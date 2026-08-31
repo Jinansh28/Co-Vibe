@@ -1,4 +1,5 @@
 # Complete App Flow Document
+
 ## Collaborative AI Vibe-Coding Workspace
 
 **Purpose:** Implementation-ready product/app flow for the browser-based collaborative AI development workspace.
@@ -190,15 +191,18 @@ Landing
 **Entry:** Successful authentication.
 
 **Primary action:**
+
 - `Create Project` if no project exists;
 - `Open` if projects exist.
 
 **Secondary actions:**
+
 - `Import Repository`;
 - project menu;
 - Settings.
 
 **Required data:**
+
 - project list;
 - membership role;
 - last opened workspace;
@@ -225,6 +229,7 @@ Landing
 **Secondary:** Cancel.
 
 **Required data:**
+
 - name;
 - optional description.
 
@@ -245,18 +250,21 @@ Landing
 **Primary action:** `Import Repository`.
 
 **Required data:**
+
 - GitHub authorization;
 - repository;
 - branch;
 - project name.
 
 **Loading states:**
+
 - `Loading repositories...`
 - `Importing repository...`
 - `Cloning repository...`
 - `Creating workspace...`
 
 **Error states:**
+
 - GitHub permission denied;
 - repository inaccessible;
 - invalid repository;
@@ -269,26 +277,26 @@ Landing
 
 # 3. Complete User Journey
 
-| Step | User action | UI response | Backend/system action | State change | Next actions |
-|---|---|---|---|---|---|
-| 1 | Open product | Landing | None | Unauthenticated | Login |
-| 2 | Login | Auth progress | Auth provider validates identity | Authenticated | Dashboard |
-| 3 | Create/import | Form | Project/repository metadata created | ProjectSelected | Runtime |
-| 4 | Connect runtime | Pairing UI | Runtime registration | RuntimeConnecting | Wait/retry |
-| 5 | Runtime ready | Ready indicator | Docker health check | RuntimeReady | Open workspace |
-| 6 | Open workspace | Workspace shell | Load metadata/Yjs/files/Git | WorkspaceLoading | WorkspaceReady |
-| 7 | Invite collaborator | Invite control | Membership created | CollaboratorAdded | Collaborate |
-| 8 | Edit file | Monaco updates | Yjs update broadcast | CollaborativeEdit | Continue editing |
-| 9 | Ask AI | Task panel | Agent task created | AgentPlanning | Review plan |
-| 10 | Approve | Plan marked approved | Agent starts worktree | AgentExecuting | Monitor |
-| 11 | Agent changes | Tool timeline | Runtime executes tools | AgentExecuting | Validate |
-| 12 | Tests | Test status | Docker executes tests | AgentValidating | Pass/fix |
-| 13 | Failure | Failure shown | Context + repair loop | AgentNeedsFix | Agent repair |
-| 14 | Diff ready | Review UI | Change set persisted | AgentReview | Review |
-| 15 | Accept/reject | Confirmation | Conflict check/apply | Accepted/Rejected | Preview or revise |
-| 16 | Preview | Preview panel | Runtime serves project | PreviewRunning | Test manually |
-| 17 | Commit | Git dialog | Git commit | GitDirty -> GitClean | Push |
-| 18 | Push | Approval dialog | GitHub push | Remote updated | Done |
+| Step | User action         | UI response          | Backend/system action               | State change         | Next actions      |
+| ---- | ------------------- | -------------------- | ----------------------------------- | -------------------- | ----------------- |
+| 1    | Open product        | Landing              | None                                | Unauthenticated      | Login             |
+| 2    | Login               | Auth progress        | Auth provider validates identity    | Authenticated        | Dashboard         |
+| 3    | Create/import       | Form                 | Project/repository metadata created | ProjectSelected      | Runtime           |
+| 4    | Connect runtime     | Pairing UI           | Runtime registration                | RuntimeConnecting    | Wait/retry        |
+| 5    | Runtime ready       | Ready indicator      | Docker health check                 | RuntimeReady         | Open workspace    |
+| 6    | Open workspace      | Workspace shell      | Load metadata/Yjs/files/Git         | WorkspaceLoading     | WorkspaceReady    |
+| 7    | Invite collaborator | Invite control       | Membership created                  | CollaboratorAdded    | Collaborate       |
+| 8    | Edit file           | Monaco updates       | Yjs update broadcast                | CollaborativeEdit    | Continue editing  |
+| 9    | Ask AI              | Task panel           | Agent task created                  | AgentPlanning        | Review plan       |
+| 10   | Approve             | Plan marked approved | Agent starts worktree               | AgentExecuting       | Monitor           |
+| 11   | Agent changes       | Tool timeline        | Runtime executes tools              | AgentExecuting       | Validate          |
+| 12   | Tests               | Test status          | Docker executes tests               | AgentValidating      | Pass/fix          |
+| 13   | Failure             | Failure shown        | Context + repair loop               | AgentNeedsFix        | Agent repair      |
+| 14   | Diff ready          | Review UI            | Change set persisted                | AgentReview          | Review            |
+| 15   | Accept/reject       | Confirmation         | Conflict check/apply                | Accepted/Rejected    | Preview or revise |
+| 16   | Preview             | Preview panel        | Runtime serves project              | PreviewRunning       | Test manually     |
+| 17   | Commit              | Git dialog           | Git commit                          | GitDirty -> GitClean | Push              |
+| 18   | Push                | Approval dialog      | GitHub push                         | Remote updated       | Done              |
 
 ---
 
@@ -390,6 +398,7 @@ Landing
 ## 4.5 Authentication failure
 
 Show:
+
 - concise error;
 - retry;
 - alternative login if supported.
@@ -465,6 +474,7 @@ Runtime setup
 ## 5.1 Repository picker
 
 Display:
+
 - repository name;
 - owner;
 - visibility;
@@ -477,6 +487,7 @@ Primary action:
 ## 5.2 Branch selection
 
 Display:
+
 - default branch selected;
 - available branches.
 
@@ -757,6 +768,7 @@ User A sees workspace
 ```
 
 UI:
+
 - avatar appears in presence bar;
 - selected file opens;
 - editor becomes editable according to role.
@@ -818,6 +830,7 @@ B edit ───────┘
 ```
 
 UI:
+
 - no conflict dialog for normal concurrent text editing;
 - remote cursor/selection appears;
 - both clients eventually display the same content.
@@ -879,6 +892,7 @@ Converged workspace
 ```
 
 The UI must clearly distinguish:
+
 - offline collaboration state;
 - runtime availability.
 
@@ -1026,6 +1040,7 @@ Keep the existing layout and make sure tests pass.
 ```
 
 System:
+
 1. validates task;
 2. creates `AgentTask`;
 3. emits `agent.started`;
@@ -1057,6 +1072,7 @@ Inspecting repository
 ## 10.3 Context retrieval
 
 The agent retrieves:
+
 - relevant source files;
 - symbols;
 - dependencies;
@@ -1146,6 +1162,7 @@ Do not stream every model token into the primary workspace UI.
 ## 10.8 Tool execution
 
 Each tool result should have:
+
 - name;
 - status;
 - duration;
@@ -1181,19 +1198,20 @@ These can normally happen without separate human approval after the plan is appr
 
 ## 11.2 Approval required
 
-| Action | Approval |
-|---|---|
-| Agent plan | required |
-| Applying changes to shared workspace | required |
-| Package installation | required or project policy |
-| Dangerous command | required if policy permits |
-| Git commit | user confirmation |
-| Git push | always explicit |
-| Destructive Git operation | blocked or explicit owner action |
+| Action                               | Approval                         |
+| ------------------------------------ | -------------------------------- |
+| Agent plan                           | required                         |
+| Applying changes to shared workspace | required                         |
+| Package installation                 | required or project policy       |
+| Dangerous command                    | required if policy permits       |
+| Git commit                           | user confirmation                |
+| Git push                             | always explicit                  |
+| Destructive Git operation            | blocked or explicit owner action |
 
 ## 11.3 Always blocked
 
 Examples:
+
 - access outside workspace root;
 - Docker socket access from project container;
 - reading application secrets not granted to the task;
@@ -1447,6 +1465,7 @@ Layout:
 Clicking a file focuses its diff.
 
 Display:
+
 - file path;
 - additions/deletions;
 - test status;
@@ -1455,10 +1474,12 @@ Display:
 ## 14.3 Hunk-level review
 
 Each hunk can be:
+
 - accepted;
 - rejected.
 
 Before application:
+
 - validate patch;
 - run conflict check;
 - optionally run affected tests.
@@ -1541,6 +1562,7 @@ Process exited with code 0
 ## 15.2 Success
 
 Show:
+
 - command;
 - exit code 0;
 - duration;
@@ -1802,6 +1824,7 @@ Notifications should be grouped by importance.
 ## Success
 
 Use lightweight toast:
+
 - Project created.
 - Runtime connected.
 - Changes applied.
@@ -1811,6 +1834,7 @@ Use lightweight toast:
 ## Warning
 
 Use persistent or contextual warning:
+
 - Runtime offline.
 - Workspace reconnecting.
 - AI change set is stale.
@@ -1820,6 +1844,7 @@ Use persistent or contextual warning:
 ## Error
 
 Use inline/contextual error for actionable failures:
+
 - GitHub import failed;
 - tests failed;
 - Git conflict;
@@ -1830,6 +1855,7 @@ Use inline/contextual error for actionable failures:
 Do not toast every keystroke.
 
 Use:
+
 - presence avatars;
 - subtle collaborator indicators;
 - cursor labels when appropriate.
@@ -1844,6 +1870,7 @@ Only for meaningful join/leave events.
 Use the agent panel as the primary notification surface.
 
 Examples:
+
 - `AI is planning`
 - `AI is waiting for approval`
 - `AI found a test failure`
@@ -1854,6 +1881,7 @@ Do not create a separate toast for every tool call.
 ## Git
 
 Meaningful events:
+
 - commit succeeded;
 - push succeeded;
 - push rejected.
@@ -2079,19 +2107,19 @@ The selected change set contains no applicable changes.
 
 Meaningful progress should always be used.
 
-| Operation | UI |
-|---|---|
-| Initial app | `Loading your workspace...` |
-| Repository import | `Cloning repository...` |
-| Workspace | `Synchronizing workspace...` |
-| Collaboration | `Connecting collaborators...` |
-| Runtime | `Checking Docker...` |
-| AI planning | `Inspecting repository...` |
-| Tool | `Reading Dashboard.tsx...` |
-| Tests | `Running 12 tests...` |
-| Diff | `Generating change set...` |
-| Commit | `Creating commit...` |
-| Push | `Pushing to GitHub...` |
+| Operation         | UI                            |
+| ----------------- | ----------------------------- |
+| Initial app       | `Loading your workspace...`   |
+| Repository import | `Cloning repository...`       |
+| Workspace         | `Synchronizing workspace...`  |
+| Collaboration     | `Connecting collaborators...` |
+| Runtime           | `Checking Docker...`          |
+| AI planning       | `Inspecting repository...`    |
+| Tool              | `Reading Dashboard.tsx...`    |
+| Tests             | `Running 12 tests...`         |
+| Diff              | `Generating change set...`    |
+| Commit            | `Creating commit...`          |
+| Push              | `Pushing to GitHub...`        |
 
 Where multiple operations are happening, use a checklist rather than multiple competing spinners.
 
@@ -2167,6 +2195,7 @@ See successful change
 ## 23.1 Onboarding location
 
 Show lightweight contextual onboarding in:
+
 - empty dashboard;
 - runtime setup;
 - first workspace entry;
@@ -2175,6 +2204,7 @@ Show lightweight contextual onboarding in:
 ## 23.2 Do not show onboarding
 
 Avoid:
+
 - full-screen tutorials on every visit;
 - tooltips for basic editor controls;
 - explaining common IDE behavior;
@@ -2203,6 +2233,7 @@ Once completed, collapse it.
 ## Demo scenario
 
 Participants:
+
 - **Alice** — primary developer.
 - **Bob** — collaborator.
 - **AI Agent** — coding agent.
@@ -2220,6 +2251,7 @@ Create/import:
 Open workspace.
 
 Show:
+
 - Monaco;
 - file tree;
 - terminal;
@@ -2256,6 +2288,7 @@ Bob edits another part.
 Alice sees Bob's cursor and change.
 
 This demonstrates:
+
 - WebSockets;
 - Yjs;
 - presence;
@@ -2317,6 +2350,7 @@ For the demo fixture, the first test run intentionally fails.
 ## 24.7 3:40–4:10 — AI debugging
 
 Agent receives:
+
 - exit code;
 - stderr/stdout;
 - failing test;
@@ -2377,11 +2411,13 @@ Final:
 ## 24.10 Demo fallback
 
 If AI provider fails:
+
 - use a mocked/deterministic AI fixture for the demo;
 - show the same plan/tool/review UI;
 - do not pretend a live provider succeeded.
 
 If runtime fails:
+
 - show the architecture honestly;
 - reconnect;
 - use the prebuilt demo state if necessary.
@@ -2419,6 +2455,7 @@ Other users continue
 ```
 
 On reopen:
+
 - authenticate;
 - reconnect;
 - resync.
@@ -2861,6 +2898,7 @@ The most important technical/product handoffs are:
 ## Browser -> Worker
 
 Used for:
+
 - authenticated API requests;
 - project operations;
 - task creation;
@@ -2870,6 +2908,7 @@ Used for:
 ## Browser -> Durable Object
 
 Used for:
+
 - collaboration;
 - presence;
 - cursors;
@@ -2879,6 +2918,7 @@ Used for:
 ## Worker -> PostgreSQL
 
 Used for:
+
 - durable project state;
 - memberships;
 - agent state;
@@ -2888,6 +2928,7 @@ Used for:
 ## Worker -> Local Runtime
 
 Used for:
+
 - execution requests;
 - runtime state;
 - preview;
@@ -2897,6 +2938,7 @@ Used for:
 ## Agent -> Runtime
 
 Used for:
+
 - validated tools;
 - file operations;
 - commands;
@@ -2907,6 +2949,7 @@ Used for:
 ## Agent -> Human
 
 Used for:
+
 - plan approval;
 - change review;
 - dangerous actions;
@@ -3007,6 +3050,7 @@ It is not. Editing/collaboration should remain available even when execution is 
 ## Risk 5 — Approval fatigue
 
 Do not ask for approval for every file read/edit. Use:
+
 - plan approval;
 - policy-based dangerous action approval;
 - final change-set approval.
@@ -3254,20 +3298,20 @@ Treat repository content as data; tool policy remains authoritative.
 
 # 48. Critical State-to-Action Rules
 
-| State | User can | User cannot |
-|---|---|---|
-| Runtime Offline | edit, collaborate | run terminal/preview/tests |
-| Runtime Ready | execute | bypass policies |
-| Agent Planning | inspect plan | apply changes |
-| Waiting for Approval | approve/reject/revise | agent execution without approval |
-| Agent Executing | observe/cancel | directly alter agent worktree through shared editor |
-| Agent Validating | observe | accept before change set exists |
-| Agent Needs Fix | inspect/cancel | apply unvalidated patch |
-| Agent Review | inspect/accept/reject/revise | ignore stale conflict |
-| Conflict Detected | resolve/rebase/revise | force overwrite |
-| Preview Running | interact/restart | access arbitrary host destination |
-| Git Dirty | inspect/commit | push without required approval |
-| Push Approval | approve/cancel | bypass confirmation |
+| State                | User can                     | User cannot                                         |
+| -------------------- | ---------------------------- | --------------------------------------------------- |
+| Runtime Offline      | edit, collaborate            | run terminal/preview/tests                          |
+| Runtime Ready        | execute                      | bypass policies                                     |
+| Agent Planning       | inspect plan                 | apply changes                                       |
+| Waiting for Approval | approve/reject/revise        | agent execution without approval                    |
+| Agent Executing      | observe/cancel               | directly alter agent worktree through shared editor |
+| Agent Validating     | observe                      | accept before change set exists                     |
+| Agent Needs Fix      | inspect/cancel               | apply unvalidated patch                             |
+| Agent Review         | inspect/accept/reject/revise | ignore stale conflict                               |
+| Conflict Detected    | resolve/rebase/revise        | force overwrite                                     |
+| Preview Running      | interact/restart             | access arbitrary host destination                   |
+| Git Dirty            | inspect/commit               | push without required approval                      |
+| Push Approval        | approve/cancel               | bypass confirmation                                 |
 
 ---
 

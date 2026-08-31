@@ -1,4 +1,5 @@
 # Collaborative AI Vibe-Coding Workspace
+
 ## Implementation-Ready, Free-First Resume MVP PRD
 
 **Document status:** MVP specification  
@@ -213,25 +214,25 @@ Git remains the source-of-truth development primitive while the workspace adds c
 
 ## Explicitly exclude
 
-| Feature | Reason |
-|---|---|
-| Kubernetes | Huge operational overhead for no MVP benefit |
-| Kafka | Inappropriate complexity for a small workload |
-| Microservices everywhere | Makes local development and debugging harder |
-| Firecracker cluster | Valuable concept but unnecessary for a free single-developer MVP |
-| Enterprise SSO | No target-user need |
-| Billing | No business model is required |
-| Payments | Same reason |
-| Multiple agents | One strong agent demonstrates the architecture |
-| Extension marketplace | Large product surface with little resume value |
-| Full VS Code parity | Scope explosion |
-| Production deployment automation | Local preview is sufficient |
-| Complex workflow engine | Agent state machine can be application code |
-| Dedicated vector DB | PostgreSQL/simple retrieval is enough |
-| Full CI/CD replacement | GitHub remains the Git/CI system |
-| Mobile IDE | Low value relative to effort |
-| Advanced enterprise RBAC | Basic project roles are enough |
-| Multi-tenant enterprise infra | Contradicts free-first architecture |
+| Feature                          | Reason                                                           |
+| -------------------------------- | ---------------------------------------------------------------- |
+| Kubernetes                       | Huge operational overhead for no MVP benefit                     |
+| Kafka                            | Inappropriate complexity for a small workload                    |
+| Microservices everywhere         | Makes local development and debugging harder                     |
+| Firecracker cluster              | Valuable concept but unnecessary for a free single-developer MVP |
+| Enterprise SSO                   | No target-user need                                              |
+| Billing                          | No business model is required                                    |
+| Payments                         | Same reason                                                      |
+| Multiple agents                  | One strong agent demonstrates the architecture                   |
+| Extension marketplace            | Large product surface with little resume value                   |
+| Full VS Code parity              | Scope explosion                                                  |
+| Production deployment automation | Local preview is sufficient                                      |
+| Complex workflow engine          | Agent state machine can be application code                      |
+| Dedicated vector DB              | PostgreSQL/simple retrieval is enough                            |
+| Full CI/CD replacement           | GitHub remains the Git/CI system                                 |
+| Mobile IDE                       | Low value relative to effort                                     |
+| Advanced enterprise RBAC         | Basic project roles are enough                                   |
+| Multi-tenant enterprise infra    | Contradicts free-first architecture                              |
 
 ---
 
@@ -262,15 +263,15 @@ Do not optimize for enterprise workflows.
 
 # 6. Resume and Interview Value
 
-| Area | Demonstrated capability | Value |
-|---|---|---:|
-| Frontend | React, TypeScript, Monaco | High |
-| Backend | REST, auth, PostgreSQL, jobs | High |
-| Distributed systems | CRDT, synchronization, reconnect | Very high |
-| AI | tools, context, agent loop, debugging | Very high |
-| Systems | Docker, processes, resource limits | Very high |
-| DevOps | GitHub, deployment, logs | High |
-| Security | sandboxing, permissions, prompt injection | Very high |
+| Area                | Demonstrated capability                   |     Value |
+| ------------------- | ----------------------------------------- | --------: |
+| Frontend            | React, TypeScript, Monaco                 |      High |
+| Backend             | REST, auth, PostgreSQL, jobs              |      High |
+| Distributed systems | CRDT, synchronization, reconnect          | Very high |
+| AI                  | tools, context, agent loop, debugging     | Very high |
+| Systems             | Docker, processes, resource limits        | Very high |
+| DevOps              | GitHub, deployment, logs                  |      High |
+| Security            | sandboxing, permissions, prompt injection | Very high |
 
 The strongest resume/interview features are:
 
@@ -428,22 +429,22 @@ flowchart LR
 
 # 9. Recommended Technology Stack
 
-| Layer | Recommendation | Why for ₹0 MVP | Alternative | Replace when |
-|---|---|---|---|---|
-| UI | React | Mature ecosystem | Vue | Team preference |
-| Language | TypeScript | Shared types and safety | JavaScript | Never necessary |
-| Editor | Monaco | Real IDE behavior | CodeMirror | Monaco limitations |
-| API | Node.js + TypeScript | Same language across stack | Python/FastAPI | AI-heavy backend |
-| Collaboration state | Yjs | Mature CRDT and awareness model | Automerge | If Yjs becomes unsuitable |
-| Realtime coordination | Cloudflare Durable Objects + WebSockets | Stateful per-workspace coordination without a separate WebSocket server | Hosted WebSocket service | If scale/requirements change |
-| API | Cloudflare Workers + Hono | Same TypeScript stack, serverless deployment, native WebSocket/DO integration | Node/Fastify | If long-running cloud jobs become necessary |
-| DB/Auth | Supabase PostgreSQL + Auth | Fast relational/auth setup | Self-hosted PostgreSQL | If limits/operations require it |
-| Static UI | Cloudflare Pages / Workers | Same platform as realtime layer | Vercel/Netlify | If frontend requirements change |
-| Runtime | Docker | Local isolation | Podman | Runtime requirements |
-| AI | Ollama/local model | No inference bill | Free hosted inference | Quality/latency requirements |
-| Git | Git CLI + GitHub OAuth/API | Preserve normal Git semantics | libgit2 | Platform constraints |
-| Validation | Zod | Runtime validation | JSON Schema | Team convention |
-| Tests | Vitest + Playwright | Fast unit/E2E coverage | Jest/Cypress | Team preference |
+| Layer                 | Recommendation                          | Why for ₹0 MVP                                                                | Alternative              | Replace when                                |
+| --------------------- | --------------------------------------- | ----------------------------------------------------------------------------- | ------------------------ | ------------------------------------------- |
+| UI                    | React                                   | Mature ecosystem                                                              | Vue                      | Team preference                             |
+| Language              | TypeScript                              | Shared types and safety                                                       | JavaScript               | Never necessary                             |
+| Editor                | Monaco                                  | Real IDE behavior                                                             | CodeMirror               | Monaco limitations                          |
+| API                   | Node.js + TypeScript                    | Same language across stack                                                    | Python/FastAPI           | AI-heavy backend                            |
+| Collaboration state   | Yjs                                     | Mature CRDT and awareness model                                               | Automerge                | If Yjs becomes unsuitable                   |
+| Realtime coordination | Cloudflare Durable Objects + WebSockets | Stateful per-workspace coordination without a separate WebSocket server       | Hosted WebSocket service | If scale/requirements change                |
+| API                   | Cloudflare Workers + Hono               | Same TypeScript stack, serverless deployment, native WebSocket/DO integration | Node/Fastify             | If long-running cloud jobs become necessary |
+| DB/Auth               | Supabase PostgreSQL + Auth              | Fast relational/auth setup                                                    | Self-hosted PostgreSQL   | If limits/operations require it             |
+| Static UI             | Cloudflare Pages / Workers              | Same platform as realtime layer                                               | Vercel/Netlify           | If frontend requirements change             |
+| Runtime               | Docker                                  | Local isolation                                                               | Podman                   | Runtime requirements                        |
+| AI                    | Ollama/local model                      | No inference bill                                                             | Free hosted inference    | Quality/latency requirements                |
+| Git                   | Git CLI + GitHub OAuth/API              | Preserve normal Git semantics                                                 | libgit2                  | Platform constraints                        |
+| Validation            | Zod                                     | Runtime validation                                                            | JSON Schema              | Team convention                             |
+| Tests                 | Vitest + Playwright                     | Fast unit/E2E coverage                                                        | Jest/Cypress             | Team preference                             |
 
 Free-tier limits and provider policies are time-sensitive. Verify current limits immediately before deployment rather than treating any free tier as guaranteed.
 
@@ -748,13 +749,13 @@ Do not promise indefinite offline Git/runtime behavior.
 
 ## CRDT vs OT vs custom
 
-| Approach | Decision |
-|---|---|
-| CRDT | Recommended |
-| OT | Not selected |
-| Yjs | Selected implementation |
-| Automerge | Good alternative |
-| Custom sync | Reject |
+| Approach    | Decision                |
+| ----------- | ----------------------- |
+| CRDT        | Recommended             |
+| OT          | Not selected            |
+| Yjs         | Selected implementation |
+| Automerge   | Good alternative        |
+| Custom sync | Reject                  |
 
 Custom synchronization would create unnecessary correctness risk.
 
@@ -898,30 +899,30 @@ Create checkpoints after:
 
 # 15. Agent Toolset
 
-| Tool | Purpose | Permission | Approval | Timeout |
-|---|---|---|---|---|
-| read_file | Read source | read | no | 5s |
-| write_file | Replace/create content | write | plan approval | 10s |
-| edit_file | Targeted edit | write | plan approval | 10s |
-| create_file | Create file | write | plan approval | 10s |
-| delete_file | Delete file | delete | explicit | 10s |
-| list_directory | Explore tree | read | no | 5s |
-| search_code | Lexical search | read | no | 10s |
-| search_repository | Repository-wide search | read | no | 15s |
-| inspect_dependencies | Read dependency metadata | read | no | 5s |
-| run_command | Execute approved command | execute | policy-dependent | 30s |
-| run_tests | Run test command | execute | no if approved test | 120s |
-| start_server | Start dev server | execute | no if policy-approved | 30s |
-| stop_process | Stop managed process | execute | no | 10s |
-| inspect_logs | Read process logs | read | no | 5s |
-| git_status | Git status | git | no | 10s |
-| git_diff | Git diff | git | no | 10s |
-| git_branch | Branch operation | git | approval for creation/switch | 15s |
-| git_commit | Commit | git | explicit | 20s |
-| git_push | Push | git | explicit | 30s |
-| inspect_preview | Preview state | read | no | 10s |
-| capture_preview | Screenshot | read | no | 20s |
-| inspect_runtime_errors | Runtime diagnostics | read | no | 10s |
+| Tool                   | Purpose                  | Permission | Approval                     | Timeout |
+| ---------------------- | ------------------------ | ---------- | ---------------------------- | ------- |
+| read_file              | Read source              | read       | no                           | 5s      |
+| write_file             | Replace/create content   | write      | plan approval                | 10s     |
+| edit_file              | Targeted edit            | write      | plan approval                | 10s     |
+| create_file            | Create file              | write      | plan approval                | 10s     |
+| delete_file            | Delete file              | delete     | explicit                     | 10s     |
+| list_directory         | Explore tree             | read       | no                           | 5s      |
+| search_code            | Lexical search           | read       | no                           | 10s     |
+| search_repository      | Repository-wide search   | read       | no                           | 15s     |
+| inspect_dependencies   | Read dependency metadata | read       | no                           | 5s      |
+| run_command            | Execute approved command | execute    | policy-dependent             | 30s     |
+| run_tests              | Run test command         | execute    | no if approved test          | 120s    |
+| start_server           | Start dev server         | execute    | no if policy-approved        | 30s     |
+| stop_process           | Stop managed process     | execute    | no                           | 10s     |
+| inspect_logs           | Read process logs        | read       | no                           | 5s      |
+| git_status             | Git status               | git        | no                           | 10s     |
+| git_diff               | Git diff                 | git        | no                           | 10s     |
+| git_branch             | Branch operation         | git        | approval for creation/switch | 15s     |
+| git_commit             | Commit                   | git        | explicit                     | 20s     |
+| git_push               | Push                     | git        | explicit                     | 30s     |
+| inspect_preview        | Preview state            | read       | no                           | 10s     |
+| capture_preview        | Screenshot               | read       | no                           | 20s     |
+| inspect_runtime_errors | Runtime diagnostics      | read       | no                           | 10s     |
 
 Every tool must:
 
@@ -1747,20 +1748,20 @@ Client:
 
 ## Threat matrix
 
-| Threat | Probability | Impact | Mitigation | Residual risk |
-|---|---|---|---|---|
-| Prompt injection in README | High | High | Treat files as data; separate system policy | Medium |
-| Command injection | High | High | Allowlist/validation + container | Medium |
-| Path traversal | High | High | Canonicalize + workspace root check | Low/medium |
-| Secret exposure | Medium | High | Redaction + no secret tool access | Medium |
-| Malicious dependency | Medium | High | Container + network restrictions | Medium |
-| SSRF | Medium | High | Network policy + URL validation | Medium |
-| XSS | Medium | High | React escaping + sanitization | Low |
-| CSRF | Low/medium | Medium | SameSite + CSRF strategy | Low |
-| Unauthorized project access | Medium | High | project membership authorization | Low |
-| Docker escape | Low | Critical | least privilege + isolation | Medium |
-| Resource exhaustion | High | High | CPU/RAM/PID/disk/time limits | Medium |
-| Git token theft | Medium | High | secure storage + redaction | Low/medium |
+| Threat                      | Probability | Impact   | Mitigation                                  | Residual risk |
+| --------------------------- | ----------- | -------- | ------------------------------------------- | ------------- |
+| Prompt injection in README  | High        | High     | Treat files as data; separate system policy | Medium        |
+| Command injection           | High        | High     | Allowlist/validation + container            | Medium        |
+| Path traversal              | High        | High     | Canonicalize + workspace root check         | Low/medium    |
+| Secret exposure             | Medium      | High     | Redaction + no secret tool access           | Medium        |
+| Malicious dependency        | Medium      | High     | Container + network restrictions            | Medium        |
+| SSRF                        | Medium      | High     | Network policy + URL validation             | Medium        |
+| XSS                         | Medium      | High     | React escaping + sanitization               | Low           |
+| CSRF                        | Low/medium  | Medium   | SameSite + CSRF strategy                    | Low           |
+| Unauthorized project access | Medium      | High     | project membership authorization            | Low           |
+| Docker escape               | Low         | Critical | least privilege + isolation                 | Medium        |
+| Resource exhaustion         | High        | High     | CPU/RAM/PID/disk/time limits                | Medium        |
+| Git token theft             | Medium      | High     | secure storage + redaction                  | Low/medium    |
 
 ## Authorization
 
@@ -1784,19 +1785,9 @@ Example:
 
 ```json
 {
-  "read": [
-    "src/**",
-    "tests/**",
-    "package.json"
-  ],
-  "write": [
-    "src/**",
-    "tests/**"
-  ],
-  "execute": [
-    "npm test",
-    "npm run build"
-  ],
+  "read": ["src/**", "tests/**", "package.json"],
+  "write": ["src/**", "tests/**"],
+  "execute": ["npm test", "npm run build"],
   "network": "restricted",
   "secrets": false,
   "gitPush": "approval_required"
@@ -1805,21 +1796,21 @@ Example:
 
 ## Permission matrix
 
-| Action | Default | Approval |
-|---|---|---|
-| Read source | Allow | No |
-| Write source | Allow in workspace | Plan approval |
-| Delete file | Restricted | Explicit |
-| Execute test | Allow approved commands | No |
-| Arbitrary shell | Restricted | Explicit |
-| Install package | Restricted | Explicit |
-| Git status/diff | Allow | No |
-| Create branch | Allow | Optional |
-| Commit | Restricted | Explicit |
-| Push | Deny by default | Explicit |
-| Read secrets | Deny | Never via agent |
-| Network | Restricted | Explicit escalation |
-| Deployment | Deny | Explicit/manual |
+| Action          | Default                 | Approval            |
+| --------------- | ----------------------- | ------------------- |
+| Read source     | Allow                   | No                  |
+| Write source    | Allow in workspace      | Plan approval       |
+| Delete file     | Restricted              | Explicit            |
+| Execute test    | Allow approved commands | No                  |
+| Arbitrary shell | Restricted              | Explicit            |
+| Install package | Restricted              | Explicit            |
+| Git status/diff | Allow                   | No                  |
+| Create branch   | Allow                   | Optional            |
+| Commit          | Restricted              | Explicit            |
+| Push            | Deny by default         | Explicit            |
+| Read secrets    | Deny                    | Never via agent     |
+| Network         | Restricted              | Explicit escalation |
+| Deployment      | Deny                    | Explicit/manual     |
 
 ---
 
@@ -2250,17 +2241,17 @@ create
 
 # 38. Performance Targets
 
-| Metric | Target | Measurement |
-|---|---:|---|
-| Initial app load | <3s | browser performance API |
-| Open small file | <500ms | click-to-editor-ready |
-| Collaboration p95 | <300ms | operation ID timestamps |
-| Reconnect | <5s | disconnect-to-converged |
-| AI first response | <5s | request-to-first-agent event |
-| Tool overhead | <1s | executor timestamps excluding command runtime |
-| Terminal latency | <300ms | process output to UI receipt |
-| Local preview startup | <10s | start request to HTTP-ready |
-| Search | <1s | request-to-results |
+| Metric                | Target | Measurement                                   |
+| --------------------- | -----: | --------------------------------------------- |
+| Initial app load      |    <3s | browser performance API                       |
+| Open small file       | <500ms | click-to-editor-ready                         |
+| Collaboration p95     | <300ms | operation ID timestamps                       |
+| Reconnect             |    <5s | disconnect-to-converged                       |
+| AI first response     |    <5s | request-to-first-agent event                  |
+| Tool overhead         |    <1s | executor timestamps excluding command runtime |
+| Terminal latency      | <300ms | process output to UI receipt                  |
+| Local preview startup |   <10s | start request to HTTP-ready                   |
+| Search                |    <1s | request-to-results                            |
 
 Do not report a target as an achieved metric until it is measured.
 
@@ -2338,12 +2329,12 @@ Cloud → authenticated outbound connection → Local Runtime
 
 ## Responsibility boundaries
 
-| Component | Owns |
-|---|---|
-| Cloudflare Worker | API/control endpoints, validation, GitHub OAuth callbacks |
-| Durable Object | WebSocket connections, Yjs sync, presence, room coordination |
-| Supabase | users, projects, memberships, tasks, change sets, audit records |
-| Local Runtime | filesystem, Docker, commands, tests, preview, Git, local AI |
+| Component         | Owns                                                            |
+| ----------------- | --------------------------------------------------------------- |
+| Cloudflare Worker | API/control endpoints, validation, GitHub OAuth callbacks       |
+| Durable Object    | WebSocket connections, Yjs sync, presence, room coordination    |
+| Supabase          | users, projects, memberships, tasks, change sets, audit records |
+| Local Runtime     | filesystem, Docker, commands, tests, preview, Git, local AI     |
 
 This is better than putting everything into one serverless function or splitting the project into many microservices.
 
@@ -2421,17 +2412,17 @@ Current Cloudflare documentation confirms Durable Objects are available on the F
 
 ## Absolute ₹0 setup
 
-| Component | MVP strategy | Expected cash cost |
-|---|---|---:|
-| Frontend hosting | free static/edge tier | ₹0 initially |
-| Database/Auth | free hosted Postgres/auth tier | ₹0 initially |
-| Collaboration | application WebSocket layer | ₹0 initially if included in chosen hosting design |
-| Git | GitHub account | ₹0 |
-| AI | Ollama/local model | ₹0 |
-| Runtime | own laptop + Docker | ₹0 |
-| Storage | repository/local disk + free DB storage | ₹0 initially |
-| Domain | provider subdomain | ₹0 |
-| Monitoring | free/basic logs | ₹0 initially |
+| Component        | MVP strategy                            |                                Expected cash cost |
+| ---------------- | --------------------------------------- | ------------------------------------------------: |
+| Frontend hosting | free static/edge tier                   |                                      ₹0 initially |
+| Database/Auth    | free hosted Postgres/auth tier          |                                      ₹0 initially |
+| Collaboration    | application WebSocket layer             | ₹0 initially if included in chosen hosting design |
+| Git              | GitHub account                          |                                                ₹0 |
+| AI               | Ollama/local model                      |                                                ₹0 |
+| Runtime          | own laptop + Docker                     |                                                ₹0 |
+| Storage          | repository/local disk + free DB storage |                                      ₹0 initially |
+| Domain           | provider subdomain                      |                                                ₹0 |
+| Monitoring       | free/basic logs                         |                                      ₹0 initially |
 
 ### Important
 
@@ -2742,6 +2733,7 @@ Collect latency/task-success evidence before claiming performance.
 ## Frontend
 
 ### FE-001 — Workspace shell
+
 - Priority: P0
 - Dependencies: project API
 - Complexity: M
@@ -2752,6 +2744,7 @@ Collect latency/task-success evidence before claiming performance.
 - Resume value: Medium
 
 ### FE-002 — Monaco integration
+
 - P0
 - Dependencies: FE-001
 - Complexity: M
@@ -2762,6 +2755,7 @@ Collect latency/task-success evidence before claiming performance.
 - Resume value: High
 
 ### FE-003 — File explorer
+
 - P0
 - Complexity: S
 - Acceptance:
@@ -2770,6 +2764,7 @@ Collect latency/task-success evidence before claiming performance.
 - Resume value: Medium
 
 ### FE-004 — Agent panel
+
 - P0
 - Dependencies: agent API
 - Complexity: M
@@ -2780,6 +2775,7 @@ Collect latency/task-success evidence before claiming performance.
 - Resume value: High
 
 ### FE-005 — Diff review
+
 - P0
 - Dependencies: change sets
 - Complexity: L
@@ -2792,10 +2788,12 @@ Collect latency/task-success evidence before claiming performance.
 ## Backend
 
 ### BE-001 — Auth/project API
+
 - P0
 - Complexity: M
 
 ### BE-002 — Authorization middleware
+
 - P0
 - Complexity: M
 - Acceptance:
@@ -2803,6 +2801,7 @@ Collect latency/task-success evidence before claiming performance.
   - tests cover ownership/membership
 
 ### BE-003 — Agent task orchestration
+
 - P0
 - Complexity: L
 - Acceptance:
@@ -2812,6 +2811,7 @@ Collect latency/task-success evidence before claiming performance.
 - Resume value: Very high
 
 ### BE-004 — WebSocket gateway
+
 - P0
 - Complexity: L
 - Resume value: Very high
@@ -2819,18 +2819,22 @@ Collect latency/task-success evidence before claiming performance.
 ## Collaboration
 
 ### COL-001 — Yjs document
+
 - P0
 - Complexity: M
 
 ### COL-002 — WebSocket provider
+
 - P0
 - Complexity: L
 
 ### COL-003 — Awareness/presence
+
 - P0
 - Complexity: M
 
 ### COL-004 — Reconnect
+
 - P0
 - Complexity: L
 - Acceptance:
@@ -2839,31 +2843,37 @@ Collect latency/task-success evidence before claiming performance.
 ## AI
 
 ### AI-001 — Provider abstraction
+
 - P0
 - Complexity: M
 - Resume value: High
 
 ### AI-002 — Repository context
+
 - P0
 - Complexity: L
 - Resume value: Very high
 
 ### AI-003 — Tool executor
+
 - P0
 - Complexity: L
 - Resume value: Very high
 
 ### AI-004 — Agent state machine
+
 - P0
 - Complexity: M
 - Resume value: Very high
 
 ### AI-005 — Test/fix loop
+
 - P0
 - Complexity: L
 - Resume value: Very high
 
 ### AI-006 — Change-set generation
+
 - P0
 - Complexity: L
 - Resume value: Very high
@@ -2871,95 +2881,116 @@ Collect latency/task-success evidence before claiming performance.
 ## Runtime
 
 ### RT-001 — Runtime pairing
+
 - P0
 - Complexity: M
 
 ### RT-002 — Docker workspace
+
 - P0
 - Complexity: L
 - Resume value: Very high
 
 ### RT-003 — Command executor
+
 - P0
 - Complexity: L
 
 ### RT-004 — Process manager
+
 - P0
 - Complexity: M
 
 ### RT-005 — Preview proxy
+
 - P0
 - Complexity: M
 
 ## Git
 
 ### GIT-001 — GitHub OAuth
+
 - P0
 - Complexity: M
 
 ### GIT-002 — Repository clone
+
 - P0
 - Complexity: M
 
 ### GIT-003 — Branch/status/diff
+
 - P0
 - Complexity: M
 
 ### GIT-004 — Commit/push approval
+
 - P0
 - Complexity: M
 
 ## Security
 
 ### SEC-001 — Path validation
+
 - P0
 - Complexity: M
 
 ### SEC-002 — Command policy
+
 - P0
 - Complexity: L
 
 ### SEC-003 — Secret redaction
+
 - P0
 - Complexity: M
 
 ### SEC-004 — Project isolation
+
 - P0
 - Complexity: M
 
 ### SEC-005 — Prompt-injection tests
+
 - P0
 - Complexity: M
 
 ## DevOps
 
 ### DEV-001 — CI
+
 - P0
 - Complexity: S
 
 ### DEV-002 — Deployment
+
 - P0
 - Complexity: M
 
 ### DEV-003 — Structured logging
+
 - P0
 - Complexity: S
 
 ## QA
 
 ### QA-001 — Unit suite
+
 - P0
 - Complexity: M
 
 ### QA-002 — Collaboration integration tests
+
 - P0
 - Complexity: L
 
 ### QA-003 — Agent integration tests
+
 - P0
 - Complexity: L
 
 ### QA-004 — E2E demo
+
 - P0
 - Complexity: L
 

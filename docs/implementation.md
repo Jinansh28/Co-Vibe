@@ -11,7 +11,7 @@
 
 1. **Single Developer Operational Efficiency:** Avoid unnecessary abstractions, microservices, or complex build pipelines. Maintain a single monorepo using standard TypeScript tooling (`pnpm` workspaces).
 2. **MVP First & Incremental Delivery:** Every phase produces a runnable, testable increment. Never write speculative code for unneeded phases.
-3. **Free-First Infrastructure Budget:** 
+3. **Free-First Infrastructure Budget:**
    - Control & Realtime: Cloudflare Workers + Durable Objects (Free tier).
    - Persistence & Auth: Supabase PostgreSQL + Supabase Auth (Free tier).
    - Execution & AI: Local Developer machine (Docker Engine + local Ollama model).
@@ -21,7 +21,7 @@
    - **Local Runtime Daemon:** Local Docker engine management, command execution, process management, Git CLI operations.
    - **Git CLI:** Absolute source of truth for committed source code.
 5. **Type Safety & Runtime Contracts:** End-to-end TypeScript strict mode. Shared data structures and WebSocket envelopes strictly validated using Zod schemas (`packages/protocol`).
-6. **Defense-in-Depth Security:** 
+6. **Defense-in-Depth Security:**
    - Model outputs are untrusted.
    - Filesystem operations strictly jailed within the workspace root.
    - Commands executed inside unprivileged Docker containers (`--cap-drop=ALL`).
@@ -106,6 +106,7 @@ co-vibe/
 ### Module Specifications
 
 #### 1. `apps/web`
+
 - **Purpose:** Single Page Application providing the browser IDE user interface.
 - **Dependencies:** React 18, `@monaco-editor/react`, `yjs`, `y-monaco`, `lucide-react`, `tailwindcss`.
 - **Public Interfaces:** UI Component tree, Monaco editor mounting hooks, collaboration state hooks.
@@ -114,6 +115,7 @@ co-vibe/
 - **What Does Not Belong Here:** Server-side secrets, direct Docker manipulation, raw SQL queries.
 
 #### 2. `apps/api`
+
 - **Purpose:** Serverless Control plane API and WebSocket gateway.
 - **Dependencies:** Hono, `@cloudflare/workers-types`, `@supabase/supabase-js`, `zod`.
 - **Public Interfaces:** `/api/v1/*` HTTP endpoints, `/ws/workspace/:id` WebSocket endpoint.
@@ -122,6 +124,7 @@ co-vibe/
 - **What Does Not Belong Here:** Shell command execution, local filesystem reads, UI code.
 
 #### 3. `apps/runtime`
+
 - **Purpose:** Developer-side execution daemon running locally.
 - **Dependencies:** Node.js v22 runtime, `ws`, `dockerode`, `chokidar`, `node-pty`.
 - **Public Interfaces:** Secure outbound WebSocket client to Worker, local pairing HTTP endpoint (`http://localhost:7890/pair`).
@@ -130,6 +133,7 @@ co-vibe/
 - **What Does Not Belong Here:** User authentication validation, React components, Durable Object storage.
 
 #### 4. `packages/protocol`
+
 - **Purpose:** System-wide message envelope schemas, payload definitions, and Zod validators.
 - **Dependencies:** `zod`.
 - **Public Interfaces:** `WsEnvelopeSchema`, `RuntimeRequestSchema`, `ToolInputSchemas`, `ApiPayloadSchemas`.
@@ -138,6 +142,7 @@ co-vibe/
 - **What Does Not Belong Here:** Network I/O, UI logic, database queries.
 
 #### 5. `packages/agent`
+
 - **Purpose:** AI Agent loop, state machine, tool definitions, and repair strategies.
 - **Dependencies:** `zod`, `@co-vibe/protocol`, `@co-vibe/shared`.
 - **Public Interfaces:** `AgentOrchestrator`, `AgentStateMachine`, `ToolRegistry`, `OllamaProvider`.
@@ -150,6 +155,7 @@ co-vibe/
 ## 4. IMPLEMENTATION STEPS
 
 ### Phase 0 — Repository Foundation
+
 - **Goal:** Set up root workspace, pnpm build configuration, shared TypeScript contracts, and linting.
 - **Prerequisites:** Node.js v22+, pnpm v9+.
 - **Files to Create:** `package.json`, `pnpm-workspace.yaml`, `tsconfig.base.json`, `.gitignore`, `packages/shared/package.json`, `packages/shared/src/index.ts`.
@@ -162,6 +168,7 @@ co-vibe/
 - **Definition of Done:** `pnpm install` and `pnpm typecheck` execute with zero errors across all workspaces.
 
 ### Phase 1 — Frontend Shell
+
 - **Goal:** Create Vite React frontend with layout grid (TopBar, Sidebar, Main Editor, Agent Panel, Bottom Terminal).
 - **Prerequisites:** Phase 0 complete.
 - **Files to Create:** `apps/web/vite.config.ts`, `apps/web/src/main.tsx`, `apps/web/src/App.tsx`, `apps/web/src/components/layout/AppLayout.tsx`, `apps/web/src/components/layout/Header.tsx`, `apps/web/src/components/layout/Sidebar.tsx`, `apps/web/src/components/layout/TerminalPane.tsx`.
@@ -174,6 +181,7 @@ co-vibe/
 - **Definition of Done:** `pnpm --filter web dev` starts dev server on `http://localhost:5173` rendering the complete UI skeleton.
 
 ### Phase 2 — Authentication
+
 - **Goal:** Integrate Supabase Auth for user login/signup and worker session validation middleware.
 - **Prerequisites:** Supabase project provisioned.
 - **Files to Create:** `apps/api/src/middleware/auth.ts`, `apps/api/src/routes/auth.ts`, `apps/web/src/features/auth/LoginPage.tsx`, `apps/web/src/features/auth/useAuth.ts`.
@@ -186,6 +194,7 @@ co-vibe/
 - **Definition of Done:** Unauthenticated users are redirected to `/login`; authenticated users obtain a valid JWT session.
 
 ### Phase 3 — Projects & Workspaces
+
 - **Goal:** Enable user project creation, workspace listing, and GitHub repository metadata registration.
 - **Prerequisites:** Phase 2 complete.
 - **Files to Create:** `apps/api/src/routes/projects.ts`, `apps/api/src/routes/workspaces.ts`, `apps/web/src/features/projects/ProjectList.tsx`, `apps/web/src/features/projects/CreateProjectModal.tsx`.
@@ -198,6 +207,7 @@ co-vibe/
 - **Definition of Done:** Users can create projects and spawn workspaces stored in Supabase PostgreSQL.
 
 ### Phase 4 — Local Runtime Infrastructure
+
 - **Goal:** Build the local execution daemon (`apps/runtime`) to pair with Cloudflare Worker and spawn Docker project containers.
 - **Prerequisites:** Docker installed on dev host machine.
 - **Files to Create:** `apps/runtime/src/index.ts`, `apps/runtime/src/docker/DockerManager.ts`, `apps/runtime/src/process/ProcessManager.ts`, `apps/runtime/src/server/PairingServer.ts`, `packages/protocol/src/runtime.ts`.
@@ -210,6 +220,7 @@ co-vibe/
 - **Definition of Done:** Local daemon pairs via single-use code, connects to Worker, and executes commands inside isolated Docker containers.
 
 ### Phase 5 — Monaco Editor Core
+
 - **Goal:** Embed Monaco Editor into the browser UI with multi-tab support, syntax highlighting, and virtual model switching.
 - **Prerequisites:** Phase 1 complete.
 - **Files to Create:** `apps/web/src/features/editor/MonacoEditor.tsx`, `apps/web/src/features/editor/TabManager.tsx`, `apps/web/src/features/editor/FileTree.tsx`, `apps/web/src/features/editor/useEditorStore.ts`.
@@ -222,6 +233,7 @@ co-vibe/
 - **Definition of Done:** Users can open multiple files in Monaco tabs with auto-detected language syntax highlighting.
 
 ### Phase 6 — Collaboration & Durable Objects
+
 - **Goal:** Implement real-time concurrent editing and remote cursor awareness using Cloudflare Durable Objects and Yjs CRDTs.
 - **Prerequisites:** Phase 3 & Phase 5 complete.
 - **Files to Create:** `apps/api/src/durable-objects/WorkspaceRoom.ts`, `packages/collaboration/src/YjsBinding.ts`, `packages/collaboration/src/AwarenessManager.ts`, `apps/web/src/features/collaboration/useCollaboration.ts`.
@@ -234,6 +246,7 @@ co-vibe/
 - **Definition of Done:** Multiple browser windows editing the same workspace file observe real-time keystrokes and cursor positions without collision.
 
 ### Phase 7 — Git Integration
+
 - **Goal:** Implement repository clone, status checking, diff calculation, and branch operations via local runtime Git CLI commands.
 - **Prerequisites:** Phase 4 complete.
 - **Files to Create:** `packages/git/src/GitManager.ts`, `packages/git/src/diff.ts`, `apps/api/src/routes/git.ts`.
@@ -246,6 +259,7 @@ co-vibe/
 - **Definition of Done:** Git status and diffs render accurately in the IDE; users can create branches and commit changes locally.
 
 ### Phase 8 — AI Provider Abstraction
+
 - **Goal:** Build the pluggable `AIProvider` framework with standard support for local Ollama models.
 - **Prerequisites:** Phase 0 complete.
 - **Files to Create:** `packages/agent/src/model/interface.ts`, `packages/agent/src/model/ollama.ts`, `packages/agent/src/model/mock.ts`.
@@ -258,6 +272,7 @@ co-vibe/
 - **Definition of Done:** Seamless switching between local Ollama instances and mock providers for unit testing.
 
 ### Phase 9 — Agent Core & State Machine
+
 - **Goal:** Create the durable agent state machine, tool registry, and execution loop.
 - **Prerequisites:** Phase 8 complete.
 - **Files to Create:** `packages/agent/src/orchestrator.ts`, `packages/agent/src/state-machine.ts`, `packages/agent/src/tools/registry.ts`, `packages/agent/src/tools/filesystem.ts`, `packages/agent/src/tools/shell.ts`, `apps/web/src/features/agent/AgentPanel.tsx`.
@@ -270,6 +285,7 @@ co-vibe/
 - **Definition of Done:** Agent processes prompt, executes validated tools, updates timeline, and persists state machine transitions to Postgres.
 
 ### Phase 10 — Context Engine (P0 Deterministic)
+
 - **Goal:** Implement fast, non-vector repository context engine combining lexical search, AST symbol lookup, import graph, and Git history.
 - **Prerequisites:** Phase 7 & Phase 9 complete.
 - **Files to Create:** `packages/context/src/retrieval.ts`, `packages/context/src/lexical.ts`, `packages/context/src/symbols.ts`, `packages/context/src/dependencies.ts`.
@@ -282,6 +298,7 @@ co-vibe/
 - **Definition of Done:** Context engine identifies and includes exact target source files into agent prompt within 500ms without vector database overhead.
 
 ### Phase 11 — Change Sets & Review System
+
 - **Goal:** Isolate agent code changes into Git worktrees, generate patches, and display diff review UI with hunk acceptance.
 - **Prerequisites:** Phase 7 & Phase 9 complete.
 - **Files to Create:** `packages/agent/src/changeset.ts`, `packages/git/src/worktree.ts`, `apps/web/src/features/changeset/DiffViewer.tsx`, `apps/web/src/features/changeset/HunkSelector.tsx`.
@@ -294,6 +311,7 @@ co-vibe/
 - **Definition of Done:** Agent modifications remain isolated in worktrees until human explicitly accepts diff in UI.
 
 ### Phase 12 — Testing & Repair Loop
+
 - **Goal:** Implement automated container test execution, test failure parser, and test-driven agent repair iteration.
 - **Prerequisites:** Phase 9 & Phase 11 complete.
 - **Files to Create:** `packages/agent/src/validation.ts`, `packages/agent/src/repair.ts`, `apps/runtime/src/process/TestRunner.ts`.
@@ -306,6 +324,7 @@ co-vibe/
 - **Definition of Done:** Agent automatically runs test suite post-execution; if tests fail, it diagnoses stack traces and attempts auto-repair.
 
 ### Phase 13 — Security Hardening & Audit Logging
+
 - **Goal:** Enforce zero-trust security controls: path traversal check, command allowlists, Docker flags, secret redaction, and audit logging.
 - **Prerequisites:** All previous phases complete.
 - **Files to Create:** `packages/security/src/path-policy.ts`, `packages/security/src/command-policy.ts`, `packages/security/src/redactor.ts`, `apps/api/src/middleware/audit.ts`.
@@ -318,6 +337,7 @@ co-vibe/
 - **Definition of Done:** Zero path traversal vulnerabilities, shell injection blocked, secrets redacted from streams, audit events stored for all mutations.
 
 ### Phase 14 — CI/CD & Deployment
+
 - **Goal:** Configure Cloudflare Worker deployment, Supabase database migration runner, and GitHub Actions CI workflow.
 - **Prerequisites:** Phase 13 complete.
 - **Files to Create:** `.github/workflows/ci.yml`, `infrastructure/cloudflare/wrangler.toml`, `scripts/migrate.ts`, `docs/deployment.md`.
@@ -414,36 +434,42 @@ co-vibe/
 ### Migration Sequence
 
 #### `001_initial_schema.sql`
+
 - **Tables:** `users`, `projects`, `project_members`.
 - **Indexes:** `idx_project_members_user` (`user_id`), `idx_projects_owner` (`owner_id`).
 - **Constraints:** Foreign key `owner_id -> users(id)`, Check `role IN ('owner','editor','viewer')`.
 - **Rollback:** `DROP TABLE project_members; DROP TABLE projects; DROP TABLE users;`.
 
 #### `002_workspaces_repos.sql`
+
 - **Tables:** `workspaces`, `repositories`.
 - **Indexes:** `idx_workspaces_project` (`project_id`), `idx_repositories_project` (`project_id`).
 - **Constraints:** Foreign key `project_id -> projects(id)`, Unique `(project_id, owner_name, repo_name)`.
 - **Rollback:** `DROP TABLE repositories; DROP TABLE workspaces;`.
 
 #### `003_collaboration_sessions.sql`
+
 - **Tables:** `collaboration_sessions`.
 - **Indexes:** `idx_collab_workspace` (`workspace_id`), `idx_collab_user` (`user_id`).
 - **Constraints:** Unique `(workspace_id, client_id)`.
 - **Rollback:** `DROP TABLE collaboration_sessions;`.
 
 #### `004_agent_execution.sql`
+
 - **Tables:** `agents`, `agent_tasks`, `agent_runs`, `tool_calls`.
 - **Indexes:** `idx_agent_tasks_workspace` (`workspace_id`, `created_at DESC`), `idx_agent_runs_task` (`task_id`, `attempt DESC`), `idx_tool_calls_run` (`run_id`, `started_at`).
 - **Constraints:** Foreign keys, Check `state IN ('created','queued','planning','waiting_for_approval','executing','validating','needs_fix','awaiting_review','accepted','rejected','revision','failed','completed','cancelled')`.
 - **Rollback:** `DROP TABLE tool_calls; DROP TABLE agent_runs; DROP TABLE agent_tasks; DROP TABLE agents;`.
 
 #### `005_changesets_conversations.sql`
+
 - **Tables:** `change_sets`, `ai_conversations`.
 - **Indexes:** `idx_changesets_task` (`task_id`, `created_at DESC`), `idx_ai_conversations_task` (`task_id`).
 - **Constraints:** Check `status IN ('pending','accepted','rejected','stale','conflicted')`.
 - **Rollback:** `DROP TABLE ai_conversations; DROP TABLE change_sets;`.
 
 #### `006_runtimes_git_audit.sql`
+
 - **Tables:** `terminal_sessions`, `runtimes`, `git_branches`, `commits`, `audit_logs`.
 - **Indexes:** `idx_runtimes_instance` (`runtime_instance_id`), `idx_audit_project_time` (`project_id`, `created_at DESC`).
 - **Constraints:** Unique `(workspace_id, name)` on `git_branches`, Unique `(workspace_id, sha)` on `commits`.
@@ -455,17 +481,17 @@ co-vibe/
 
 All endpoints operate under `/api/v1`. Structured Response: `{ "data": T, "requestId": "req_..." }`.
 
-| Route | Handler | Service | Database Operation | Validation (Zod) | Authorization | Error Handling | Tests |
-|---|---|---|---|---|---|---|---|
-| `POST /auth/login` | `AuthHandler.login` | `AuthService` | Select/Insert `users` | `LoginInputSchema` | Public | `AUTH_ERROR` | `auth.test.ts` |
-| `POST /projects` | `ProjectHandler.create` | `ProjectService` | Insert `projects`, Insert `project_members` | `CreateProjectSchema` | User | `VALIDATION_ERROR` | `projects.test.ts` |
-| `GET /projects/:id` | `ProjectHandler.get` | `ProjectService` | Select `projects` + `members` | `UUIDSchema` | Project Member | `AUTHZ_ERROR` | `projects.test.ts` |
-| `POST /projects/:id/workspaces` | `WorkspaceHandler.create` | `WorkspaceService` | Insert `workspaces` | `CreateWorkspaceSchema` | Owner / Editor | `AUTHZ_ERROR` | `workspaces.test.ts` |
-| `POST /agents/:id/tasks` | `AgentHandler.createTask` | `AgentService` | Insert `agent_tasks` | `CreateTaskSchema` | Owner / Editor | `POLICY_VIOLATION` | `agent.test.ts` |
-| `GET /changesets/:id` | `ChangeSetHandler.get` | `ChangeSetService` | Select `change_sets` | `UUIDSchema` | Project Member | `AUTHZ_ERROR` | `changeset.test.ts` |
-| `POST /changesets/:id/accept` | `ChangeSetHandler.accept` | `ChangeSetService` | Update `change_sets`, apply patch | `AcceptChangeSetSchema` | Owner / Editor | `GIT_ERROR` | `changeset.test.ts` |
-| `POST /projects/:id/git/commit` | `GitHandler.commit` | `GitService` | Insert `commits` | `CommitSchema` | Owner / Editor | `GIT_ERROR` | `git.test.ts` |
-| `POST /workspaces/:id/runtime/start` | `RuntimeHandler.start` | `RuntimeService` | Insert/Update `runtimes` | `WorkspaceIdSchema` | Owner / Editor | `RUNTIME_ERROR` | `runtime.test.ts` |
+| Route                                | Handler                   | Service            | Database Operation                          | Validation (Zod)        | Authorization  | Error Handling     | Tests                |
+| ------------------------------------ | ------------------------- | ------------------ | ------------------------------------------- | ----------------------- | -------------- | ------------------ | -------------------- |
+| `POST /auth/login`                   | `AuthHandler.login`       | `AuthService`      | Select/Insert `users`                       | `LoginInputSchema`      | Public         | `AUTH_ERROR`       | `auth.test.ts`       |
+| `POST /projects`                     | `ProjectHandler.create`   | `ProjectService`   | Insert `projects`, Insert `project_members` | `CreateProjectSchema`   | User           | `VALIDATION_ERROR` | `projects.test.ts`   |
+| `GET /projects/:id`                  | `ProjectHandler.get`      | `ProjectService`   | Select `projects` + `members`               | `UUIDSchema`            | Project Member | `AUTHZ_ERROR`      | `projects.test.ts`   |
+| `POST /projects/:id/workspaces`      | `WorkspaceHandler.create` | `WorkspaceService` | Insert `workspaces`                         | `CreateWorkspaceSchema` | Owner / Editor | `AUTHZ_ERROR`      | `workspaces.test.ts` |
+| `POST /agents/:id/tasks`             | `AgentHandler.createTask` | `AgentService`     | Insert `agent_tasks`                        | `CreateTaskSchema`      | Owner / Editor | `POLICY_VIOLATION` | `agent.test.ts`      |
+| `GET /changesets/:id`                | `ChangeSetHandler.get`    | `ChangeSetService` | Select `change_sets`                        | `UUIDSchema`            | Project Member | `AUTHZ_ERROR`      | `changeset.test.ts`  |
+| `POST /changesets/:id/accept`        | `ChangeSetHandler.accept` | `ChangeSetService` | Update `change_sets`, apply patch           | `AcceptChangeSetSchema` | Owner / Editor | `GIT_ERROR`        | `changeset.test.ts`  |
+| `POST /projects/:id/git/commit`      | `GitHandler.commit`       | `GitService`       | Insert `commits`                            | `CommitSchema`          | Owner / Editor | `GIT_ERROR`        | `git.test.ts`        |
+| `POST /workspaces/:id/runtime/start` | `RuntimeHandler.start`    | `RuntimeService`   | Insert/Update `runtimes`                    | `WorkspaceIdSchema`     | Owner / Editor | `RUNTIME_ERROR`    | `runtime.test.ts`    |
 
 ---
 
@@ -527,7 +553,7 @@ export class WorkspaceEditorController {
 
   public openFile(filePath: string, language: string) {
     let model = this.models.get(filePath);
-    
+
     if (!model) {
       const filesMap = this.doc.getMap<Y.Text>('files');
       let yText = filesMap.get(filePath);
@@ -539,12 +565,7 @@ export class WorkspaceEditorController {
       model = monaco.editor.createModel(yText.toString(), language, monaco.Uri.file(filePath));
       this.models.set(filePath, model);
 
-      const binding = new MonacoBinding(
-        yText,
-        model,
-        new Set([this.editor]),
-        /* awareness */ null
-      );
+      const binding = new MonacoBinding(yText, model, new Set([this.editor]), /* awareness */ null);
       this.bindings.set(filePath, binding);
     }
 
@@ -595,7 +616,11 @@ export interface IDockerManager {
   createContainer(workspaceId: string, image: string): Promise<string>;
   startContainer(containerId: string): Promise<void>;
   stopContainer(containerId: string): Promise<void>;
-  execCommand(containerId: string, cmd: string[], opts?: { timeoutMs?: number; cwd?: string }): Promise<{ stdout: string; stderr: string; exitCode: number }>;
+  execCommand(
+    containerId: string,
+    cmd: string[],
+    opts?: { timeoutMs?: number; cwd?: string }
+  ): Promise<{ stdout: string; stderr: string; exitCode: number }>;
 }
 
 export interface IProcessManager {
@@ -726,7 +751,7 @@ export async function runAgentExecutionLoop(
   try {
     while (!taskComplete && attempt <= maxAttempts) {
       await orchestrator.updateState(task.id, 'executing');
-      
+
       // 1. Gather Context
       const contextPrompt = await orchestrator.contextEngine.buildPrompt(task, worktreePath);
 
@@ -742,7 +767,7 @@ export async function runAgentExecutionLoop(
       if (response.toolCalls && response.toolCalls.length > 0) {
         for (const toolCall of response.toolCalls) {
           const tool = toolRegistry.get(toolCall.name);
-          
+
           // Validate Policy & Execution Path
           orchestrator.securityPolicy.validateToolExecution(toolCall, worktreePath);
 
@@ -754,7 +779,12 @@ export async function runAgentExecutionLoop(
             dockerManager: orchestrator.dockerManager,
           });
 
-          await orchestrator.recordToolCall(task.activeRunId, toolCall.name, toolCall.arguments, output);
+          await orchestrator.recordToolCall(
+            task.activeRunId,
+            toolCall.name,
+            toolCall.arguments,
+            output
+          );
         }
       }
 
@@ -839,7 +869,9 @@ Base Commit (sha: a1b2c3d)
 ```
 
 ### Patch Application Safety Check
+
 Before applying an accepted change set:
+
 1. Fetch latest SHA of destination workspace (`current_sha`).
 2. If `current_sha === base_revision`, apply patch directly using `git apply`.
 3. If `current_sha !== base_revision`, perform a **three-way patch merge** (`git apply --3way`).
@@ -849,14 +881,14 @@ Before applying an accepted change set:
 
 ## 16. SECURITY IMPLEMENTATION
 
-| Threat | Technical Control | Module Location | Validation Check | Automated Test |
-|---|---|---|---|---|
-| **Path Traversal** | Path canonicalization (`resolve`) & prefix check against root | `packages/security/path-policy.ts` | Reject paths containing `..` or null bytes | `path-policy.test.ts` |
-| **Command Injection** | Structured array execution (`cmd: string[]`), no raw shell | `packages/security/command-policy.ts` | Executables must match strict allowlist | `command-policy.test.ts` |
-| **Docker Breakout** | Drop capabilities (`--cap-drop=ALL`), non-root UID 10001 | `apps/runtime/docker/DockerManager.ts` | Inspect container specs post-creation | `docker-security.test.ts` |
-| **Prompt Injection** | Treat tool outputs as untrusted data inside `<tool_result>` tags | `packages/agent/prompts/system.ts` | Ensure system policies cannot be overridden by file text | `prompt-security.test.ts` |
-| **SSRF** | Dev server proxy restricted strictly to local container IPs | `apps/api/routes/preview.ts` | Validate destination IP against sandbox network subnet | `ssrf.test.ts` |
-| **Token Theft** | Encrypt GitHub OAuth tokens server-side using AES-256-GCM | `apps/api/services/github.ts` | Verify tokens are omitted from client API payloads | `secrets.test.ts` |
+| Threat                | Technical Control                                                | Module Location                        | Validation Check                                         | Automated Test            |
+| --------------------- | ---------------------------------------------------------------- | -------------------------------------- | -------------------------------------------------------- | ------------------------- |
+| **Path Traversal**    | Path canonicalization (`resolve`) & prefix check against root    | `packages/security/path-policy.ts`     | Reject paths containing `..` or null bytes               | `path-policy.test.ts`     |
+| **Command Injection** | Structured array execution (`cmd: string[]`), no raw shell       | `packages/security/command-policy.ts`  | Executables must match strict allowlist                  | `command-policy.test.ts`  |
+| **Docker Breakout**   | Drop capabilities (`--cap-drop=ALL`), non-root UID 10001         | `apps/runtime/docker/DockerManager.ts` | Inspect container specs post-creation                    | `docker-security.test.ts` |
+| **Prompt Injection**  | Treat tool outputs as untrusted data inside `<tool_result>` tags | `packages/agent/prompts/system.ts`     | Ensure system policies cannot be overridden by file text | `prompt-security.test.ts` |
+| **SSRF**              | Dev server proxy restricted strictly to local container IPs      | `apps/api/routes/preview.ts`           | Validate destination IP against sandbox network subnet   | `ssrf.test.ts`            |
+| **Token Theft**       | Encrypt GitHub OAuth tokens server-side using AES-256-GCM        | `apps/api/services/github.ts`          | Verify tokens are omitted from client API payloads       | `secrets.test.ts`         |
 
 ---
 
@@ -901,6 +933,7 @@ Subsystem: Full End-to-End IDE Workflow
 ## 18. ENVIRONMENT SETUP
 
 ### Prerequisites
+
 - **Node.js:** v22.x LTS
 - **Package Manager:** `pnpm` v9.x (`corepack enable`)
 - **Docker:** Docker Desktop / Docker Engine v24+
@@ -935,18 +968,18 @@ OLLAMA_BASE_URL=http://127.0.0.1:11434
 
 Execute commands using `pnpm` from the workspace root:
 
-| Action | Command | Purpose |
-|---|---|---|
-| **Install Dependencies** | `pnpm install` | Installs monorepo packages across all workspaces |
-| **Start Development** | `pnpm dev` | Starts Vite web dev server, Worker dev server, and Runtime daemon concurrently |
-| **Run Unit Tests** | `pnpm test` | Runs Vitest across packages |
-| **Run E2E Tests** | `pnpm test:e2e` | Runs Playwright end-to-end browser tests |
-| **Type Check** | `pnpm typecheck` | Runs `tsc --noEmit` across all workspaces |
-| **Lint Codebase** | `pnpm lint` | Runs ESLint and formatting checks |
-| **Build Production** | `pnpm build` | Builds frontend assets and bundles worker script |
-| **Database Migration** | `pnpm db:migrate` | Runs SQL migration scripts against targeted Supabase database |
-| **Start Runtime Daemon** | `pnpm runtime:start` | Launches local developer execution daemon |
-| **Stop Runtime Daemon** | `pnpm runtime:stop` | Tears down local daemon and removes sandbox containers |
+| Action                   | Command              | Purpose                                                                        |
+| ------------------------ | -------------------- | ------------------------------------------------------------------------------ |
+| **Install Dependencies** | `pnpm install`       | Installs monorepo packages across all workspaces                               |
+| **Start Development**    | `pnpm dev`           | Starts Vite web dev server, Worker dev server, and Runtime daemon concurrently |
+| **Run Unit Tests**       | `pnpm test`          | Runs Vitest across packages                                                    |
+| **Run E2E Tests**        | `pnpm test:e2e`      | Runs Playwright end-to-end browser tests                                       |
+| **Type Check**           | `pnpm typecheck`     | Runs `tsc --noEmit` across all workspaces                                      |
+| **Lint Codebase**        | `pnpm lint`          | Runs ESLint and formatting checks                                              |
+| **Build Production**     | `pnpm build`         | Builds frontend assets and bundles worker script                               |
+| **Database Migration**   | `pnpm db:migrate`    | Runs SQL migration scripts against targeted Supabase database                  |
+| **Start Runtime Daemon** | `pnpm runtime:start` | Launches local developer execution daemon                                      |
+| **Stop Runtime Daemon**  | `pnpm runtime:stop`  | Tears down local daemon and removes sandbox containers                         |
 
 ---
 

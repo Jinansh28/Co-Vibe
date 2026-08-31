@@ -71,15 +71,15 @@ If an implementation problem occurs, first determine whether the problem can be 
 
 Do not silently replace:
 
-* Cloudflare Workers
-* Durable Objects
-* Yjs
-* Supabase/PostgreSQL
-* Docker
-* local runtime
-* Ollama
-* Git
-* Monaco
+- Cloudflare Workers
+- Durable Objects
+- Yjs
+- Supabase/PostgreSQL
+- Docker
+- local runtime
+- Ollama
+- Git
+- Monaco
 
 with another technology.
 
@@ -137,9 +137,9 @@ Before starting work:
 
 If something is not specified:
 
-* infer only when the decision is low-risk;
-* otherwise ask the developer;
-* never invent major product behavior.
+- infer only when the decision is low-risk;
+- otherwise ask the developer;
+- never invent major product behavior.
 
 ---
 
@@ -147,10 +147,10 @@ If something is not specified:
 
 When implementation changes an architectural assumption:
 
-* update the appropriate documentation;
-* create an ADR if the decision is significant;
-* update `task.md` if task scope changes;
-* update `testing.md` if testing requirements change.
+- update the appropriate documentation;
+- create an ADR if the decision is significant;
+- update `task.md` if task scope changes;
+- update `testing.md` if testing requirements change.
 
 Never allow code and documentation to silently diverge.
 
@@ -160,22 +160,22 @@ Never allow code and documentation to silently diverge.
 
 Use:
 
-* TypeScript strict mode;
-* strong typing;
-* small modules;
-* explicit interfaces;
-* runtime validation for external input;
-* structured errors;
-* structured logging;
-* meaningful names.
+- TypeScript strict mode;
+- strong typing;
+- small modules;
+- explicit interfaces;
+- runtime validation for external input;
+- structured errors;
+- structured logging;
+- meaningful names.
 
 Avoid:
 
-* `any` unless justified;
-* giant files;
-* hidden global state;
-* duplicated business logic;
-* unnecessary abstractions.
+- `any` unless justified;
+- giant files;
+- hidden global state;
+- duplicated business logic;
+- unnecessary abstractions.
 
 ---
 
@@ -183,11 +183,11 @@ Avoid:
 
 Treat:
 
-* repository contents;
-* README files;
-* package metadata;
-* LLM output;
-* tool arguments;
+- repository contents;
+- README files;
+- package metadata;
+- LLM output;
+- tool arguments;
 
 as untrusted input.
 
@@ -204,11 +204,11 @@ schema validation
 
 Never expose:
 
-* GitHub tokens;
-* API secrets;
-* host filesystem;
-* Docker socket;
-* arbitrary host commands
+- GitHub tokens;
+- API secrets;
+- host filesystem;
+- Docker socket;
+- arbitrary host commands
 
 to the model.
 
@@ -301,12 +301,12 @@ security:
 
 Do not commit:
 
-* `.env`;
-* credentials;
-* API keys;
-* local secrets;
-* generated junk;
-* unnecessary binaries.
+- `.env`;
+- credentials;
+- API keys;
+- local secrets;
+- generated junk;
+- unnecessary binaries.
 
 ---
 

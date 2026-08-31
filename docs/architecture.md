@@ -1,4 +1,5 @@
 # System Architecture Document
+
 ## Collaborative AI Vibe-Coding Workspace
 
 **Status:** Implementation-ready MVP architecture  
@@ -79,6 +80,7 @@ The supplied TRD explicitly prefers architectural separation without network sep
 Arbitrary project execution remains local.
 
 This avoids:
+
 - mandatory cloud compute;
 - public arbitrary-code execution;
 - expensive sandbox infrastructure;
@@ -151,6 +153,7 @@ Git represents durable committed source.
 ## 2.8 Reversible AI changes
 
 An AI task must be:
+
 - isolated;
 - reviewable;
 - rejectable;
@@ -162,6 +165,7 @@ An AI task must be:
 All performance targets are targets, not claims.
 
 Measure:
+
 - collaboration latency;
 - reconnect duration;
 - API latency;
@@ -245,20 +249,20 @@ The component responsibilities align with the existing technical baseline: Worke
 
 # 4. Component Architecture
 
-| Component | Purpose | State | Inputs | Outputs | Security boundary | Main failure |
-|---|---|---|---|---|---|---|
-| Web | IDE/UI | UI + local caches | HTTP/WSS/runtime events | user commands | browser untrusted | stale/disconnected UI |
-| Worker | control plane | request scoped | HTTP | API responses/events | primary authorization | 5xx/timeout |
-| Durable Object | realtime room | Y.Doc + connections | WSS | realtime events | workspace membership | restart/disconnect |
-| Supabase | durable metadata | relational | SQL | rows | server-only credentials | transaction failure |
-| Agent | coding loop | task/run state | task/context/tool results | plans/tool calls | model untrusted | bad output/timeout |
-| Context Engine | repository retrieval | index/cache | repo/task/errors | ranked context | repo untrusted | stale index |
-| Runtime | execution bridge | processes/container | typed commands | streams/results | host boundary | disconnect/crash |
-| Docker | execution isolation | container | runtime config | process output | isolation layer | crash/escape risk |
-| Git | version authority | repository | CLI commands | status/diff/commit | credential boundary | conflict |
-| GitHub | remote repo | remote state | OAuth/Git | remote refs | external system | API/rate limit |
-| Preview | app feedback | process/port | dev server | browser content | separate preview boundary | crash |
-| Observability | diagnosis | telemetry | events/logs | metrics/traces | redact secrets | telemetry loss |
+| Component      | Purpose              | State               | Inputs                    | Outputs              | Security boundary         | Main failure          |
+| -------------- | -------------------- | ------------------- | ------------------------- | -------------------- | ------------------------- | --------------------- |
+| Web            | IDE/UI               | UI + local caches   | HTTP/WSS/runtime events   | user commands        | browser untrusted         | stale/disconnected UI |
+| Worker         | control plane        | request scoped      | HTTP                      | API responses/events | primary authorization     | 5xx/timeout           |
+| Durable Object | realtime room        | Y.Doc + connections | WSS                       | realtime events      | workspace membership      | restart/disconnect    |
+| Supabase       | durable metadata     | relational          | SQL                       | rows                 | server-only credentials   | transaction failure   |
+| Agent          | coding loop          | task/run state      | task/context/tool results | plans/tool calls     | model untrusted           | bad output/timeout    |
+| Context Engine | repository retrieval | index/cache         | repo/task/errors          | ranked context       | repo untrusted            | stale index           |
+| Runtime        | execution bridge     | processes/container | typed commands            | streams/results      | host boundary             | disconnect/crash      |
+| Docker         | execution isolation  | container           | runtime config            | process output       | isolation layer           | crash/escape risk     |
+| Git            | version authority    | repository          | CLI commands              | status/diff/commit   | credential boundary       | conflict              |
+| GitHub         | remote repo          | remote state        | OAuth/Git                 | remote refs          | external system           | API/rate limit        |
+| Preview        | app feedback         | process/port        | dev server                | browser content      | separate preview boundary | crash                 |
+| Observability  | diagnosis            | telemetry           | events/logs               | metrics/traces       | redact secrets            | telemetry loss        |
 
 ---
 
@@ -559,6 +563,7 @@ sequenceDiagram
 ```
 
 Browser must never receive:
+
 - Supabase service-role key;
 - GitHub client secret;
 - runtime master credential;
@@ -576,21 +581,21 @@ Editor
 Viewer
 ```
 
-| Operation | Owner | Editor | Viewer |
-|---|---:|---:|---:|
-| Read project | ✓ | ✓ | ✓ |
-| Edit code | ✓ | ✓ | — |
-| Collaborate | ✓ | ✓ | read-only |
-| Run runtime | ✓ | ✓ | — |
-| Ask agent | ✓ | ✓ | — |
-| Approve plan | ✓ | ✓ | — |
-| Apply changes | ✓ | ✓ | — |
-| Create branch | ✓ | ✓ | — |
-| Commit | ✓ | ✓ | — |
-| Push | ✓ | configurable | — |
-| Invite | ✓ | — | — |
-| Project settings | ✓ | — | — |
-| Delete project | ✓ | — | — |
+| Operation        | Owner |       Editor |    Viewer |
+| ---------------- | ----: | -----------: | --------: |
+| Read project     |     ✓ |            ✓ |         ✓ |
+| Edit code        |     ✓ |            ✓ |         — |
+| Collaborate      |     ✓ |            ✓ | read-only |
+| Run runtime      |     ✓ |            ✓ |         — |
+| Ask agent        |     ✓ |            ✓ |         — |
+| Approve plan     |     ✓ |            ✓ |         — |
+| Apply changes    |     ✓ |            ✓ |         — |
+| Create branch    |     ✓ |            ✓ |         — |
+| Commit           |     ✓ |            ✓ |         — |
+| Push             |     ✓ | configurable |         — |
+| Invite           |     ✓ |            — |         — |
+| Project settings |     ✓ |            — |         — |
+| Delete project   |     ✓ |            — |         — |
 
 Authorization sequence:
 
@@ -1208,13 +1213,10 @@ interface AgentTool<Input, Output> {
   description: string;
   schema: ZodSchema<Input>;
   permission: Permission;
-  risk: "low" | "medium" | "high" | "critical";
+  risk: 'low' | 'medium' | 'high' | 'critical';
   timeoutMs: number;
 
-  execute(
-    input: Input,
-    context: ToolContext
-  ): Promise<ToolResult<Output>>;
+  execute(input: Input, context: ToolContext): Promise<ToolResult<Output>>;
 }
 
 interface ToolContext {
@@ -1228,30 +1230,30 @@ interface ToolContext {
 
 ## Tool inventory
 
-| Tool | Permission | Executor | Risk |
-|---|---|---|---|
-| read_file | repository.read | Runtime | low |
-| write_file | repository.write | Runtime/worktree | medium |
-| edit_file | repository.write | Runtime/worktree | medium |
-| create_file | repository.write | Runtime/worktree | medium |
-| delete_file | repository.write | Runtime/worktree | high |
-| list_directory | repository.read | Runtime | low |
-| search_code | repository.read | Context/Runtime | low |
-| search_repository | repository.read | Context | low |
-| inspect_dependencies | repository.read | Runtime | low |
-| run_command | runtime.execute | Docker | high |
-| run_tests | runtime.execute | Docker | medium |
-| start_server | runtime.execute | Docker | medium |
-| stop_process | runtime.execute | Runtime | medium |
-| inspect_logs | runtime.read | Runtime | low |
-| git_status | git.read | Runtime | low |
-| git_diff | git.read | Runtime | low |
-| git_branch | git.write | Runtime | medium |
-| git_commit | git.write | Runtime | high |
-| git_push | git.push | Runtime | critical |
-| inspect_preview | preview.read | Runtime | low |
-| capture_preview | preview.read | Runtime | medium |
-| inspect_runtime_errors | runtime.read | Runtime | low |
+| Tool                   | Permission       | Executor         | Risk     |
+| ---------------------- | ---------------- | ---------------- | -------- |
+| read_file              | repository.read  | Runtime          | low      |
+| write_file             | repository.write | Runtime/worktree | medium   |
+| edit_file              | repository.write | Runtime/worktree | medium   |
+| create_file            | repository.write | Runtime/worktree | medium   |
+| delete_file            | repository.write | Runtime/worktree | high     |
+| list_directory         | repository.read  | Runtime          | low      |
+| search_code            | repository.read  | Context/Runtime  | low      |
+| search_repository      | repository.read  | Context          | low      |
+| inspect_dependencies   | repository.read  | Runtime          | low      |
+| run_command            | runtime.execute  | Docker           | high     |
+| run_tests              | runtime.execute  | Docker           | medium   |
+| start_server           | runtime.execute  | Docker           | medium   |
+| stop_process           | runtime.execute  | Runtime          | medium   |
+| inspect_logs           | runtime.read     | Runtime          | low      |
+| git_status             | git.read         | Runtime          | low      |
+| git_diff               | git.read         | Runtime          | low      |
+| git_branch             | git.write        | Runtime          | medium   |
+| git_commit             | git.write        | Runtime          | high     |
+| git_push               | git.push         | Runtime          | critical |
+| inspect_preview        | preview.read     | Runtime          | low      |
+| capture_preview        | preview.read     | Runtime          | medium   |
+| inspect_runtime_errors | runtime.read     | Runtime          | low      |
 
 The supplied technical prompt requires these exact tool families and asks that each define schema, permission, timeout, resource limit, audit event, errors, and example. fileciteturn3file1L523-L581
 
@@ -1270,6 +1272,7 @@ The supplied technical prompt requires these exact tool families and asks that e
 ```
 
 Rules:
+
 - normalized relative path;
 - max returned bytes;
 - no binary output.
@@ -1285,6 +1288,7 @@ Rules:
 ```
 
 Fail if:
+
 - old text absent;
 - multiple unexpected matches;
 - path invalid.
@@ -1300,6 +1304,7 @@ Fail if:
 ```
 
 Always:
+
 - containerized;
 - bounded;
 - audited;
@@ -1627,6 +1632,7 @@ stderr limit: 1 MB
 Retry transient infrastructure failures.
 
 Do not blindly retry:
+
 - deterministic test failures;
 - permission failures;
 - policy-blocked commands;
@@ -1649,6 +1655,7 @@ Project Container
 ```
 
 Responsibilities:
+
 - runtime registration;
 - pairing;
 - heartbeat;
@@ -1741,6 +1748,7 @@ Recommended heartbeat:
 These are implementation defaults, not external service guarantees.
 
 Pairing codes must be:
+
 - short-lived;
 - single-use;
 - workspace-scoped;
@@ -1763,6 +1771,7 @@ READY
 ```
 
 On reconnect, runtime reports:
+
 - runtime identity;
 - container state;
 - active process IDs;
@@ -1847,6 +1856,7 @@ ENTRYPOINT ["/usr/local/bin/runtime-entrypoint.sh"]
 ```
 
 Runtime configuration should additionally:
+
 - drop capabilities;
 - bound CPU/memory/PIDs;
 - avoid privileged mode;
@@ -1923,6 +1933,7 @@ A blocklist is not sufficient; container isolation remains required.
 ## Browser
 
 May receive:
+
 - user identity;
 - public metadata;
 - safe runtime status.
@@ -1930,6 +1941,7 @@ May receive:
 ## Worker
 
 May access:
+
 - OAuth server credentials;
 - service credentials;
 - runtime authentication secrets.
@@ -1941,6 +1953,7 @@ May access only explicitly required project/runtime secrets.
 ## Agent
 
 Must not receive:
+
 - raw GitHub token;
 - Supabase service key;
 - host environment;
@@ -1949,6 +1962,7 @@ Must not receive:
 ## Logs
 
 Redact:
+
 - bearer tokens;
 - OAuth tokens;
 - private keys;
@@ -2039,6 +2053,7 @@ Preview must have a separate origin/security context where possible so project H
 # 39. Preview Security
 
 Protect against:
+
 - SSRF;
 - XSS;
 - cookie theft;
@@ -2046,6 +2061,7 @@ Protect against:
 - arbitrary proxy targets.
 
 Rules:
+
 - only proxy registered runtime ports;
 - separate preview origin;
 - no application cookies in preview;
@@ -2240,14 +2256,14 @@ sequenceDiagram
 
 # 44. Consistency Model
 
-| Domain | Model | Reason |
-|---|---|---|
-| Collaboration | eventual convergence | concurrent edits |
-| Metadata | transactional | relational integrity |
-| Agent state | durable state machine | long-running jobs |
-| Git | committed source truth | durable version history |
-| Runtime | local process authority | actual process/container state |
-| Presence | ephemeral | safe to reconstruct |
+| Domain        | Model                   | Reason                         |
+| ------------- | ----------------------- | ------------------------------ |
+| Collaboration | eventual convergence    | concurrent edits               |
+| Metadata      | transactional           | relational integrity           |
+| Agent state   | durable state machine   | long-running jobs              |
+| Git           | committed source truth  | durable version history        |
+| Runtime       | local process authority | actual process/container state |
+| Presence      | ephemeral               | safe to reconstruct            |
 
 The supplied architecture explicitly defines this consistency model. fileciteturn2file2L444-L458
 
@@ -2364,6 +2380,7 @@ remote visibility timestamp
 ```
 
 Report:
+
 - p50;
 - p95;
 - p99.
@@ -2381,6 +2398,7 @@ document converged
 ## Agent
 
 Measure:
+
 - task created;
 - first event;
 - plan ready;
@@ -2391,6 +2409,7 @@ Measure:
 ## Runtime
 
 Measure:
+
 - request;
 - process start;
 - first byte;
@@ -2556,23 +2575,27 @@ The supplied technical baseline also selects pnpm workspaces and a TypeScript mo
 ## contracts
 
 Own:
+
 - API DTOs;
 - runtime messages;
 - WebSocket envelopes;
 - Zod schemas.
 
 Forbidden:
+
 - React;
 - database drivers.
 
 ## domain
 
 Own:
+
 - domain entities;
 - state transitions;
 - permissions.
 
 Forbidden:
+
 - Docker;
 - browser APIs;
 - HTTP.
@@ -2580,6 +2603,7 @@ Forbidden:
 ## agent
 
 Own:
+
 - orchestrator;
 - state machine;
 - prompts;
@@ -2587,12 +2611,14 @@ Own:
 - repair loop.
 
 Forbidden:
+
 - host filesystem;
 - direct Docker daemon.
 
 ## context
 
 Own:
+
 - indexing;
 - search;
 - ranking;
@@ -2601,6 +2627,7 @@ Own:
 ## security
 
 Own:
+
 - path validation;
 - command policy;
 - authorization helpers;
@@ -2609,11 +2636,13 @@ Own:
 ## runtime-protocol
 
 Own:
+
 - runtime command/result schemas.
 
 ## git
 
 Own:
+
 - Git adapter;
 - worktree logic;
 - diff parsing.
@@ -2621,6 +2650,7 @@ Own:
 ## collaboration
 
 Own:
+
 - Yjs binding;
 - awareness;
 - document identity.
@@ -2667,14 +2697,9 @@ interface AIProvider {
 interface ProjectRepository {
   getProject(id: string): Promise<Project | null>;
 
-  getMembership(
-    projectId: string,
-    userId: string
-  ): Promise<ProjectMember | null>;
+  getMembership(projectId: string, userId: string): Promise<ProjectMember | null>;
 
-  createProject(
-    input: CreateProjectInput
-  ): Promise<Project>;
+  createProject(input: CreateProjectInput): Promise<Project>;
 }
 ```
 
@@ -2802,16 +2827,16 @@ The supplied technical design selects this exact technology family and explicitl
 
 # 54. Technical Risk Matrix
 
-| Risk | Probability | Impact | Detection | Mitigation | Fallback |
-|---|---|---|---|---|---|
-| AI reliability | High | High | failed tasks | deterministic context + bounded loop | manual coding |
-| Docker security | Medium | Critical | security tests | isolation + limits | disable execution |
-| Collaboration correctness | Medium | High | convergence tests | Yjs + protocol tests | single-user mode |
-| Runtime connectivity | High | High | heartbeat | reconnect | editor-only |
-| Git conflicts | Medium | High | patch check | base revision + three-way apply | manual resolution |
-| Free-tier limits | Medium | Medium | usage metrics | bounded workload | local-only mode |
-| Model quality | High | High | benchmark tasks | provider abstraction | manual implementation |
-| Scope creep | High | High | milestone review | strict P0/P1 | defer |
+| Risk                      | Probability | Impact   | Detection         | Mitigation                           | Fallback              |
+| ------------------------- | ----------- | -------- | ----------------- | ------------------------------------ | --------------------- |
+| AI reliability            | High        | High     | failed tasks      | deterministic context + bounded loop | manual coding         |
+| Docker security           | Medium      | Critical | security tests    | isolation + limits                   | disable execution     |
+| Collaboration correctness | Medium      | High     | convergence tests | Yjs + protocol tests                 | single-user mode      |
+| Runtime connectivity      | High        | High     | heartbeat         | reconnect                            | editor-only           |
+| Git conflicts             | Medium      | High     | patch check       | base revision + three-way apply      | manual resolution     |
+| Free-tier limits          | Medium      | Medium   | usage metrics     | bounded workload                     | local-only mode       |
+| Model quality             | High        | High     | benchmark tasks   | provider abstraction                 | manual implementation |
+| Scope creep               | High        | High     | milestone review  | strict P0/P1                         | defer                 |
 
 ---
 
@@ -2836,6 +2861,7 @@ local runtime
 Same architecture.
 
 Watch:
+
 - active rooms;
 - Worker traffic;
 - AI load.
@@ -2845,6 +2871,7 @@ Watch:
 Still viable.
 
 Improve:
+
 - room lifecycle;
 - DB indexes;
 - task throttling.
@@ -2852,11 +2879,13 @@ Improve:
 ## 1,000 users
 
 Likely pressure:
+
 - AI capacity;
 - active collaboration rooms;
 - database limits.
 
 Introduce:
+
 - task queue;
 - stronger provider routing;
 - managed database capacity.
@@ -3047,6 +3076,7 @@ flowchart TB
 ```
 
 Parallel work:
+
 - frontend design system + API contracts;
 - runtime protocol + Worker service modules;
 - Monaco + database migrations;

@@ -1,4 +1,5 @@
 # UI/UX DESIGN SPECIFICATION
+
 ## Collaborative AI Vibe-Coding Workspace
 
 **Document type:** Implementation-ready UI/UX specification  
@@ -29,6 +30,7 @@ Human control
 ```
 
 It does not optimize for:
+
 - marketing-heavy SaaS dashboards;
 - conversational AI as the primary interaction;
 - decorative animations;
@@ -53,18 +55,18 @@ The workspace should visually communicate this without requiring a tutorial.
 
 ## 1.2 Primary UX goals
 
-| Goal | Design implication |
-|---|---|
-| Developer productivity | Dense, keyboard-first layout |
-| Collaboration | Persistent presence and remote cursor cues |
-| AI trust | Explicit agent state, plan, tools, tests, and review |
-| Safety | Isolated AI change indicator + approval boundaries |
-| Runtime clarity | Always-visible runtime status |
-| Code readability | Editor gets the largest surface |
-| Fast navigation | Command/search affordances |
-| Debuggability | Errors remain attached to their source |
-| Accessibility | Keyboard and focus-first interaction |
-| MVP simplicity | One strong workspace instead of many dashboards |
+| Goal                   | Design implication                                   |
+| ---------------------- | ---------------------------------------------------- |
+| Developer productivity | Dense, keyboard-first layout                         |
+| Collaboration          | Persistent presence and remote cursor cues           |
+| AI trust               | Explicit agent state, plan, tools, tests, and review |
+| Safety                 | Isolated AI change indicator + approval boundaries   |
+| Runtime clarity        | Always-visible runtime status                        |
+| Code readability       | Editor gets the largest surface                      |
+| Fast navigation        | Command/search affordances                           |
+| Debuggability          | Errors remain attached to their source               |
+| Accessibility          | Keyboard and focus-first interaction                 |
+| MVP simplicity         | One strong workspace instead of many dashboards      |
 
 ## 1.3 Product UX loop
 
@@ -107,11 +109,13 @@ Push
 Use a **dark-first developer-tool aesthetic** with a fully supported light theme.
 
 The visual language should feel closer to:
+
 - a modern code editor;
 - a terminal;
 - a collaborative engineering console;
 
 than:
+
 - a consumer dashboard;
 - a marketing website;
 - a chat application.
@@ -134,6 +138,7 @@ Instrumented
 ## 2.3 Avoid
 
 Do not use:
+
 - giant gradient hero cards;
 - excessive glassmorphism;
 - oversized rounded cards;
@@ -155,6 +160,7 @@ Do not use:
 Dark mode is the default for the developer workspace.
 
 Light mode is supported because:
+
 - users may work in bright environments;
 - accessibility is improved for some users;
 - a portfolio demo benefits from theme choice.
@@ -180,6 +186,7 @@ Avoid deep elevation stacks.
 Use borders more often than shadows.
 
 Default:
+
 - 1px panel border;
 - subtle neutral border;
 - stronger border on focus;
@@ -220,6 +227,7 @@ JetBrains Mono, ui-monospace, SFMono-Regular, Consolas, monospace
 ```
 
 Use the code font only for:
+
 - editor;
 - terminal;
 - code snippets;
@@ -352,6 +360,7 @@ These are recommended design tokens, not a PRD requirement.
 ## 6.3 Semantic rule
 
 Never use:
+
 - red merely for visual emphasis;
 - green merely as decoration;
 - yellow merely to make a card noticeable.
@@ -373,6 +382,7 @@ Gray   = neutral/inactive
 Use one consistent icon family such as Lucide.
 
 Recommended:
+
 - 16px icons for tree/toolbars;
 - 14px icons for dense lists;
 - 18px for primary actions;
@@ -430,6 +440,7 @@ Panel:        220–300ms
 ## 8.4 Reduced motion
 
 When `prefers-reduced-motion: reduce` is active:
+
 - remove non-essential transitions;
 - replace pulsing with static indicators;
 - keep status changes immediate.
@@ -464,6 +475,7 @@ Landing
 Workspace surfaces are not separate pages wherever possible.
 
 Use:
+
 - panels;
 - drawers;
 - tabs;
@@ -471,6 +483,7 @@ Use:
 - dialogs.
 
 The user should not leave the coding context to:
+
 - view Git status;
 - inspect AI progress;
 - inspect terminal output;
@@ -665,6 +678,7 @@ The PRD calls for projects, create project, import GitHub, runtime status, and r
 ## 12.3 Project card
 
 Show:
+
 - project name;
 - repository/branch;
 - last updated;
@@ -673,6 +687,7 @@ Show:
 - last activity.
 
 Avoid:
+
 - progress bars;
 - vanity metrics;
 - fake analytics.
@@ -966,6 +981,7 @@ If the available width cannot satisfy these values, collapse the AI panel before
 All major panels are resizable with 4–6px resize hit areas.
 
 Behavior:
+
 - cursor changes on hover;
 - keyboard-accessible resize if feasible;
 - dimensions persisted per user;
@@ -980,6 +996,7 @@ Collapse to icon rail or hide.
 ### AI
 
 Collapse to a 40px rail containing:
+
 - AI icon;
 - active task indicator;
 - approval badge.
@@ -1013,6 +1030,7 @@ All major panels visible.
 ## 17.2 1280px
 
 Same structure with:
+
 - narrower explorer;
 - narrower AI;
 - fewer secondary labels;
@@ -1061,6 +1079,7 @@ File tree becomes an overlay drawer.
 Mobile is not an IDE replacement.
 
 Show:
+
 - project navigation;
 - editor preview/limited editing if practical;
 - AI task review;
@@ -1068,6 +1087,7 @@ Show:
 - preview.
 
 Do not promise full:
+
 - multi-panel editing;
 - advanced Monaco workflows;
 - dense collaboration;
@@ -1096,17 +1116,12 @@ Editor | AI | Terminal | Preview
 ## 18.2 Priority
 
 Left:
+
 1. project;
 2. branch;
 3. Git dirty state.
 
-Center/right:
-4. Share;
-5. Run;
-6. AI;
-7. collaborators;
-8. runtime;
-9. settings.
+Center/right: 4. Share; 5. Run; 6. AI; 7. collaborators; 8. runtime; 9. settings.
 
 ## 18.3 Project menu
 
@@ -1220,6 +1235,7 @@ README.md
 ```
 
 Modified:
+
 - subtle colored dot;
 - not a bright badge.
 
@@ -1228,6 +1244,7 @@ AI-modified pending review should not appear as ordinary shared dirty state beca
 ## 19.3 Selected state
 
 Selected row:
+
 - subtle background;
 - left accent line;
 - strong text.
@@ -1266,12 +1283,14 @@ Do not add IDE features that are not needed for MVP.
 ## 19.6 Search
 
 Search should:
+
 - filter by path/name;
 - support quick keyboard invocation;
 - show result count;
 - preserve tree context.
 
 Large repositories:
+
 - virtualize long lists;
 - lazy-load directory children;
 - avoid rendering thousands of nodes simultaneously.
@@ -1301,6 +1320,7 @@ Dirty indicator:
 `●`
 
 Close:
+
 - middle click;
 - close icon on hover;
 - `Ctrl/Cmd+W` with standard browser/Monaco conflict handled intentionally.
@@ -1316,6 +1336,7 @@ Clicking a segment navigates within the current path.
 ## 20.4 Editor settings
 
 MVP:
+
 - font size;
 - word wrap;
 - minimap toggle;
@@ -1330,10 +1351,12 @@ Persist per user.
 Use Monaco diagnostics.
 
 Inline:
+
 - subtle squiggle;
 - gutter marker.
 
 Hover:
+
 ```text
 Type error
 Property 'theme' does not exist...
@@ -1366,11 +1389,13 @@ This prevents permanent visual noise.
 ## 20.7 Remote cursors
 
 Remote cursor:
+
 - thin vertical caret;
 - collaborator color;
 - name label only when active/hovered.
 
 Remote selection:
+
 - translucent collaborator color;
 - never obscure syntax.
 
@@ -1389,6 +1414,7 @@ Top bar:
 ```
 
 Hover:
+
 ```text
 Alice
 Online
@@ -1408,6 +1434,7 @@ Use accessible text in addition to color.
 ## 21.3 Cursor labels
 
 Only show persistent labels for:
+
 - the active remote cursor;
 - recently moved cursor.
 
@@ -1426,6 +1453,7 @@ Presence tooltip:
 Do not show conflict dialogs for normal Yjs collaboration.
 
 Instead:
+
 - merge automatically;
 - show remote cursor;
 - keep selections subtle.
@@ -1548,6 +1576,7 @@ What should the agent change?
 ```
 
 Optional context actions:
+
 - `Current file`;
 - `Selected code`;
 - `Current error`.
@@ -1748,6 +1777,7 @@ What should change in the plan?
 ## 25.2 Visible information
 
 Show:
+
 - timestamp;
 - tool name;
 - target;
@@ -1757,6 +1787,7 @@ Show:
 ## 25.3 Hidden by default
 
 Hide:
+
 - raw model tokens;
 - full prompt;
 - internal chain-of-thought;
@@ -1764,6 +1795,7 @@ Hide:
 - repetitive file contents.
 
 Expandable:
+
 - command;
 - concise stdout;
 - error details;
@@ -1915,6 +1947,7 @@ shared workspace
 ## 27.3 Header
 
 Show:
+
 - task title;
 - files changed;
 - additions/deletions;
@@ -1925,6 +1958,7 @@ Show:
 ## 27.4 File list
 
 Each file:
+
 - status icon;
 - path;
 - additions/deletions;
@@ -1941,6 +1975,7 @@ A  tests/Dashboard.test.ts +14 -2
 ## 27.5 Diff viewer
 
 Use:
+
 - syntax highlighting;
 - line numbers;
 - clear addition/deletion treatment;
@@ -2067,6 +2102,7 @@ Exit code: 0
 ## 29.2 Terminal header
 
 Show:
+
 - session tabs;
 - runtime state;
 - process state;
@@ -2174,6 +2210,7 @@ Keep the preview itself uncluttered.
 ## 30.6 AI relationship
 
 A `Send Error to AI` action packages:
+
 - error message;
 - relevant console output;
 - current route;
@@ -2247,6 +2284,7 @@ Name
 ## 31.5 Commit validation
 
 Disable commit when:
+
 - no changes;
 - empty message.
 
@@ -2309,12 +2347,15 @@ Only notify when meaningful:
 ## 33.1 Placement
 
 Primary:
+
 - bottom-right toast stack.
 
 Contextual:
+
 - inline within relevant panel.
 
 Persistent:
+
 - top workspace banner for conditions that affect work.
 
 ## 33.2 Priority
@@ -2358,6 +2399,7 @@ Error:    persistent if unresolved
 `✓ Pushed feature/dark-mode`
 
 Do not toast:
+
 - every file read;
 - every Yjs update;
 - every agent tool call;
@@ -2383,6 +2425,7 @@ neutral
 ## Display
 
 Always pair color with:
+
 - icon;
 - text;
 - tooltip.
@@ -2719,6 +2762,7 @@ Example:
 # 40. IconButton
 
 Use for:
+
 - close;
 - settings;
 - refresh;
@@ -2726,6 +2770,7 @@ Use for:
 - expand.
 
 Requirements:
+
 - 32×32px minimum hit target in normal UI;
 - tooltip after short hover;
 - accessible label.
@@ -2735,6 +2780,7 @@ Requirements:
 # 41. Tooltip
 
 Use for:
+
 - unfamiliar icon buttons;
 - truncated paths;
 - status details.
@@ -2776,6 +2822,7 @@ lg: 32px
 ```
 
 Presence:
+
 - status dot;
 - accessible name.
 
@@ -2802,11 +2849,13 @@ Panel headers should be 32–36px high.
 # 45. Tabs
 
 Use for:
+
 - editor files;
 - terminal sessions;
 - bottom panels.
 
 States:
+
 - active;
 - inactive;
 - dirty;
@@ -2819,6 +2868,7 @@ Avoid horizontal tab overflow where possible; use scroll with visible affordance
 # 46. Tree
 
 Requirements:
+
 - keyboard navigation;
 - lazy directory expansion;
 - virtualization for large repositories;
@@ -2832,6 +2882,7 @@ Requirements:
 # 47. Dialog
 
 Use for:
+
 - Git push confirmation;
 - dangerous command approval;
 - package installation;
@@ -2845,12 +2896,14 @@ Do not use modal dialogs for routine AI progress.
 # 48. Dropdown
 
 Use for:
+
 - branch selector;
 - project selector;
 - runtime actions;
 - settings.
 
 Keyboard:
+
 - ArrowUp/Down;
 - Enter;
 - Escape;
@@ -2861,6 +2914,7 @@ Keyboard:
 # 49. Toast
 
 Requirements:
+
 - max 3 visible at once;
 - stack vertically;
 - newest on top;
@@ -2872,6 +2926,7 @@ Requirements:
 # 50. Progress
 
 Use:
+
 - determinate progress when known;
 - activity indicator when unknown.
 
@@ -2888,12 +2943,14 @@ unless the system can actually calculate meaningful progress.
 # 51. CodeBlock
 
 Used outside Monaco for:
+
 - commands;
 - errors;
 - approval dialogs;
 - small snippets.
 
 Include:
+
 - copy button;
 - language label where useful;
 - wrap option for logs.
@@ -2903,6 +2960,7 @@ Include:
 # 52. DiffViewer
 
 Capabilities:
+
 - unified/split mode;
 - syntax highlighting;
 - line numbers;
@@ -2918,6 +2976,7 @@ MVP default: unified diff for compactness.
 # 53. Terminal Component
 
 Capabilities:
+
 - tabs;
 - streaming output;
 - command input;
@@ -3024,6 +3083,7 @@ Do not override high-value Monaco shortcuts unnecessarily.
 Every non-editor interaction must be keyboard reachable.
 
 Required:
+
 - visible focus;
 - logical tab order;
 - Escape closes dialogs/popovers;
@@ -3045,6 +3105,7 @@ Return focus to trigger.
 Do not steal focus automatically unless the user explicitly initiated an action that requires approval.
 
 Instead:
+
 - announce;
 - visually emphasize;
 - optionally offer keyboard shortcut.
@@ -3054,6 +3115,7 @@ Instead:
 Use semantic elements first.
 
 Examples:
+
 - `button`;
 - `nav`;
 - `dialog`;
@@ -3076,6 +3138,7 @@ Changes ready for review.
 ```
 
 Do not announce:
+
 - every cursor movement;
 - every code edit;
 - every AI tool call.
@@ -3085,6 +3148,7 @@ Do not announce:
 Target WCAG AA for normal UI text.
 
 Do not rely on color alone for:
+
 - Git dirty state;
 - online/offline;
 - test pass/fail;
@@ -3116,6 +3180,7 @@ Next action
 ## 58.2 Never show
 
 Do not expose:
+
 - hidden chain-of-thought;
 - internal prompts;
 - private model reasoning;
@@ -3496,6 +3561,7 @@ Collaboration events should not interrupt typing.
 The product is not intended to become a full VS Code replacement, but file navigation must remain usable.
 
 Use:
+
 - lazy directory expansion;
 - virtualized tree rendering;
 - incremental search;
@@ -3505,6 +3571,7 @@ Use:
 Do not load the full repository into the DOM.
 
 For AI:
+
 - show retrieved context as counts and file names;
 - do not expose a giant context dump.
 
@@ -3534,6 +3601,7 @@ This gives the developer confidence that the agent is looking in the right place
 # 67. Test UX
 
 Tests should be represented consistently across:
+
 - terminal;
 - AI panel;
 - diff review;
@@ -3559,6 +3627,7 @@ Theme.test.tsx
 ```
 
 Clicking a failure:
+
 - opens relevant output;
 - optionally opens source/test file;
 - offers `Send to AI`.
@@ -3670,6 +3739,7 @@ Get started
 ## 71.2 Contextual hints
 
 Only show hints:
+
 - first time entering workspace;
 - first time opening AI;
 - first time opening collaboration/share.
@@ -3708,6 +3778,7 @@ Open.
 Workspace:
 
 Show:
+
 - Monaco;
 - file tree;
 - collaborators;
@@ -3953,6 +4024,7 @@ Push Approval
 ## Defer
 
 Do not design deep flows for:
+
 - multiple AI agents;
 - extension marketplace;
 - enterprise administration;
@@ -4081,18 +4153,18 @@ IconButton
 
 # 76. Component State Matrix
 
-| Component | Default | Hover | Active | Loading | Disabled | Error | Success |
-|---|---|---|---|---|---|---|---|
-| Button | normal | raised | pressed | spinner | muted | danger | optional |
-| IconButton | neutral | surface | pressed | spinner | muted | danger | optional |
-| ProjectItem | neutral | surface | selected | skeleton | muted | — | — |
-| RuntimeStatus | Ready/offline | tooltip | — | reconnecting | — | error | connected |
-| AgentPanel | idle | — | working | active | — | failed | review ready |
-| ApprovalCard | waiting | — | focused | — | — | blocked | approved |
-| DiffHunk | normal | highlight | selected | — | rejected | conflict | accepted |
-| Terminal | idle | — | running | streaming | offline | exit 1 | exit 0 |
-| Preview | stopped | — | running | starting | offline | crashed | healthy |
-| GitStatus | clean | tooltip | — | operation | — | conflict | pushed |
+| Component     | Default       | Hover     | Active   | Loading      | Disabled | Error    | Success      |
+| ------------- | ------------- | --------- | -------- | ------------ | -------- | -------- | ------------ |
+| Button        | normal        | raised    | pressed  | spinner      | muted    | danger   | optional     |
+| IconButton    | neutral       | surface   | pressed  | spinner      | muted    | danger   | optional     |
+| ProjectItem   | neutral       | surface   | selected | skeleton     | muted    | —        | —            |
+| RuntimeStatus | Ready/offline | tooltip   | —        | reconnecting | —        | error    | connected    |
+| AgentPanel    | idle          | —         | working  | active       | —        | failed   | review ready |
+| ApprovalCard  | waiting       | —         | focused  | —            | —        | blocked  | approved     |
+| DiffHunk      | normal        | highlight | selected | —            | rejected | conflict | accepted     |
+| Terminal      | idle          | —         | running  | streaming    | offline  | exit 1   | exit 0       |
+| Preview       | stopped       | —         | running  | starting     | offline  | crashed  | healthy      |
+| GitStatus     | clean         | tooltip   | —        | operation    | —        | conflict | pushed       |
 
 ---
 
@@ -4178,22 +4250,22 @@ This is an implementation recommendation, not a requirement to split the applica
 
 # 79. UX-to-System State Mapping
 
-| UI state | System meaning |
-|---|---|
-| Runtime ● Ready | Local runtime authenticated and available |
-| Runtime ○ Offline | Runtime unavailable |
-| Collaboration ● Connected | Browser has active collaboration connection |
-| Agent Planning | Agent task in planning state |
-| Waiting for Approval | User action required |
-| AI Working | Agent executing tools in isolated worktree |
-| Testing | Runtime executing validation |
-| Fixing | Agent repair loop active |
-| Review Ready | Change set generated |
-| Stale | Shared revision changed since agent base |
-| Conflict | Safe patch application cannot proceed automatically |
-| Applied | Accepted changes merged into shared workspace |
-| Git Dirty | Working tree has uncommitted changes |
-| Push Approval | User must explicitly authorize remote update |
+| UI state                  | System meaning                                      |
+| ------------------------- | --------------------------------------------------- |
+| Runtime ● Ready           | Local runtime authenticated and available           |
+| Runtime ○ Offline         | Runtime unavailable                                 |
+| Collaboration ● Connected | Browser has active collaboration connection         |
+| Agent Planning            | Agent task in planning state                        |
+| Waiting for Approval      | User action required                                |
+| AI Working                | Agent executing tools in isolated worktree          |
+| Testing                   | Runtime executing validation                        |
+| Fixing                    | Agent repair loop active                            |
+| Review Ready              | Change set generated                                |
+| Stale                     | Shared revision changed since agent base            |
+| Conflict                  | Safe patch application cannot proceed automatically |
+| Applied                   | Accepted changes merged into shared workspace       |
+| Git Dirty                 | Working tree has uncommitted changes                |
+| Push Approval             | User must explicitly authorize remote update        |
 
 ---
 
@@ -4373,12 +4445,14 @@ COLLABORATION   EDITOR
 Before considering the UI MVP complete:
 
 ### Product identity
+
 - [ ] Looks like a developer tool, not SaaS admin.
 - [ ] Workspace is the visual center of gravity.
 - [ ] AI is visibly an engineering agent.
 - [ ] Collaboration is visible.
 
 ### Workspace
+
 - [ ] Monaco occupies dominant space.
 - [ ] Explorer is resizable/collapsible.
 - [ ] AI panel is resizable/collapsible.
@@ -4386,6 +4460,7 @@ Before considering the UI MVP complete:
 - [ ] Top bar exposes branch/runtime/collaboration state.
 
 ### Collaboration
+
 - [ ] Presence avatars.
 - [ ] Online/offline state.
 - [ ] Remote cursor.
@@ -4394,6 +4469,7 @@ Before considering the UI MVP complete:
 - [ ] No cursor/notification chaos.
 
 ### AI
+
 - [ ] Task composer.
 - [ ] Planning state.
 - [ ] Plan approval.
@@ -4405,6 +4481,7 @@ Before considering the UI MVP complete:
 - [ ] Stop/retry/error states.
 
 ### Review
+
 - [ ] File list.
 - [ ] Syntax-highlighted diff.
 - [ ] Hunk controls.
@@ -4414,6 +4491,7 @@ Before considering the UI MVP complete:
 - [ ] Apply/reject/revise.
 
 ### Runtime
+
 - [ ] Connected.
 - [ ] Reconnecting.
 - [ ] Offline.
@@ -4422,6 +4500,7 @@ Before considering the UI MVP complete:
 - [ ] Preview startup/error/restart.
 
 ### Git
+
 - [ ] Branch.
 - [ ] Status.
 - [ ] Changes.
@@ -4430,6 +4509,7 @@ Before considering the UI MVP complete:
 - [ ] Push conflict.
 
 ### Accessibility
+
 - [ ] Keyboard navigation.
 - [ ] Focus states.
 - [ ] Dialog focus management.
@@ -4440,6 +4520,7 @@ Before considering the UI MVP complete:
 - [ ] Monaco shortcut compatibility.
 
 ### Responsive
+
 - [ ] 1440px full workspace.
 - [ ] 1280px compact workspace.
 - [ ] 1024px collapsed secondary panels.

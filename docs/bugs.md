@@ -11,13 +11,13 @@
 
 Bug severity is classified based on functional impact, user data risk, security boundary breaches, and operational disruption.
 
-| Severity | Level | Impact Criteria | Target SLA (Response / Resolution) |
-|---|---|---|---|
-| **S0** | **Critical** | System outage, CRDT document corruption, unauthorized workspace access, arbitrary command injection escape, host Docker compromise, secret key leakage. | **Response:** < 1 hour<br/>**Fix Target:** < 24 hours |
-| **S1** | **High** | Core functionality broken (e.g. agent repair loop crash, Git worktree corruption, WebSocket sync drop without reconnect, local runtime disconnect). | **Response:** < 4 hours<br/>**Fix Target:** < 48 hours |
-| **S2** | **Medium** | Non-blocking feature failure (e.g. diff viewer syntax highlight error, context engine sub-optimal ranking, terminal log streaming truncation). | **Response:** < 24 hours<br/>**Fix Target:** < 1 week |
-| **S3** | **Low** | Minor edge-case bug with straightforward workaround (e.g. tooltip rendering delay, non-critical toast toast timing issue). | **Response:** < 48 hours<br/>**Fix Target:** Next release cycle |
-| **S4** | **Cosmetic** | Visual defects, alignment flaws, minor typos, UI glassmorphic glow padding adjustments. | **Response:** Best effort<br/>**Fix Target:** Backlog priority |
+| Severity | Level        | Impact Criteria                                                                                                                                         | Target SLA (Response / Resolution)                              |
+| -------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| **S0**   | **Critical** | System outage, CRDT document corruption, unauthorized workspace access, arbitrary command injection escape, host Docker compromise, secret key leakage. | **Response:** < 1 hour<br/>**Fix Target:** < 24 hours           |
+| **S1**   | **High**     | Core functionality broken (e.g. agent repair loop crash, Git worktree corruption, WebSocket sync drop without reconnect, local runtime disconnect).     | **Response:** < 4 hours<br/>**Fix Target:** < 48 hours          |
+| **S2**   | **Medium**   | Non-blocking feature failure (e.g. diff viewer syntax highlight error, context engine sub-optimal ranking, terminal log streaming truncation).          | **Response:** < 24 hours<br/>**Fix Target:** < 1 week           |
+| **S3**   | **Low**      | Minor edge-case bug with straightforward workaround (e.g. tooltip rendering delay, non-critical toast toast timing issue).                              | **Response:** < 48 hours<br/>**Fix Target:** Next release cycle |
+| **S4**   | **Cosmetic** | Visual defects, alignment flaws, minor typos, UI glassmorphic glow padding adjustments.                                                                 | **Response:** Best effort<br/>**Fix Target:** Backlog priority  |
 
 ---
 
@@ -55,7 +55,7 @@ flowchart TD
 
 All issues logged to the tracker MUST use the following markdown template:
 
-```markdown
+````markdown
 ## BUG-000 — Short descriptive bug title
 
 Status: OPEN
@@ -66,14 +66,17 @@ Reported: YYYY-MM-DD
 Related Task: TASK-XXX
 
 ### Summary
+
 Clear 2-3 sentence description of the bug and its functional impact.
 
 ### Environment
+
 - **Browser/OS:** Chrome 125 / Windows 11
 - **Deployment:** Cloudflare Worker Staging / Local Docker Runtime
 - **Node/pnpm Version:** Node v22.2.0 / pnpm v9.1.0
 
 ### Steps to Reproduce
+
 1. Open workspace with two browser sessions (User A and User B).
 2. User A opens file `src/App.tsx`.
 3. User B disconnects network connection while typing.
@@ -81,35 +84,46 @@ Clear 2-3 sentence description of the bug and its functional impact.
 5. User B reconnects network.
 
 ### Expected
+
 User B receives Yjs missing delta vector update and document converges smoothly without text corruption.
 
 ### Actual
+
 User B's Monaco editor model experiences line offset mismatch resulting in duplicate line insertions.
 
 ### Logs
+
 ```text
 [ERROR] 14:22:01.405 [WorkspaceRoom] Yjs state vector mismatch for client_cli_88192
 [WARN]  14:22:01.410 [YjsMonacoBinding] Text model transaction rejected: IndexOutOfBoundsException
 ```
+````
 
 ### Screenshots
-*(Attach visual screenshots or terminal recordings if applicable)*
+
+_(Attach visual screenshots or terminal recordings if applicable)_
 
 ### Root Cause
-*(To be populated during INVESTIGATING phase)*
+
+_(To be populated during INVESTIGATING phase)_
 
 ### Fix
-*(To be populated during IN_PROGRESS / FIXED phase detailing PR diff)*
+
+_(To be populated during IN_PROGRESS / FIXED phase detailing PR diff)_
 
 ### Regression Test
-*(Path to automated test file validating fix, e.g. `tests/collaboration/bug-000-reconnect.test.ts`)*
+
+_(Path to automated test file validating fix, e.g. `tests/collaboration/bug-000-reconnect.test.ts`)_
 
 ### Verification
-*(QA sign-off date, environment, and verification build commit SHA)*
+
+_(QA sign-off date, environment, and verification build commit SHA)_
 
 ### Notes
+
 Any additional context, edge case observations, or related tickets.
-```
+
+````
 
 ---
 
@@ -169,17 +183,17 @@ A pull request fixing an S0/S1 bug WITHOUT a corresponding regression test will 
 
 ## 7. INITIAL RISK WATCHLIST
 
-The following architectural risk areas are flagged for proactive QA investigation.  
+The following architectural risk areas are flagged for proactive QA investigation.
 *(Note: These are categorized strictly as **Risk / Watch Items** — not confirmed bugs).*
 
 ```markdown
 ### WATCH-001 — High-Frequency Concurrent Keystroke Reconnection Race
 
-Component: Collaboration  
-Risk Area: Yjs State Vector Synchronization  
-Description: Under high-latency network jitter, a client reconnecting while rapidly typing may transmit an outdated state vector, potentially triggering temporary Monaco model content flicker before convergence.  
+Component: Collaboration
+Risk Area: Yjs State Vector Synchronization
+Description: Under high-latency network jitter, a client reconnecting while rapidly typing may transmit an outdated state vector, potentially triggering temporary Monaco model content flicker before convergence.
 Mitigation Plan: Add integration test simulating 50ms packet jitter during Yjs state vector exchange (`tests/collaboration/reconnect-race.test.ts`).
-```
+````
 
 ```markdown
 ### WATCH-002 — Orphan Agent Git Worktree Directories
@@ -277,6 +291,7 @@ flowchart LR
 The quality engineering manager monitors basic bug health metrics per release cycle:
 
 ### Primary Quality Metrics
+
 - **Total Open Bugs:** Count of active issues in `OPEN`, `INVESTIGATING`, `CONFIRMED`, or `IN_PROGRESS` status.
 - **Bugs by Severity:** Breakdown of open issues across `S0`, `S1`, `S2`, `S3`, and `S4`.
 - **Security Bugs:** Count of open security-related issues (`Security` component).
@@ -288,8 +303,8 @@ The quality engineering manager monitors basic bug health metrics per release cy
 
 ## 10. CURRENT ACTIVE BUG LOG
 
-*(No confirmed production bugs currently logged for initial codebase version v0.1.0-alpha).*
+_(No confirmed production bugs currently logged for initial codebase version v0.1.0-alpha)._
 
-| Bug ID | Title | Severity | Component | Status | Reported | Related Task |
-|---|---|---|---|---|---|---|
-| *None* | *Initial alpha baseline* | — | — | — | 2026-08-31 | — |
+| Bug ID | Title                    | Severity | Component | Status | Reported   | Related Task |
+| ------ | ------------------------ | -------- | --------- | ------ | ---------- | ------------ |
+| _None_ | _Initial alpha baseline_ | —        | —         | —      | 2026-08-31 | —            |
