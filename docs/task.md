@@ -21,9 +21,9 @@
 
 ```text
 Current Sprint:     Sprint 1 — Monorepo Foundation & Core Shell
-Current Task:       TASK-002 — Shared Protocol & Zod Envelopes Package
-Completed Tasks:    TASK-001 — Monorepo Workspace & TypeScript Base Setup
-Next Task:          TASK-002 — Shared Protocol & Zod Envelopes Package
+Current Task:       TASK-003 — Vitest Test Infrastructure Setup
+Completed Tasks:    TASK-001, TASK-002
+Next Task:          TASK-003 — Vitest Test Infrastructure Setup
 Blocked Tasks:      None
 Known Risks:        - Browser memory overhead during long-lived Yjs sessions.
                     - Ollama model inference latency on consumer hardware.
@@ -120,7 +120,7 @@ Monorepo builds cleanly with `pnpm build` and passes `pnpm typecheck`.
 
 ## TASK-002 — Shared Protocol & Zod Envelopes Package
 
-Status: TODO  
+Status: DONE  
 Priority: P0  
 Component: Foundation  
 Depends on: TASK-001  
@@ -145,12 +145,12 @@ Create `@co-vibe/protocol` package providing Zod schemas and runtime validation 
 
 ### Acceptance Criteria
 
-- [ ] Valid envelopes pass `WsEnvelopeSchema.parse()` without throwing.
-- [ ] Malformed payloads (missing `workspaceId` or `timestamp`) fail validation with Zod error.
+- [x] Valid envelopes pass `WsEnvelopeSchema.parse()` without throwing.
+- [x] Malformed payloads (missing `workspaceId` or `timestamp`) fail validation with Zod error.
 
 ### Tests
 
-- [ ] `packages/protocol/tests/envelope.test.ts` validates envelope serialization/deserialization.
+- [x] `packages/protocol/tests/envelope.test.ts` validates envelope serialization/deserialization.
 
 ### Definition of Done
 
