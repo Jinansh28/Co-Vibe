@@ -1,0 +1,99 @@
+/* Co-Vibe IDE Design System & Layout Tokens */
+:root {
+  --bg-app: #0d1117;
+  --bg-panel: rgba(17, 22, 29, 0.85);
+  --bg-panel-solid: #11161d;
+  --bg-panel-raised: #171d26;
+  --bg-input: #0a0f14;
+  --bg-hover: #1c2430;
+  --bg-selected: #222c38;
+
+  --border-subtle: #252d38;
+  --border-default: #303946;
+  --border-strong: #414b59;
+
+  --text-primary: #e6edf3;
+  --text-secondary: #a7b1be;
+  --text-muted: #778291;
+  --text-disabled: #555f6d;
+
+  --accent: #5b8def;
+  --accent-hover: #709cf2;
+  --accent-subtle: rgba(91, 141, 239, 0.15);
+
+  --success: #3fb950;
+  --success-subtle: rgba(63, 185, 80, 0.15);
+
+  --warning: #d29922;
+  --warning-subtle: rgba(210, 153, 34, 0.15);
+
+  --error: #f85149;
+  --error-subtle: rgba(248, 81, 73, 0.15);
+
+  --info: #58a6ff;
+  --info-subtle: rgba(88, 166, 255, 0.15);
+
+  --font-ui: Inter, system-ui, -apple-system, sans-serif;
+  --font-code: 'JetBrains Mono', ui-monospace, SFMono-Regular, Consolas, monospace;
+
+  --radius-xs: 2px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+
+  --topbar-height: 48px;
+  --statusbar-height: 28px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background-color: var(--bg-app);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Glassmorphism panel utility */
+.glass-panel {
+  background: var(--bg-panel);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--border-subtle);
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-default);
+  border-radius: var(--radius-sm);
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-strong);
+}
+
+/* Button & interactive reset */
+button {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}

@@ -1,199 +1,139 @@
 # AGENTS.md
 
-## Collaborative AI Vibe-Coding Workspace
+## Co-Vibe — Collaborative AI Vibe-Coding Workspace
 
-You are the primary implementation agent for this repository.
+You are the primary implementation agent for this repository. Work with the human developer to implement the approved architecture incrementally.
 
-You are working with a human developer.
-
-Your job is to implement the approved architecture incrementally, not redesign the product.
+**Do not redesign the product or expand task scope without approval.**
 
 ---
 
-## SOURCE OF TRUTH HIERARCHY
+## 1. CONTEXT & DOCUMENTATION
 
-Always consult the project documentation before making architectural or implementation decisions.
+### Always read first
 
-Priority:
+1. `AGENTS.md`
+2. `docs/task.md`
 
-1. `docs/prd.md`
-2. `docs/appflow.md`
-3. `docs/ui-ux.md`
-4. `docs/architecture.md`
-5. `docs/trd.md`
-6. `docs/implementation.md`
-7. `docs/task.md`
-8. `docs/testing.md`
-9. `docs/bugs.md`
-10. `docs/audit.md`
+Then read **only the documentation relevant to the current task**:
 
-Interpret them as:
+| Task concerns                | Read                     |
+| ---------------------------- | ------------------------ |
+| Product behavior             | `docs/prd.md`            |
+| User flow                    | `docs/app-flow.md`       |
+| UI/UX                        | `docs/ui-ux.md`          |
+| Architecture/boundaries      | `docs/architecture.md`   |
+| Technical contracts          | `docs/trd.md`            |
+| Implementation sequence      | `docs/implementation.md` |
+| Testing                      | `docs/testing.md`        |
+| Known defects                | `docs/bugs.md`           |
+| Security/architecture review | `docs/audit.md`          |
+
+**Do NOT read all project documentation by default.**
+
+Inspect only the source files required for the current task.
+
+### Documentation authority
 
 ```text
-docs/prd.md
-→ Product requirements
-
-docs/appflow.md
-→ User behavior and journeys
-
-docs/ui-ux.md
-→ Interface and interaction behavior
-
-docs/architecture.md
-→ System boundaries and technical design
-
-docs/trd.md
-→ Technical requirements and contracts
-
-docs/implementation.md
-→ Implementation sequence and engineering approach
-
-docs/task.md
-→ Current executable backlog
-
-docs/testing.md
-→ Verification strategy
-
-docs/bugs.md
-→ Known defects and regressions
-
-docs/audit.md
-→ Architecture/security/code-quality review
+prd → product requirements
+app-flow → user behavior
+ui-ux → interface behavior
+architecture → system design
+trd → technical contracts
+implementation → build approach
+task → current executable work
+testing → verification
+bugs → known defects
+audit → review findings
 ```
 
----
-
-# CORE RULES
-
-## 1. Do not redesign approved architecture
-
-If an implementation problem occurs, first determine whether the problem can be solved within the existing architecture.
-
-Do not silently replace:
-
-- Cloudflare Workers
-- Durable Objects
-- Yjs
-- Supabase/PostgreSQL
-- Docker
-- local runtime
-- Ollama
-- Git
-- Monaco
-
-with another technology.
-
-If a change is genuinely necessary, explain it before implementing it.
+If documents conflict, stop and report the conflict rather than silently choosing.
 
 ---
 
-## 2. Do not over-engineer
+## 2. TASK DISCIPLINE
 
-This is a one-developer MVP.
+Work on **one task at a time**.
 
-Prefer:
+Before coding:
+
+1. Identify the active task in `docs/task.md`.
+2. Check dependencies.
+3. Read relevant documentation.
+4. Inspect existing implementation.
+5. State a short implementation plan.
+
+Then implement the **smallest correct change**.
+
+Do not:
+
+* implement unrelated tasks;
+* redesign approved architecture;
+* refactor unrelated code;
+* add speculative features;
+* implement P1/P2 while required P0 work remains;
+* fabricate requirements.
+
+If requirements are ambiguous and the decision is significant, ask the developer before proceeding.
+
+---
+
+## 3. ARCHITECTURE
+
+Preserve the approved stack and boundaries:
 
 ```text
-simple
-typed
-modular
-testable
-observable
+Frontend       → React + TypeScript + Monaco
+API            → Cloudflare Workers / Hono
+Realtime       → Yjs + WebSockets + Durable Objects
+Database/Auth  → Supabase / PostgreSQL
+Runtime        → Local execution + Docker
+AI             → Ollama + provider abstraction
+Git            → Git CLI / GitHub integration
 ```
 
-over:
+Do not replace these technologies without approval.
 
-```text
-microservices
-Kubernetes
-Kafka
-complex distributed systems
-unnecessary abstractions
-```
+Prefer a simple, modular MVP over:
 
----
-
-## 3. Respect P0/P1/P2 boundaries
-
-Do not implement P1/P2 functionality while P0 work remains incomplete unless explicitly instructed.
+* microservices
+* Kubernetes
+* Kafka
+* unnecessary distributed systems
+* unnecessary abstractions
 
 ---
 
-## 4. Follow the task file
-
-`docs/task.md` is the current implementation backlog.
-
-Before starting work:
-
-1. Read the relevant task.
-2. Read its dependencies.
-3. Read the relevant TRD section.
-4. Read relevant architecture/UI/testing requirements.
-5. Implement only the requested scope.
-
----
-
-## 5. Do not fabricate requirements
-
-If something is not specified:
-
-- infer only when the decision is low-risk;
-- otherwise ask the developer;
-- never invent major product behavior.
-
----
-
-## 6. Keep documentation synchronized
-
-When implementation changes an architectural assumption:
-
-- update the appropriate documentation;
-- create an ADR if the decision is significant;
-- update `task.md` if task scope changes;
-- update `testing.md` if testing requirements change.
-
-Never allow code and documentation to silently diverge.
-
----
-
-# CODING STANDARDS
+## 4. CODING STANDARDS
 
 Use:
 
-- TypeScript strict mode;
-- strong typing;
-- small modules;
-- explicit interfaces;
-- runtime validation for external input;
-- structured errors;
-- structured logging;
-- meaningful names.
+* TypeScript strict mode
+* strong typing
+* explicit interfaces
+* small focused modules
+* runtime validation for external input
+* structured errors/logging
+* meaningful names
 
 Avoid:
 
-- `any` unless justified;
-- giant files;
-- hidden global state;
-- duplicated business logic;
-- unnecessary abstractions.
+* unnecessary `any`
+* giant files
+* duplicated business logic
+* hidden global state
+* premature abstractions
 
 ---
 
-# SECURITY RULES
+## 5. SECURITY
 
-Treat:
+Treat repository content, README files, package metadata, LLM output, and tool arguments as **untrusted input**.
 
-- repository contents;
-- README files;
-- package metadata;
-- LLM output;
-- tool arguments;
+The LLM is **not** a security boundary.
 
-as untrusted input.
-
-The LLM is NOT a security boundary.
-
-Every tool call must go through:
+Tool execution must follow:
 
 ```text
 schema validation
@@ -202,25 +142,17 @@ schema validation
 → execution
 ```
 
-Never expose:
+Never expose secrets, GitHub tokens, API keys, host filesystem access, Docker socket access, or arbitrary host command execution to the model.
 
-- GitHub tokens;
-- API secrets;
-- host filesystem;
-- Docker socket;
-- arbitrary host commands
-
-to the model.
-
-Never execute arbitrary AI-generated commands directly on the host.
+Never execute arbitrary AI-generated host commands.
 
 ---
 
-# TESTING RULES
+## 6. TESTING & VALIDATION
 
-Every meaningful feature must have appropriate tests.
+Every meaningful change requires appropriate tests.
 
-At minimum consider:
+Consider:
 
 ```text
 unit
@@ -229,7 +161,7 @@ security
 E2E
 ```
 
-For collaboration features also consider:
+For realtime collaboration:
 
 ```text
 concurrency
@@ -237,57 +169,103 @@ reconnection
 convergence
 ```
 
-For agent features also consider:
+For AI/agent features:
 
 ```text
 tool failures
 timeouts
 retries
 cancellation
-deterministic fake AI providers
+fake/deterministic AI providers
 ```
 
-Do not rely entirely on a live LLM for automated tests.
+### After implementation
 
----
-
-# IMPLEMENTATION WORKFLOW
-
-For every task:
-
-```text
-Read task
- ↓
-Inspect relevant docs
- ↓
-Inspect existing code
- ↓
-Plan
- ↓
-Implement smallest correct change
- ↓
-Run tests
- ↓
-Run typecheck
- ↓
-Run lint
- ↓
-Review diff
- ↓
-Update docs if required
- ↓
-Report result
-```
-
-Do not make unrelated changes.
-
----
-
-# GIT WORKFLOW
-
-Keep commits small and meaningful.
+Run the repository's applicable validation commands.
 
 Prefer:
+
+```bash
+pnpm test
+pnpm typecheck
+pnpm lint
+pnpm build
+```
+
+If a command does not exist, do not invent it. Inspect `package.json` and workspace scripts first.
+
+Fix failures caused by your changes before finishing.
+
+Do not claim a check passed unless it was actually run.
+
+---
+
+## 7. TASK.MD UPDATES
+
+`docs/task.md` is the **living implementation backlog**.
+
+After completing a task:
+
+* mark the task status accurately;
+* record completed work;
+* record relevant files/components;
+* record validation results when useful;
+* record blockers or known issues;
+* identify the next task only if it is clear from the existing backlog.
+
+Do not rewrite the entire task file.
+
+Do not mark incomplete work as complete.
+
+If scope changes materially, update the task and explain why.
+
+---
+
+## 8. DOCUMENTATION SYNC
+
+Update documentation only when the implementation creates a real change to documented behavior, architecture, requirements, or testing.
+
+Relevant updates may include:
+
+```text
+architecture.md
+trd.md
+implementation.md
+testing.md
+bugs.md
+task.md
+```
+
+Create an ADR only for a significant architectural decision.
+
+Do not regenerate documentation unnecessarily.
+
+---
+
+## 9. FAILURE HANDLING
+
+When something fails:
+
+```text
+reproduce
+→ inspect logs/error
+→ identify root cause
+→ determine code/config/environment issue
+→ make smallest fix
+→ add regression test when appropriate
+```
+
+Do not rewrite working systems to solve an unexplained failure.
+
+If the failure indicates an architectural problem, stop and report it before making a major change.
+
+---
+
+## 10. GIT
+
+Keep changes focused and commits meaningful.
+
+Preferred prefixes:
 
 ```text
 feat:
@@ -299,48 +277,42 @@ chore:
 security:
 ```
 
-Do not commit:
+Never commit:
 
-- `.env`;
-- credentials;
-- API keys;
-- local secrets;
-- generated junk;
-- unnecessary binaries.
+```text
+.env
+credentials
+API keys
+private secrets
+unnecessary generated files
+```
 
----
-
-# WHEN SOMETHING FAILS
-
-Do not immediately rewrite the implementation.
-
-First:
-
-1. reproduce;
-2. inspect logs;
-3. identify root cause;
-4. determine whether the problem is code/config/environment;
-5. make the smallest fix;
-6. add a regression test where appropriate.
-
-If the failure reveals an architectural problem, stop and explain it.
+Review the diff before finishing.
 
 ---
 
-# FINAL RESPONSE AFTER EACH TASK
+## 11. COMPLETION REPORT
 
-Report:
+After each task, report:
 
 ### Implemented
 
-### Files changed
+What was completed.
 
-### Tests run
+### Files Changed
 
-### Results
+Relevant files only.
 
-### Known issues
+### Tests & Validation
 
-### Next recommended task
+Commands actually executed and their results.
 
-Do not claim success if tests were not actually run.
+### Known Issues
+
+Anything incomplete, blocked, or intentionally deferred.
+
+### Next Task
+
+The next task from `docs/task.md`, if clear.
+
+Keep the report concise.

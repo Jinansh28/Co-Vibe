@@ -6,6 +6,7 @@ import {
   TerminalOutputPayloadSchema,
   AgentTaskProgressPayloadSchema,
   PreviewUpdatedPayloadSchema,
+  HealthCheckResponseSchema,
 } from '../src/index.js';
 
 describe('Protocol Envelope Schemas', () => {
@@ -105,6 +106,25 @@ describe('Protocol Envelope Schemas', () => {
     const parsed = AgentTaskProgressPayloadSchema.parse(payload);
     expect(parsed.state).toBe('EXECUTING');
     expect(parsed.percentage).toBe(50);
+  });
+
+  it('validates HealthCheckResponseSchema', () => {
+    const parsed = HealthCheckResponseSchema.parse({
+      service: 'api-worker',
+      status: 'ok',
+      timestamp: Date.now(),
+      version: '0.1.0',
+    });
+
+    expect(parsed.service).toBe('api-worker');
+    expect(() =>
+      HealthCheckResponseSchema.parse({
+        service: '',
+        status: 'ok',
+        timestamp: Date.now(),
+        version: '0.1.0',
+      }),
+    ).toThrow();
   });
 
   it('validates PreviewUpdatedPayloadSchema', () => {

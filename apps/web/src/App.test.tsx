@@ -5,10 +5,10 @@ import React from 'react';
 import App from './App.js';
 
 describe('Web App Shell UI', () => {
-  it('renders header title and Health Check section', () => {
+  it('renders IDE shell layout grid', () => {
     render(<App />);
-    expect(screen.getByText(/Co-Vibe IDE/i)).toBeDefined();
-    expect(screen.getByText(/System Services Health Check/i)).toBeDefined();
-    expect(screen.getByRole('button', { name: /Run Health Check/i })).toBeDefined();
+    expect(screen.getAllByText(/Co-Vibe/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/Explorer/i)).toBeDefined();
+    expect(screen.getByRole('button', { name: /Run Project/i })).toBeDefined();
   });
 });

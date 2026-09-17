@@ -21,9 +21,9 @@
 
 ```text
 Current Sprint:     Sprint 1 — Monorepo Foundation & Core Shell
-Current Task:       TASK-003 — Vitest Test Infrastructure Setup
-Completed Tasks:    TASK-001, TASK-002
-Next Task:          TASK-003 — Vitest Test Infrastructure Setup
+Current Task:       TASK-005 — Client Toast & Notification System
+Completed Tasks:    TASK-001, TASK-002, TASK-003, TASK-004
+Next Task:          TASK-005 — Client Toast & Notification System
 Blocked Tasks:      None
 Known Risks:        - Browser memory overhead during long-lived Yjs sessions.
                     - Ollama model inference latency on consumer hardware.
@@ -160,7 +160,7 @@ Protocol package published internally to monorepo and imported by `apps/api` and
 
 ## TASK-003 — Vitest Test Infrastructure Setup
 
-Status: TODO  
+Status: DONE  
 Priority: P0  
 Component: Testing  
 Depends on: TASK-001  
@@ -183,12 +183,12 @@ Configure Vitest test runner across monorepo packages and apps with unified repo
 
 ### Acceptance Criteria
 
-- [ ] Running `pnpm test` executes tests across all packages concurrently.
-- [ ] Test summary outputs formatted test counts and execution times.
+- [x] Running `pnpm test` executes tests across all packages concurrently.
+- [x] Test summary outputs formatted test counts and execution times.
 
 ### Tests
 
-- [ ] Running `pnpm test` successfully runs fixture test suites.
+- [x] Running `pnpm test` successfully runs fixture test suites.
 
 ### Definition of Done
 
@@ -200,7 +200,7 @@ Test runner configured and passing in CI pipeline setup.
 
 ## TASK-004 — React + Vite IDE Shell Layout
 
-Status: TODO  
+Status: DONE  
 Priority: P0  
 Component: Frontend  
 Depends on: TASK-001  
@@ -213,28 +213,33 @@ Build the main IDE layout grid containing TopBar, Sidebar, Main Editor Pane, Age
 ### Implementation
 
 - Initialize React 18 + Vite app in `apps/web`.
-- Configure TailwindCSS styling system with custom dark theme colors and glassmorphism tokens.
-- Build grid components: `TopBar`, `Sidebar`, `FileExplorer`, `EditorPane`, `AgentPanel`, `TerminalPane`.
-- Add panel resize handles and toggle buttons.
+- Configure custom dark theme styling system with glassmorphic panel design tokens (`apps/web/src/index.css`).
+- Build layout components: `TopBar`, `Sidebar`, `FileExplorer`, `EditorPane`, `AgentPanel`, `TerminalPane`, `AppLayout`.
+- Add collapsible panel toggles and responsive flex grid layout.
 
 ### Files
 
 - `apps/web/vite.config.ts`
 - `apps/web/src/App.tsx`
+- `apps/web/src/index.css`
 - `apps/web/src/components/layout/AppLayout.tsx`
 - `apps/web/src/components/layout/TopBar.tsx`
 - `apps/web/src/components/layout/Sidebar.tsx`
+- `apps/web/src/components/layout/FileExplorer.tsx`
+- `apps/web/src/components/layout/EditorPane.tsx`
+- `apps/web/src/components/layout/AgentPanel.tsx`
 - `apps/web/src/components/layout/TerminalPane.tsx`
+- `apps/web/src/components/layout/AppLayout.test.tsx`
 
 ### Acceptance Criteria
 
-- [ ] IDE layout renders responsive panels without horizontal scroll overflow.
-- [ ] Panel toggle buttons collapse and expand Sidebar, Agent Panel, and Terminal Drawer.
-- [ ] Layout complies with glassmorphism UI design specification.
+- [x] IDE layout renders responsive panels without horizontal scroll overflow.
+- [x] Panel toggle buttons collapse and expand Sidebar, Agent Panel, and Terminal Drawer.
+- [x] Layout complies with glassmorphism UI design specification.
 
 ### Tests
 
-- [ ] `apps/web/src/components/layout/AppLayout.test.tsx` renders shell layout grid.
+- [x] `apps/web/src/components/layout/AppLayout.test.tsx` renders shell layout grid and verifies panel toggling.
 
 ### Definition of Done
 
