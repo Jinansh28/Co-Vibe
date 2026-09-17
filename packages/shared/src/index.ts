@@ -26,9 +26,19 @@ export interface Workspace {
   updatedAt: string;
 }
 
+export interface ProjectMember {
+  id: string;
+  projectId: string;
+  userId: string;
+  role: 'owner' | 'editor' | 'viewer';
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface HealthStatus {
   service: string;
   status: 'ok' | 'degraded' | 'down';
   timestamp: number;
   version: string;
 }
+

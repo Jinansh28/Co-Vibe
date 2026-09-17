@@ -1,8 +1,12 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import type { HealthCheckResponse } from '@co-vibe/protocol';
+import { authMiddleware, type Env } from './middleware/auth.js';
+import { authRoutes } from './routes/auth.js';
+import { projectRoutes } from './routes/projects.js';
+import { workspaceRoutes } from './routes/workspaces.js';
 
-const app = new Hono();
+const app = new Hono<Env>();
 
 app.use('*', cors());
 
@@ -20,4 +24,13 @@ app.get('/', (c) => {
   return c.json({ name: 'Co-Vibe API Worker', status: 'online' });
 });
 
+const apiV1 = new Hono<Env>();
+apiV1.use('*', authMiddleware);
+apiV1.route('/auth', authRoutes);
+apiV1.route('/projects', projectRoutes);
+apiV1.route('/projects', workspaceRoutes);
+
+app.route('/api/v1', apiV1);
+
 export default app;
+

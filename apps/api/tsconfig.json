@@ -4,8 +4,8 @@
     "moduleResolution": "Bundler",
     "module": "ESNext",
     "target": "ES2022",
-    "rootDir": "./src",
     "types": ["@cloudflare/workers-types"]
   },
-  "include": ["src/**/*"]
+  "include": ["src/**/*", "tests/**/*"]
 }
+

@@ -21,9 +21,9 @@
 
 ```text
 Current Sprint:     Sprint 1 — Monorepo Foundation & Core Shell
-Current Task:       TASK-005 — Client Toast & Notification System
-Completed Tasks:    TASK-001, TASK-002, TASK-003, TASK-004
-Next Task:          TASK-005 — Client Toast & Notification System
+Current Task:       TASK-011 — Projects Dashboard UI
+Completed Tasks:    TASK-001, TASK-002, TASK-003, TASK-004, TASK-005, TASK-006, TASK-007, TASK-008, TASK-009, TASK-010
+Next Task:          TASK-011 — Projects Dashboard UI
 Blocked Tasks:      None
 Known Risks:        - Browser memory overhead during long-lived Yjs sessions.
                     - Ollama model inference latency on consumer hardware.
@@ -249,7 +249,7 @@ Build the main IDE layout grid containing TopBar, Sidebar, Main Editor Pane, Age
 
 ## TASK-005 — Client Toast & Notification System
 
-Status: TODO  
+Status: DONE  
 Priority: P1  
 Component: Frontend  
 Depends on: TASK-004  
@@ -269,15 +269,16 @@ Implement global toast notification provider for feedback on async operations, e
 
 - `apps/web/src/components/ui/Toast.tsx`
 - `apps/web/src/context/NotificationContext.tsx`
+- `apps/web/src/components/ui/Toast.test.tsx`
 
 ### Acceptance Criteria
 
-- [ ] Calling `showNotification('Error', 'error')` renders red toast notification banner.
-- [ ] Toast dismisses automatically after 4 seconds.
+- [x] Calling `showNotification('Error', 'error')` renders red toast notification banner.
+- [x] Toast dismisses automatically after 4 seconds.
 
 ### Tests
 
-- [ ] `apps/web/src/components/ui/Toast.test.tsx` tests toast lifecycle.
+- [x] `apps/web/src/components/ui/Toast.test.tsx` tests toast lifecycle.
 
 ### Definition of Done
 
@@ -289,7 +290,7 @@ Toast system integrated into main layout root.
 
 ## TASK-006 — Database Initial Migration (`001_initial_schema.sql`)
 
-Status: TODO  
+Status: DONE  
 Priority: P0  
 Component: Authentication  
 Depends on: TASK-001  
@@ -313,12 +314,12 @@ Create initial PostgreSQL migration establishing `users`, `projects`, and `proje
 
 ### Acceptance Criteria
 
-- [ ] Migration executes on blank Postgres database without syntax errors.
-- [ ] Unique constraints and foreign keys correctly enforced.
+- [x] Migration executes on blank Postgres database without syntax errors.
+- [x] Unique constraints and foreign keys correctly enforced.
 
 ### Tests
 
-- [ ] Integration test executes up/down migrations on test Postgres container.
+- [x] Integration test executes up/down migrations on test Postgres container.
 
 ### Definition of Done
 
@@ -328,7 +329,7 @@ Migration schema applied cleanly to Supabase database.
 
 ## TASK-007 — Worker JWT Authentication Middleware
 
-Status: TODO  
+Status: DONE  
 Priority: P0  
 Component: Authentication  
 Depends on: TASK-002, TASK-006  
@@ -353,12 +354,12 @@ Create Hono authentication middleware in Cloudflare Worker (`apps/api`) validati
 
 ### Acceptance Criteria
 
-- [ ] Unauthenticated requests to `/api/v1/*` return `401 Unauthorized` with structured JSON error.
-- [ ] Valid JWT header passes request to route handler with populated user identity context.
+- [x] Unauthenticated requests to `/api/v1/*` return `401 Unauthorized` with structured JSON error.
+- [x] Valid JWT header passes request to route handler with populated user identity context.
 
 ### Tests
 
-- [ ] `apps/api/tests/auth.test.ts` tests valid, expired, and missing tokens.
+- [x] `apps/api/tests/auth.test.ts` tests valid, expired, and missing tokens.
 
 ### Definition of Done
 
@@ -368,7 +369,7 @@ Protected API routes guarded by authentication middleware.
 
 ## TASK-008 — Frontend Login Page & Auth Provider
 
-Status: TODO  
+Status: DONE  
 Priority: P0  
 Component: Authentication  
 Depends on: TASK-004, TASK-007  
@@ -390,15 +391,17 @@ Build Frontend Login/Signup page integrated with Supabase Client Auth SDK and ro
 - `apps/web/src/features/auth/LoginPage.tsx`
 - `apps/web/src/features/auth/AuthProvider.tsx`
 - `apps/web/src/features/auth/useAuth.ts`
+- `apps/web/src/features/auth/ProtectedRoute.tsx`
+- `apps/web/src/lib/supabaseClient.ts`
 
 ### Acceptance Criteria
 
-- [ ] User submitting valid credentials gains active session and redirects to `/projects`.
-- [ ] Unauthenticated access to `/projects/123` redirects to `/login`.
+- [x] User submitting valid credentials gains active session and redirects to `/projects`.
+- [x] Unauthenticated access to `/projects/123` redirects to `/login`.
 
 ### Tests
 
-- [ ] `apps/web/src/features/auth/LoginPage.test.tsx` tests form submission.
+- [x] `apps/web/src/features/auth/LoginPage.test.tsx` tests form submission.
 
 ### Definition of Done
 
@@ -410,7 +413,7 @@ End-to-end login flow operational in browser UI.
 
 ## TASK-009 — Workspaces & Repositories Migration (`002_workspaces_repos.sql`)
 
-Status: TODO  
+Status: DONE  
 Priority: P0  
 Component: Projects  
 Depends on: TASK-006  
@@ -432,12 +435,12 @@ Create migration script establishing `workspaces` and `repositories` tables.
 
 ### Acceptance Criteria
 
-- [ ] Foreign keys to `projects(id)` cascade delete on project removal.
-- [ ] Unique index on `(project_id, owner_name, repo_name)` prevents duplicate imports.
+- [x] Foreign keys to `projects(id)` cascade delete on project removal.
+- [x] Unique index on `(project_id, owner_name, repo_name)` prevents duplicate imports.
 
 ### Tests
 
-- [ ] Migration runner verifies table schema creation.
+- [x] Migration runner verifies table schema creation.
 
 ### Definition of Done
 
@@ -447,7 +450,7 @@ Database schema updated with workspace tables.
 
 ## TASK-010 — Projects & Workspaces API Endpoints
 
-Status: TODO  
+Status: DONE  
 Priority: P0  
 Component: Projects  
 Depends on: TASK-007, TASK-009  
@@ -473,12 +476,12 @@ Implement CRUD API endpoints for managing projects, members, and workspace insta
 
 ### Acceptance Criteria
 
-- [ ] User creating project is automatically assigned `owner` role in `project_members`.
-- [ ] User without project membership receives `403 Forbidden` on `GET /api/v1/projects/:id`.
+- [x] User creating project is automatically assigned `owner` role in `project_members`.
+- [x] User without project membership receives `403 Forbidden` on `GET /api/v1/projects/:id`.
 
 ### Tests
 
-- [ ] `apps/api/tests/projects.test.ts` tests project CRUD and authorization limits.
+- [x] `apps/api/tests/projects.test.ts` tests project CRUD and authorization limits.
 
 ### Definition of Done
 

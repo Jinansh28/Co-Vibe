@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 export * from './envelope.js';
 export * from './runtime.js';
+export * from './projects.js';
 
 export const HealthCheckResponseSchema = z.object({
   service: z.string().min(1),
