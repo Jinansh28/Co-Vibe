@@ -9,6 +9,7 @@ interface TopBarProps {
   onToggleAgent: () => void;
   onRunProject?: () => void;
   onRunTests?: () => void;
+  onBackToDashboard?: () => void;
 }
 
 export const TopBar: React.FC<TopBarProps> = ({
@@ -20,6 +21,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   onToggleAgent,
   onRunProject,
   onRunTests,
+  onBackToDashboard,
 }) => {
   return (
     <header
@@ -37,6 +39,28 @@ export const TopBar: React.FC<TopBarProps> = ({
     >
       {/* Left section: Panel toggle + Brand logo */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        {onBackToDashboard && (
+          <button
+            onClick={onBackToDashboard}
+            title="Return to Projects Dashboard"
+            aria-label="Back to Projects"
+            style={{
+              padding: '4px 8px',
+              borderRadius: 'var(--radius-sm)',
+              backgroundColor: 'transparent',
+              border: '1px solid var(--border-subtle)',
+              color: 'var(--text-secondary)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+              fontSize: '12px',
+              cursor: 'pointer',
+            }}
+          >
+            ← Projects
+          </button>
+        )}
+
         <button
           onClick={onToggleSidebar}
           title={isSidebarOpen ? 'Collapse Sidebar (Ctrl+B)' : 'Expand Sidebar (Ctrl+B)'}

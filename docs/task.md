@@ -21,9 +21,9 @@
 
 ```text
 Current Sprint:     Sprint 1 — Monorepo Foundation & Core Shell
-Current Task:       TASK-011 — Projects Dashboard UI
-Completed Tasks:    TASK-001, TASK-002, TASK-003, TASK-004, TASK-005, TASK-006, TASK-007, TASK-008, TASK-009, TASK-010
-Next Task:          TASK-011 — Projects Dashboard UI
+Current Task:       TASK-015 — Process Execution & Stream Manager
+Completed Tasks:    TASK-001, TASK-002, TASK-003, TASK-004, TASK-005, TASK-006, TASK-007, TASK-008, TASK-009, TASK-010, TASK-011, TASK-012, TASK-013, TASK-014
+Next Task:          TASK-015 — Process Execution & Stream Manager
 Blocked Tasks:      None
 Known Risks:        - Browser memory overhead during long-lived Yjs sessions.
                     - Ollama model inference latency on consumer hardware.
@@ -491,7 +491,7 @@ Projects API operational and passing integration tests.
 
 ## TASK-011 — Projects Dashboard UI
 
-Status: TODO  
+Status: DONE  
 Priority: P0  
 Component: Projects  
 Depends on: TASK-008, TASK-010  
@@ -515,12 +515,12 @@ Build frontend Projects Dashboard page listing user projects, repository import 
 
 ### Acceptance Criteria
 
-- [ ] Dashboard displays list of projects fetched from `/api/v1/projects`.
-- [ ] Submitting modal form creates project and navigates to workspace route `/projects/:id/workspace/:wsId`.
+- [x] Dashboard displays list of projects fetched from `/api/v1/projects`.
+- [x] Submitting modal form creates project and navigates to workspace route `/projects/:id/workspace/:wsId`.
 
 ### Tests
 
-- [ ] `apps/web/src/features/projects/ProjectsPage.test.tsx` tests project creation flow.
+- [x] `apps/web/src/features/projects/ProjectsPage.test.tsx` tests project creation flow.
 
 ### Definition of Done
 
@@ -532,7 +532,7 @@ User can navigate from login -> dashboard -> create project.
 
 ## TASK-012 — Runtime Pairing Server & Token Authentication
 
-Status: TODO  
+Status: DONE  
 Priority: P0  
 Component: Runtime  
 Depends on: TASK-007  
@@ -557,12 +557,12 @@ Create local HTTP pairing server in `apps/runtime` enabling initial authenticati
 
 ### Acceptance Criteria
 
-- [ ] Runtime daemon starts local pairing server on port 7890.
-- [ ] Submitting valid pairing code exchanges secret for signed runtime authorization token.
+- [x] Runtime daemon starts local pairing server on port 7890.
+- [x] Submitting valid pairing code exchanges secret for signed runtime authorization token.
 
 ### Tests
 
-- [ ] `apps/runtime/tests/pairing.test.ts` tests pairing code verification.
+- [x] `apps/runtime/tests/pairing.test.ts` tests pairing code verification.
 
 ### Definition of Done
 
@@ -572,7 +572,7 @@ Runtime daemon authenticates successfully with Worker API.
 
 ## TASK-013 — Outbound WebSocket Runtime Channel
 
-Status: TODO  
+Status: DONE  
 Priority: P0  
 Component: Runtime  
 Depends on: TASK-002, TASK-012  
@@ -585,22 +585,25 @@ Establish secure, persistent outbound WebSocket connection from local runtime da
 ### Implementation
 
 - Create WebSocket client connection in runtime daemon targeting `wss://<worker>/ws/runtime`.
-- Attach runtime token in connection handshake headers.
+- Attach runtime token in connection handshake headers or query parameter `?token=...`.
 - Implement automatic reconnection backoff (1s -> 2s -> 5s) and ping/pong heartbeats (15s).
 
 ### Files
 
 - `apps/runtime/src/server/workerClient.ts`
 - `apps/api/src/routes/runtimeWs.ts`
+- `apps/runtime/tests/workerClient.test.ts`
+- `apps/api/tests/runtimeWs.test.ts`
 
 ### Acceptance Criteria
 
-- [ ] Runtime connects outbound to Worker WebSocket server.
-- [ ] Network disconnects trigger automatic reconnect within 5 seconds without duplicate sockets.
+- [x] Runtime connects outbound to Worker WebSocket server.
+- [x] Network disconnects trigger automatic reconnect within 5 seconds without duplicate sockets.
 
 ### Tests
 
-- [ ] `apps/runtime/tests/workerClient.test.ts` verifies heartbeat and reconnect sequence.
+- [x] `apps/runtime/tests/workerClient.test.ts` verifies heartbeat and reconnect sequence.
+- [x] `apps/api/tests/runtimeWs.test.ts` verifies token validation and WebSocket routing.
 
 ### Definition of Done
 
@@ -612,7 +615,7 @@ Bi-directional command pipeline established between Cloudflare Worker and local 
 
 ## TASK-014 — Docker Container Manager (`DockerManager.ts`)
 
-Status: TODO  
+Status: DONE  
 Priority: P0  
 Component: Docker  
 Depends on: TASK-013  
@@ -636,12 +639,12 @@ Build container lifecycle manager in `apps/runtime` using `dockerode` to spawn u
 
 ### Acceptance Criteria
 
-- [ ] Sandbox container spins up with UID 10001 and non-root privileges.
-- [ ] Attempts to access Docker host socket inside container fail with permission denied.
+- [x] Sandbox container spins up with UID 10001 and non-root privileges.
+- [x] Attempts to access Docker host socket inside container fail with permission denied.
 
 ### Tests
 
-- [ ] `apps/runtime/tests/dockerManager.test.ts` spawns container, runs `whoami`, verifies `workspace` output, tears down container.
+- [x] `apps/runtime/tests/dockerManager.test.ts` spawns container, runs `whoami`, verifies `workspace` output, tears down container.
 
 ### Definition of Done
 

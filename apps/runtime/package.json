@@ -12,9 +12,11 @@
   },
   "dependencies": {
     "@co-vibe/protocol": "workspace:*",
-    "@co-vibe/shared": "workspace:*"
+    "@co-vibe/shared": "workspace:*",
+    "dockerode": "^4.0.2"
   },
   "devDependencies": {
+    "@types/dockerode": "^3.3.34",
     "@types/node": "^22.9.0",
     "tsx": "^4.19.2",
     "typescript": "^5.6.3"

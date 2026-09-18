@@ -5,6 +5,7 @@ import { authMiddleware, type Env } from './middleware/auth.js';
 import { authRoutes } from './routes/auth.js';
 import { projectRoutes } from './routes/projects.js';
 import { workspaceRoutes } from './routes/workspaces.js';
+import { runtimeWsRoutes } from './routes/runtimeWs.js';
 
 const app = new Hono<Env>();
 
@@ -24,7 +25,10 @@ app.get('/', (c) => {
   return c.json({ name: 'Co-Vibe API Worker', status: 'online' });
 });
 
+app.route('/ws/runtime', runtimeWsRoutes);
+
 const apiV1 = new Hono<Env>();
+apiV1.route('/ws/runtime', runtimeWsRoutes);
 apiV1.use('*', authMiddleware);
 apiV1.route('/auth', authRoutes);
 apiV1.route('/projects', projectRoutes);
@@ -33,4 +37,5 @@ apiV1.route('/projects', workspaceRoutes);
 app.route('/api/v1', apiV1);
 
 export default app;
+
 

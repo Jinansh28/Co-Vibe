@@ -9,12 +9,14 @@ interface AppLayoutProps {
   initialSidebarOpen?: boolean;
   initialTerminalOpen?: boolean;
   initialAgentOpen?: boolean;
+  onBackToDashboard?: () => void;
 }
 
 export const AppLayout: React.FC<AppLayoutProps> = ({
   initialSidebarOpen = true,
   initialTerminalOpen = true,
   initialAgentOpen = true,
+  onBackToDashboard,
 }) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(initialSidebarOpen);
   const [isTerminalOpen, setIsTerminalOpen] = useState(initialTerminalOpen);
@@ -41,6 +43,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
         onToggleTerminal={() => setIsTerminalOpen((prev) => !prev)}
         isAgentOpen={isAgentOpen}
         onToggleAgent={() => setIsAgentOpen((prev) => !prev)}
+        onBackToDashboard={onBackToDashboard}
       />
 
       {/* Main Content Area (Sidebar + Editor + Agent Panel) */}

@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "build": "pnpm --recursive run build",
-    "dev": "pnpm --parallel run dev",
+    "dev": "pnpm --parallel --filter=!@co-vibe/api run dev",
+    "dev:api": "pnpm --filter @co-vibe/api run dev",
+    "dev:all": "pnpm --parallel run dev",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",

@@ -46,3 +46,28 @@ export const PathValidationSchema = z.object({
 });
 
 export type PathValidationRequest = z.infer<typeof PathValidationSchema>;
+
+export const PairingCodeResponseSchema = z.object({
+  code: z.string().length(6),
+  expiresAt: z.number().int().positive(),
+});
+
+export type PairingCodeResponse = z.infer<typeof PairingCodeResponseSchema>;
+
+export const PairingVerifySchema = z.object({
+  code: z.string().length(6),
+  workspaceId: z.string().optional(),
+});
+
+export type PairingVerifyRequest = z.infer<typeof PairingVerifySchema>;
+
+export const PairingTokenResponseSchema = z.object({
+  ok: z.boolean(),
+  token: z.string().optional(),
+  runtimeId: z.string().optional(),
+  expiresAt: z.number().optional(),
+  error: z.string().optional(),
+});
+
+export type PairingTokenResponse = z.infer<typeof PairingTokenResponseSchema>;
+
