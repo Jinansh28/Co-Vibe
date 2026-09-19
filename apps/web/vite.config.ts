@@ -7,5 +7,10 @@ export default defineConfig({
     port: 5173,
     strictPort: false,
   },
+  resolve: {
+    alias: {
+      'monaco-editor/esm/vs/editor/editor.api.js': 'monaco-editor'
+    }
+  }
 });
 
