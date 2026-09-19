@@ -21,9 +21,9 @@
 
 ```text
 Current Sprint:     Sprint 1 — Monorepo Foundation & Core Shell
-Current Task:       TASK-015 — Process Execution & Stream Manager
-Completed Tasks:    TASK-001, TASK-002, TASK-003, TASK-004, TASK-005, TASK-006, TASK-007, TASK-008, TASK-009, TASK-010, TASK-011, TASK-012, TASK-013, TASK-014
-Next Task:          TASK-015 — Process Execution & Stream Manager
+Current Task:       TASK-019 — Cloudflare Durable Object Workspace Room (`WorkspaceRoom.ts`)
+Completed Tasks:    TASK-001, TASK-002, TASK-003, TASK-004, TASK-005, TASK-006, TASK-007, TASK-008, TASK-009, TASK-010, TASK-011, TASK-012, TASK-013, TASK-014, TASK-015, TASK-016, TASK-017, TASK-018
+Next Task:          TASK-019 — Cloudflare Durable Object Workspace Room (`WorkspaceRoom.ts`)
 Blocked Tasks:      None
 Known Risks:        - Browser memory overhead during long-lived Yjs sessions.
                     - Ollama model inference latency on consumer hardware.
@@ -654,7 +654,7 @@ Docker containers spawned safely with explicit resource caps and capability rest
 
 ## TASK-015 — Process Execution & Stream Manager
 
-Status: TODO  
+Status: DONE  
 Priority: P0  
 Component: Docker  
 Depends on: TASK-014  
@@ -675,15 +675,16 @@ Build process execution manager running commands inside container and streaming 
 
 - `apps/runtime/src/process/ProcessManager.ts`
 - `apps/runtime/src/process/streamBuffer.ts`
+- `apps/runtime/tests/processManager.test.ts`
 
 ### Acceptance Criteria
 
-- [ ] Command `node -e "console.log('hello'); console.error('fail');"` streams separate stdout and stderr chunks.
-- [ ] Process running longer than timeout duration is forcibly killed with `SIGKILL`.
+- [x] Command `node -e "console.log('hello'); console.error('fail');"` streams separate stdout and stderr chunks.
+- [x] Process running longer than timeout duration is forcibly killed with `SIGKILL`.
 
 ### Tests
 
-- [ ] `apps/runtime/tests/processManager.test.ts` tests streaming and timeout execution.
+- [x] `apps/runtime/tests/processManager.test.ts` tests streaming and timeout execution.
 
 ### Definition of Done
 
@@ -695,7 +696,7 @@ Commands execute inside container with streamed outputs and strict process contr
 
 ## TASK-016 — Monaco Editor Component Integration
 
-Status: TODO  
+Status: DONE  
 Priority: P0  
 Component: Editor  
 Depends on: TASK-004  
@@ -719,12 +720,12 @@ Integrate `@monaco-editor/react` into main IDE view with syntax highlighting, VS
 
 ### Acceptance Criteria
 
-- [ ] Monaco Editor mounts smoothly inside central EditorPane without layout distortion.
-- [ ] Opening TypeScript file displays full syntax highlighting and line numbers.
+- [x] Monaco Editor mounts smoothly inside central EditorPane without layout distortion.
+- [x] Opening TypeScript file displays full syntax highlighting and line numbers.
 
 ### Tests
 
-- [ ] `apps/web/src/features/editor/MonacoEditor.test.tsx` verifies editor mounting.
+- [x] `apps/web/src/features/editor/MonacoEditor.test.tsx` verifies editor mounting.
 
 ### Definition of Done
 
@@ -734,7 +735,7 @@ Monaco Editor embedded and operational in browser UI.
 
 ## TASK-017 — Virtual File Tree & Multi-Tab Model Manager
 
-Status: TODO  
+Status: DONE  
 Priority: P0  
 Component: Editor  
 Depends on: TASK-016  
@@ -758,12 +759,12 @@ Implement sidebar File Tree view and multi-tab editor manager supporting file op
 
 ### Acceptance Criteria
 
-- [ ] Clicking file in sidebar opens tab and switches active Monaco model.
-- [ ] Closing file tab disposes corresponding Monaco `ITextModel` without memory leak.
+- [x] Clicking file in sidebar opens tab and switches active Monaco model.
+- [x] Closing file tab disposes corresponding Monaco `ITextModel` without memory leak.
 
 ### Tests
 
-- [ ] `apps/web/src/features/editor/TabManager.test.tsx` tests tab switching and model disposal.
+- [x] `apps/web/src/features/editor/TabManager.test.tsx` tests tab switching and model disposal.
 
 ### Definition of Done
 
@@ -775,7 +776,7 @@ User can navigate file tree and work across multiple open editor tabs.
 
 ## TASK-018 — Collaboration Sessions Migration (`003_collaboration_sessions.sql`)
 
-Status: TODO  
+Status: DONE  
 Priority: P0  
 Component: Collaboration  
 Depends on: TASK-009  
@@ -796,11 +797,11 @@ Create database migration for tracking active collaboration sessions.
 
 ### Acceptance Criteria
 
-- [ ] Migration applies cleanly with unique constraint on `(workspace_id, client_id)`.
+- [x] Migration applies cleanly with unique constraint on `(workspace_id, client_id)`.
 
 ### Tests
 
-- [ ] Migration runner validation test.
+- [x] Migration runner validation test.
 
 ### Definition of Done
 

@@ -1,16 +1,12 @@
 import React from 'react';
-import { FileExplorer } from './FileExplorer.js';
+import { FileTree } from '../../features/editor/FileTree.js';
 
 interface SidebarProps {
   isOpen: boolean;
-  onSelectFile?: (filePath: string) => void;
-  activeFilePath?: string;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
   isOpen,
-  onSelectFile,
-  activeFilePath = 'src/App.tsx',
 }) => {
   if (!isOpen) return null;
 
@@ -105,7 +101,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       {/* File Tree List */}
-      <FileExplorer onSelectFile={onSelectFile} activeFilePath={activeFilePath} />
+      <FileTree />
     </aside>
   );
 };

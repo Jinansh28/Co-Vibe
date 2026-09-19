@@ -13,6 +13,17 @@ export {
   type ExecOptions,
   type ExecResult,
 } from './docker/DockerManager.js';
+export {
+  ProcessManager,
+  type IProcessManager,
+  type ManagedProcess,
+  type ProcessExecOptions,
+  type ProcessExecResult,
+} from './process/ProcessManager.js';
+export {
+  StreamBuffer,
+  type StreamBufferOptions,
+} from './process/streamBuffer.js';
 
 export function createRuntimeServer(tokenManager?: TokenManager): Server {
   const manager = tokenManager || new TokenManager();

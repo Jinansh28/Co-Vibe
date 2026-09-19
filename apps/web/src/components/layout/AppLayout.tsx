@@ -21,7 +21,6 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   const [isSidebarOpen, setIsSidebarOpen] = useState(initialSidebarOpen);
   const [isTerminalOpen, setIsTerminalOpen] = useState(initialTerminalOpen);
   const [isAgentOpen, setIsAgentOpen] = useState(initialAgentOpen);
-  const [activeFilePath, setActiveFilePath] = useState('src/App.tsx');
 
   return (
     <div
@@ -57,17 +56,10 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
         }}
       >
         {/* Left Explorer Sidebar */}
-        <Sidebar
-          isOpen={isSidebarOpen}
-          activeFilePath={activeFilePath}
-          onSelectFile={(filePath) => setActiveFilePath(filePath)}
-        />
+        <Sidebar isOpen={isSidebarOpen} />
 
         {/* Central Editor Surface */}
-        <EditorPane
-          activeFilePath={activeFilePath}
-          onCloseTab={() => setActiveFilePath('')}
-        />
+        <EditorPane />
 
         {/* Right AI Agent Drawer */}
         <AgentPanel

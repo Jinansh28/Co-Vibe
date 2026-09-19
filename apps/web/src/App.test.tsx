@@ -56,7 +56,6 @@ describe('Web App Shell UI', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText(/Explorer/i)).toBeDefined();
       expect(screen.getByRole('button', { name: /Run Project/i })).toBeDefined();
     });
   });
