@@ -18,7 +18,7 @@ function MainContent() {
   };
 
   if (activeView === 'workspace') {
-    return <AppLayout onBackToDashboard={() => setActiveView('dashboard')} />;
+    return <AppLayout workspaceId={activeWorkspaceId} onBackToDashboard={() => setActiveView('dashboard')} />;
   }
 
   return <ProjectsPage onOpenWorkspace={handleOpenWorkspace} />;

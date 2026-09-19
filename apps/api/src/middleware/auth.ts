@@ -14,6 +14,7 @@ export interface AuthUser {
 export type Env = {
   Bindings: {
     SUPABASE_JWT_SECRET?: string;
+    WORKSPACE_ROOM?: DurableObjectNamespace;
   };
   Variables: {
     authUser: AuthUser;

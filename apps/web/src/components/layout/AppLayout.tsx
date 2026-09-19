@@ -6,6 +6,7 @@ import { AgentPanel } from './AgentPanel.js';
 import { TerminalPane } from './TerminalPane.js';
 
 interface AppLayoutProps {
+  workspaceId?: string | null;
   initialSidebarOpen?: boolean;
   initialTerminalOpen?: boolean;
   initialAgentOpen?: boolean;
@@ -13,6 +14,7 @@ interface AppLayoutProps {
 }
 
 export const AppLayout: React.FC<AppLayoutProps> = ({
+  workspaceId,
   initialSidebarOpen = true,
   initialTerminalOpen = true,
   initialAgentOpen = true,
@@ -59,7 +61,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
         <Sidebar isOpen={isSidebarOpen} />
 
         {/* Central Editor Surface */}
-        <EditorPane />
+        <EditorPane workspaceId={workspaceId} />
 
         {/* Right AI Agent Drawer */}
         <AgentPanel

@@ -15,6 +15,10 @@ vi.mock('./useEditorStore.js', () => ({
   useEditorStore: vi.fn(),
 }));
 
+vi.mock('../../features/auth/useAuth.js', () => ({
+  useAuth: () => ({ user: { email: 'test@example.com' } })
+}));
+
 describe('Monaco Editor Configuration (editorConfig)', () => {
   it('defines required default editor options for VS Code Dark Modern', () => {
     expect(DEFAULT_EDITOR_OPTIONS.fontSize).toBe(14);

@@ -1,8 +1,12 @@
 // @vitest-environment jsdom
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import React from 'react';
 import { AppLayout } from './AppLayout.js';
+
+vi.mock('../../features/auth/useAuth.js', () => ({
+  useAuth: () => ({ user: { email: 'test@example.com' } })
+}));
 
 describe('AppLayout IDE Shell Grid', () => {
   it('renders top bar, sidebar, editor pane, agent panel, and terminal drawer', () => {

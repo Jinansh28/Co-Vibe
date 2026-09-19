@@ -21,9 +21,9 @@
 
 ```text
 Current Sprint:     Sprint 1 — Monorepo Foundation & Core Shell
-Current Task:       TASK-019 — Cloudflare Durable Object Workspace Room (`WorkspaceRoom.ts`)
-Completed Tasks:    TASK-001, TASK-002, TASK-003, TASK-004, TASK-005, TASK-006, TASK-007, TASK-008, TASK-009, TASK-010, TASK-011, TASK-012, TASK-013, TASK-014, TASK-015, TASK-016, TASK-017, TASK-018
-Next Task:          TASK-019 — Cloudflare Durable Object Workspace Room (`WorkspaceRoom.ts`)
+Current Task:       TASK-023 — Standardized AI Provider Interface & Ollama Client
+Completed Tasks:    TASK-001, TASK-002, TASK-003, TASK-004, TASK-005, TASK-006, TASK-007, TASK-008, TASK-009, TASK-010, TASK-011, TASK-012, TASK-013, TASK-014, TASK-015, TASK-016, TASK-017, TASK-018, TASK-019, TASK-020, TASK-021, TASK-022
+Next Task:          TASK-024 — Deterministic Context Retrieval Engine (`retrieval.ts`)
 Blocked Tasks:      None
 Known Risks:        - Browser memory overhead during long-lived Yjs sessions.
                     - Ollama model inference latency on consumer hardware.
@@ -811,7 +811,7 @@ Database schema ready for tracking room collaboration sessions.
 
 ## TASK-019 — Cloudflare Durable Object Workspace Room (`WorkspaceRoom.ts`)
 
-Status: TODO  
+Status: DONE  
 Priority: P0  
 Component: Collaboration  
 Depends on: TASK-007, TASK-018  
@@ -836,12 +836,12 @@ Create stateful Cloudflare Durable Object `WorkspaceRoom` managing real-time Web
 
 ### Acceptance Criteria
 
-- [ ] Multiple WebSocket connections joining same workspace ID connect to same Durable Object instance.
-- [ ] Yjs update sent by Client A broadcasts to Client B within 300ms.
+- [x] Multiple WebSocket connections joining same workspace ID connect to same Durable Object instance.
+- [x] Yjs update sent by Client A broadcasts to Client B within 300ms.
 
 ### Tests
 
-- [ ] `tests/collaboration/durableObject.test.ts` verifies multi-client WebSocket synchronization.
+- [x] `tests/collaboration/durableObject.test.ts` verifies multi-client WebSocket synchronization.
 
 ### Definition of Done
 
@@ -851,7 +851,7 @@ Durable Object room handles real-time WebSocket connection lifecycle and CRDT br
 
 ## TASK-020 — Monaco Yjs CRDT & Remote Cursor Binding
 
-Status: TODO  
+Status: DONE  
 Priority: P0  
 Component: Collaboration  
 Depends on: TASK-016, TASK-019  
@@ -876,12 +876,12 @@ Bind Monaco Editor models to Yjs CRDT document structures (`Y.Text`) with live a
 
 ### Acceptance Criteria
 
-- [ ] Typing in Client A updates Client B Monaco editor text automatically without focus reset.
-- [ ] Remote user selection renders with custom user color marker and name tag.
+- [x] Typing in Client A updates Client B Monaco editor text automatically without focus reset.
+- [x] Remote user selection renders with custom user color marker and name tag.
 
 ### Tests
 
-- [ ] `tests/collaboration/yjsMonacoBinding.test.ts` tests concurrent edit convergence.
+- [x] `tests/collaboration/yjsMonacoBinding.test.ts` tests concurrent edit convergence.
 
 ### Definition of Done
 
@@ -893,7 +893,7 @@ Multi-user real-time co-editing operational with remote cursors.
 
 ## TASK-021 — Git CLI Wrapper & Status Service (`GitManager.ts`)
 
-Status: TODO  
+Status: DONE  
 Priority: P0  
 Component: Git  
 Depends on: TASK-014  
@@ -918,12 +918,12 @@ Implement Git CLI wrapper in runtime daemon providing repository status, branch 
 
 ### Acceptance Criteria
 
-- [ ] `getStatus()` returns list of modified, staged, and untracked files.
-- [ ] `getDiff()` generates unified diff string matching standard git CLI output.
+- [x] `getStatus()` returns list of modified, staged, and untracked files.
+- [x] `getDiff()` generates unified diff string matching standard git CLI output.
 
 ### Tests
 
-- [ ] `packages/git/tests/gitManager.test.ts` executes git operations against test git repository fixture.
+- [x] `packages/git/tests/gitManager.test.ts` executes git operations against test git repository fixture.
 
 ### Definition of Done
 
@@ -933,7 +933,7 @@ Git status, diff, branch, and commit operations accessible via API.
 
 ## TASK-022 — Isolated Agent Git Worktree Manager (`worktree.ts`)
 
-Status: TODO  
+Status: DONE  
 Priority: P0  
 Component: Git  
 Depends on: TASK-021  
@@ -956,12 +956,12 @@ Build Git worktree manager spawning temporary isolated worktree directories for 
 
 ### Acceptance Criteria
 
-- [ ] Agent edits executed inside worktree directory leave main workspace branch untouched.
-- [ ] `removeWorktree()` completely prunes temporary worktree path from disk.
+- [x] Agent edits executed inside worktree directory leave main workspace branch untouched.
+- [x] `removeWorktree()` completely prunes temporary worktree path from disk.
 
 ### Tests
 
-- [ ] `packages/git/tests/worktree.test.ts` verifies isolated worktree creation and patch extraction.
+- [x] `packages/git/tests/worktree.test.ts` verifies isolated worktree creation and patch extraction.
 
 ### Definition of Done
 

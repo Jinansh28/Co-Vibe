@@ -5,3 +5,11 @@ compatibility_flags = ["nodejs_compat"]
 
 [vars]
 ENVIRONMENT = "development"
+
+[[durable_objects.bindings]]
+name = "WORKSPACE_ROOM"
+class_name = "WorkspaceRoom"
+
+[[migrations]]
+tag = "v1"
+new_classes = ["WorkspaceRoom"]

@@ -1,12 +1,28 @@
-import React from 'react';
+import React, { useState, useCallback } from 'react';
 import type { editor } from 'monaco-editor';
 import type { Monaco } from '@monaco-editor/react';
 import { MonacoEditor } from '../../features/editor/MonacoEditor.js';
 import { getLanguageFromPath } from '../../features/editor/editorConfig.js';
 import { useEditorStore } from '../../features/editor/useEditorStore.js';
 import { TabManager } from '../../features/editor/TabManager.js';
+import { useAuth } from '../../features/auth/useAuth.js';
+import { useCollaboration } from '../../features/collaboration/useCollaboration.js';
+
+function stringToColor(str: string) {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = str.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  let color = '#';
+  for (let i = 0; i < 3; i++) {
+    const value = (hash >> (i * 8)) & 0xFF;
+    color += ('00' + value.toString(16)).slice(-2);
+  }
+  return color;
+}
 
 interface EditorPaneProps {
+  workspaceId?: string | null;
   value?: string;
   defaultValue?: string;
   onChange?: (value: string | undefined, ev: editor.IModelContentChangedEvent) => void;
@@ -24,6 +40,7 @@ export default function App() {
 `;
 
 export const EditorPane: React.FC<EditorPaneProps> = ({
+  workspaceId,
   value,
   defaultValue,
   onChange,
@@ -39,6 +56,28 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
         ? 'TypeScript React'
         : language.charAt(0).toUpperCase() + language.slice(1))
     : '';
+
+  const { user } = useAuth();
+  const userState = {
+    name: user?.email || 'Anonymous',
+    color: stringToColor(user?.email || 'anon'),
+  };
+
+  const [editorInstance, setEditorInstance] = useState<editor.IStandaloneCodeEditor | null>(null);
+
+  const { connected } = useCollaboration(
+    workspaceId || '',
+    activeFilePath,
+    editorInstance,
+    userState
+  );
+
+  const handleMount = useCallback((editor: editor.IStandaloneCodeEditor, monaco: Monaco) => {
+    setEditorInstance(editor);
+    if (onMount) {
+      onMount(editor, monaco);
+    }
+  }, [onMount]);
 
   return (
     <main
@@ -74,7 +113,7 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
             language={language}
             theme="vs-dark"
             onChange={onChange}
-            onMount={onMount}
+            onMount={handleMount}
             readOnly={readOnly}
           />
         ) : (
@@ -131,7 +170,9 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <span>UTF-8</span>
           <span>{displayLanguage}</span>
-          <span style={{ color: 'var(--success)', fontWeight: 600 }}>● Yjs Synced</span>
+          <span style={{ color: connected ? 'var(--success)' : 'var(--text-muted)', fontWeight: 600 }}>
+            {connected ? '● Yjs Synced' : '○ Offline'}
+          </span>
         </div>
       </footer>
     </main>
