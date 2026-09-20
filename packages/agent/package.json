@@ -9,7 +9,11 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run --project agent"
   },
-  "dependencies": {},
+  "dependencies": {
+    "zod": "^3.25.76",
+    "@co-vibe/context": "workspace:*",
+    "@co-vibe/protocol": "workspace:*"
+  },
   "devDependencies": {
     "typescript": "^5.6.3"
   }

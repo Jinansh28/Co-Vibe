@@ -21,9 +21,9 @@
 
 ```text
 Current Sprint:     Sprint 1 — Monorepo Foundation & Core Shell
-Current Task:       TASK-025 — Agent Execution Tables Migration (`004_agent_execution.sql`)
-Completed Tasks:    TASK-001, TASK-002, TASK-003, TASK-004, TASK-005, TASK-006, TASK-007, TASK-008, TASK-009, TASK-010, TASK-011, TASK-012, TASK-013, TASK-014, TASK-015, TASK-016, TASK-017, TASK-018, TASK-019, TASK-020, TASK-021, TASK-022, TASK-023, TASK-024
-Next Task:          TASK-026 — Agent Finite State Machine (`state-machine.ts`)
+Current Task:       TASK-029 — Change Sets Schema Migration (`005_changesets_conversations.sql`)
+Completed Tasks:    TASK-001, TASK-002, TASK-003, TASK-004, TASK-005, TASK-006, TASK-007, TASK-008, TASK-009, TASK-010, TASK-011, TASK-012, TASK-013, TASK-014, TASK-015, TASK-016, TASK-017, TASK-018, TASK-019, TASK-020, TASK-021, TASK-022, TASK-023, TASK-024, TASK-025, TASK-026, TASK-027, TASK-028
+Next Task:          TASK-030 — Three-Way Diff Applicability & Hunk Accept Engine
 Blocked Tasks:      None
 Known Risks:        - Browser memory overhead during long-lived Yjs sessions.
                     - Ollama model inference latency on consumer hardware.
@@ -1059,7 +1059,7 @@ Context engine constructs deterministic prompt context chunks within 500ms.
 
 ## TASK-025 — Agent Execution Tables Migration (`004_agent_execution.sql`)
 
-Status: TODO  
+Status: DONE  
 Priority: P0  
 Component: Agent  
 Depends on: TASK-009  
@@ -1081,11 +1081,11 @@ Create database migration establishing `agents`, `agent_tasks`, `agent_runs`, an
 
 ### Acceptance Criteria
 
-- [ ] Foreign keys cascade delete when parent workspace or task is deleted.
+- [x] Foreign keys cascade delete when parent workspace or task is deleted.
 
 ### Tests
 
-- [ ] Migration runner validation test.
+- [x] Migration runner validation test.
 
 ### Definition of Done
 
@@ -1095,7 +1095,7 @@ Database schema ready for durable agent task state tracking.
 
 ## TASK-026 — Agent Finite State Machine (`state-machine.ts`)
 
-Status: TODO  
+Status: DONE  
 Priority: P0  
 Component: Agent  
 Depends on: TASK-025  
@@ -1117,12 +1117,12 @@ Implement durable Agent State Machine enforcing valid state transitions and pers
 
 ### Acceptance Criteria
 
-- [ ] Valid transition updates state in memory and database transactionally.
-- [ ] Attempting illegal state transition throws `INVALID_STATE_TRANSITION` error.
+- [x] Valid transition updates state in memory and database transactionally.
+- [x] Attempting illegal state transition throws `INVALID_STATE_TRANSITION` error.
 
 ### Tests
 
-- [ ] `packages/agent/tests/stateMachine.test.ts` tests all state transition paths.
+- [x] `packages/agent/tests/stateMachine.test.ts` tests all state transition paths.
 
 ### Definition of Done
 
@@ -1132,7 +1132,7 @@ Agent state machine operational with strict transition rules.
 
 ## TASK-027 — Tool Registry & Execution Safety Engine (`registry.ts`)
 
-Status: TODO  
+Status: DONE  
 Priority: P0  
 Component: Agent  
 Depends on: TASK-014, TASK-023  
@@ -1157,12 +1157,12 @@ Create Agent Tool Registry managing tool registration, Zod schema validation, ex
 
 ### Acceptance Criteria
 
-- [ ] Model invoking `write_file` with invalid arguments receives structured Zod validation error.
-- [ ] Tool execution exceeding timeout threshold cancels execution and returns timeout error output.
+- [x] Model invoking `write_file` with invalid arguments receives structured Zod validation error.
+- [x] Tool execution exceeding timeout threshold cancels execution and returns timeout error output.
 
 ### Tests
 
-- [ ] `packages/agent/tests/toolRegistry.test.ts` tests tool input validation and execution timeouts.
+- [x] `packages/agent/tests/toolRegistry.test.ts` tests tool input validation and execution timeouts.
 
 ### Definition of Done
 
@@ -1172,7 +1172,7 @@ Tool registry loaded with standard tools and security controls.
 
 ## TASK-028 — Central Agent Orchestrator (`orchestrator.ts`)
 
-Status: TODO  
+Status: DONE  
 Priority: P0  
 Component: Agent  
 Depends on: TASK-024, TASK-026, TASK-027  
@@ -1196,12 +1196,12 @@ Build central `AgentOrchestrator` managing full task loop: prompt construction, 
 
 ### Acceptance Criteria
 
-- [ ] Submitting prompt in AgentPanel initiates agent task and displays live tool execution timeline.
-- [ ] Agent execution state updates automatically in PostgreSQL database and UI timeline.
+- [x] Submitting prompt in AgentPanel initiates agent task and displays live tool execution timeline.
+- [x] Agent execution state updates automatically in PostgreSQL database and UI timeline.
 
 ### Tests
 
-- [ ] `packages/agent/tests/orchestrator.test.ts` executes complete mock agent task.
+- [x] `packages/agent/tests/orchestrator.test.ts` executes complete mock agent task.
 
 ### Definition of Done
 

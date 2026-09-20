@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-
+import { ToolTimeline } from './ToolTimeline.js';
+import { AgentTaskProgressPayload } from '@co-vibe/protocol';
 interface AgentPanelProps {
   isOpen: boolean;
   onClose?: () => void;
@@ -7,6 +8,7 @@ interface AgentPanelProps {
 
 export const AgentPanel: React.FC<AgentPanelProps> = ({ isOpen, onClose }) => {
   const [prompt, setPrompt] = useState('');
+  const [timelineEvents, setTimelineEvents] = useState<AgentTaskProgressPayload[]>([]);
 
   if (!isOpen) return null;
 
@@ -128,20 +130,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ isOpen, onClose }) => {
         </div>
 
         {/* Agent Activity Stream */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          <div
-            style={{
-              fontSize: '11px',
-              padding: '8px 10px',
-              borderRadius: 'var(--radius-sm)',
-              backgroundColor: 'var(--bg-panel-raised)',
-              border: '1px solid var(--border-subtle)',
-              color: 'var(--text-secondary)',
-            }}
-          >
-            <span style={{ color: 'var(--accent)', fontWeight: 600 }}>[System]</span> Workspace loaded and ready for task commands.
-          </div>
-        </div>
+        <ToolTimeline events={timelineEvents} />
       </div>
 
       {/* Prompt Input Footer */}

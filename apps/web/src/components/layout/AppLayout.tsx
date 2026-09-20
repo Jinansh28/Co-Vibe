@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { TopBar } from './TopBar.js';
 import { Sidebar } from './Sidebar.js';
 import { EditorPane } from './EditorPane.js';
-import { AgentPanel } from './AgentPanel.js';
+import { AgentPanel } from '../../features/agent/AgentPanel.js';
 import { TerminalPane } from './TerminalPane.js';
 
 interface AppLayoutProps {

@@ -151,6 +151,16 @@ importers:
         version: 5.4.21(@types/node@22.20.1)
 
   packages/agent:
+    dependencies:
+      '@co-vibe/context':
+        specifier: workspace:*
+        version: link:../context
+      '@co-vibe/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+      zod:
+        specifier: ^3.25.76
+        version: 3.25.76
     devDependencies:
       typescript:
         specifier: ^5.6.3
