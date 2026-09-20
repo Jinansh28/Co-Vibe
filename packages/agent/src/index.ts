@@ -6,3 +6,4 @@ export * from './tools/registry.js';
 export * from './tools/filesystem.js';
 export * from './tools/shell.js';
 export * from './orchestrator.js';
+export * from './changeset.js';

@@ -21,9 +21,9 @@
 
 ```text
 Current Sprint:     Sprint 1 — Monorepo Foundation & Core Shell
-Current Task:       TASK-029 — Change Sets Schema Migration (`005_changesets_conversations.sql`)
-Completed Tasks:    TASK-001, TASK-002, TASK-003, TASK-004, TASK-005, TASK-006, TASK-007, TASK-008, TASK-009, TASK-010, TASK-011, TASK-012, TASK-013, TASK-014, TASK-015, TASK-016, TASK-017, TASK-018, TASK-019, TASK-020, TASK-021, TASK-022, TASK-023, TASK-024, TASK-025, TASK-026, TASK-027, TASK-028
-Next Task:          TASK-030 — Three-Way Diff Applicability & Hunk Accept Engine
+Current Task:       TASK-031 — Side-by-Side Diff Viewer UI
+Completed Tasks:    TASK-001, TASK-002, TASK-003, TASK-004, TASK-005, TASK-006, TASK-007, TASK-008, TASK-009, TASK-010, TASK-011, TASK-012, TASK-013, TASK-014, TASK-015, TASK-016, TASK-017, TASK-018, TASK-019, TASK-020, TASK-021, TASK-022, TASK-023, TASK-024, TASK-025, TASK-026, TASK-027, TASK-028, TASK-029, TASK-030
+Next Task:          TASK-032 — Containerized Test Runner & Output Parser (`TestRunner.ts`)
 Blocked Tasks:      None
 Known Risks:        - Browser memory overhead during long-lived Yjs sessions.
                     - Ollama model inference latency on consumer hardware.
@@ -1213,7 +1213,7 @@ Agent Orchestrator executes end-to-end task loop streaming step updates to UI.
 
 ## TASK-029 — Change Sets Schema Migration (`005_changesets_conversations.sql`)
 
-Status: TODO  
+Status: DONE  
 Priority: P0  
 Component: Change Sets  
 Depends on: TASK-025  
@@ -1235,11 +1235,11 @@ Create database migration for storing change sets and AI conversation histories.
 
 ### Acceptance Criteria
 
-- [ ] Table schema applies cleanly with check constraints on `status` (`pending`, `accepted`, `rejected`, `stale`, `conflicted`).
+- [x] Table schema applies cleanly with check constraints on `status` (`pending`, `accepted`, `rejected`, `stale`, `conflicted`).
 
 ### Tests
 
-- [ ] Migration runner validation test.
+- [x] Migration runner validation test.
 
 ### Definition of Done
 
@@ -1249,7 +1249,7 @@ Database schema ready for storing agent change sets.
 
 ## TASK-030 — Three-Way Diff Applicability & Hunk Accept Engine
 
-Status: TODO  
+Status: DONE  
 Priority: P0  
 Component: Change Sets  
 Depends on: TASK-022, TASK-029  
@@ -1275,12 +1275,12 @@ Build change set patch manager validating patch applicability against current wo
 
 ### Acceptance Criteria
 
-- [ ] Valid patch applies cleanly to workspace branch upon human acceptance.
-- [ ] Stale patch conflicting with new human edits is rejected without corrupting workspace files.
+- [x] Valid patch applies cleanly to workspace branch upon human acceptance.
+- [x] Stale patch conflicting with new human edits is rejected without corrupting workspace files.
 
 ### Tests
 
-- [ ] `packages/agent/tests/changeset.test.ts` tests three-way patch applicability and conflict detection.
+- [x] `packages/agent/tests/changeset.test.ts` tests three-way patch applicability and conflict detection.
 
 ### Definition of Done
 
@@ -1290,7 +1290,7 @@ Change sets apply safely to shared workspace after human review.
 
 ## TASK-031 — Side-by-Side Diff Viewer UI
 
-Status: TODO  
+Status: DONE  
 Priority: P0  
 Component: Change Sets  
 Depends on: TASK-016, TASK-030  
@@ -1313,12 +1313,12 @@ Build Side-by-Side Diff Viewer UI component in frontend allowing users to inspec
 
 ### Acceptance Criteria
 
-- [ ] DiffViewer displays side-by-side diff of original file vs agent worktree output.
-- [ ] Clicking "Accept ChangeSet" calls `/api/v1/changesets/:id/accept` and updates main workspace.
+- [x] DiffViewer displays side-by-side diff of original file vs agent worktree output.
+- [x] Clicking "Accept ChangeSet" calls `/api/v1/changesets/:id/accept` and updates main workspace.
 
 ### Tests
 
-- [ ] `apps/web/src/features/changeset/DiffViewer.test.tsx` tests diff rendering.
+- [x] `apps/web/src/features/changeset/DiffViewer.test.tsx` tests diff rendering.
 
 ### Definition of Done
 

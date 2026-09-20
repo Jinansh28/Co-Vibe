@@ -8,6 +8,7 @@ import { workspaceRoutes } from './routes/workspaces.js';
 import { runtimeWsRoutes } from './routes/runtimeWs.js';
 import { workspaceWsRoutes } from './routes/workspaceWs.js';
 import { gitRoutes } from './routes/git.js';
+import { changesetRoutes } from './routes/changesets.js';
 
 export { WorkspaceRoom } from './durable-objects/WorkspaceRoom.js';
 
@@ -39,6 +40,7 @@ apiV1.route('/projects', projectRoutes);
 apiV1.route('/projects', workspaceRoutes);
 apiV1.route('/workspaces', workspaceWsRoutes);
 apiV1.route('/workspaces', gitRoutes);
+apiV1.route('/changesets', changesetRoutes);
 
 app.route('/api/v1', apiV1);
 
