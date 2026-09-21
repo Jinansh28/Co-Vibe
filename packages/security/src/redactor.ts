@@ -1,5 +1,5 @@
 const GITHUB_TOKEN_REGEX = /ghp_[a-zA-Z0-9]{36}/g;
-const JWT_REGEX = /eyJ[a-zA-Z0-9_\-]+\.[a-zA-Z0-9_\-]+\.[a-zA-Z0-9_\-]+/g;
+const JWT_REGEX = /eyJ[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+/g;
 const AUTH_HEADER_REGEX = /((?:['"])?authorization(?:['"])?\s*:\s*(?:['"])?(?:bearer|basic)\s+)[^\s\r\n'"]+/gi;
 
 export function redactSecrets(text: string): string {

@@ -6,7 +6,8 @@
     "dev": "wrangler dev",
     "build": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run --project api"
+    "test": "vitest run --project api",
+    "deploy": "node --experimental-strip-types ../../scripts/deploy.ts"
   },
   "dependencies": {
     "@co-vibe/protocol": "workspace:*",
