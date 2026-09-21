@@ -24,6 +24,11 @@ export {
   StreamBuffer,
   type StreamBufferOptions,
 } from './process/streamBuffer.js';
+export {
+  TestRunner,
+  type TestResult,
+  type FailedSpec,
+} from './process/TestRunner.js';
 
 export function createRuntimeServer(tokenManager?: TokenManager): Server {
   const manager = tokenManager || new TokenManager();

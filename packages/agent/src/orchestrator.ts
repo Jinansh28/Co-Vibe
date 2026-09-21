@@ -3,6 +3,8 @@ import { ToolRegistry } from './tools/registry.js';
 import { AgentStateMachine } from './state-machine.js';
 import { ContextRetriever } from '@co-vibe/context';
 import { AgentTaskProgressPayload } from '@co-vibe/protocol';
+import { TestResult } from './validation.js';
+import { runRepairLoop } from './repair.js';
 
 export interface OrchestratorOptions {
   provider: AIProvider;
@@ -13,6 +15,7 @@ export interface OrchestratorOptions {
   taskId: string;
   runId: string;
   workspaceFiles: Map<string, string>;
+  validateTask?: () => Promise<TestResult>;
 }
 
 export class AgentOrchestrator {
@@ -24,6 +27,7 @@ export class AgentOrchestrator {
   private taskId: string;
   private runId: string;
   private workspaceFiles: Map<string, string>;
+  private validateTask?: () => Promise<TestResult>;
 
   constructor(options: OrchestratorOptions) {
     this.provider = options.provider;
@@ -34,6 +38,7 @@ export class AgentOrchestrator {
     this.taskId = options.taskId;
     this.runId = options.runId;
     this.workspaceFiles = options.workspaceFiles;
+    this.validateTask = options.validateTask;
   }
 
   private sendProgress(state: AgentTaskProgressPayload['state'], stepName: string, message: string, percentage?: number) {
@@ -124,6 +129,24 @@ export class AgentOrchestrator {
       }
 
       await this.stateMachine.transition('validating');
+      
+      if (this.validateTask) {
+        this.sendProgress('EXECUTING', 'Run Tests', 'Running automated tests', 80);
+        const testResult = await this.validateTask();
+        
+        if (!testResult.passed) {
+          return await runRepairLoop({
+            stateMachine: this.stateMachine,
+            contextRetriever: this.contextRetriever,
+            provider: this.provider,
+            toolRegistry: this.toolRegistry,
+            workspaceFiles: this.workspaceFiles,
+            validateTask: this.validateTask,
+            onProgress: (state, step, msg, pct) => this.sendProgress(state, step, msg, pct)
+          }, testResult, messages);
+        }
+      }
+
       this.sendProgress('SUCCESS', 'Task Completed', 'Task executed successfully', 100);
       
       await this.stateMachine.transition('awaiting_review');

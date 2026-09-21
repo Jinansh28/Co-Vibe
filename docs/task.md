@@ -21,9 +21,9 @@
 
 ```text
 Current Sprint:     Sprint 1 — Monorepo Foundation & Core Shell
-Current Task:       TASK-031 — Side-by-Side Diff Viewer UI
-Completed Tasks:    TASK-001, TASK-002, TASK-003, TASK-004, TASK-005, TASK-006, TASK-007, TASK-008, TASK-009, TASK-010, TASK-011, TASK-012, TASK-013, TASK-014, TASK-015, TASK-016, TASK-017, TASK-018, TASK-019, TASK-020, TASK-021, TASK-022, TASK-023, TASK-024, TASK-025, TASK-026, TASK-027, TASK-028, TASK-029, TASK-030
-Next Task:          TASK-032 — Containerized Test Runner & Output Parser (`TestRunner.ts`)
+Current Task:       TASK-033 — Test-Driven Agent Repair Loop (`repair.ts`)
+Completed Tasks:    TASK-001, TASK-002, TASK-003, TASK-004, TASK-005, TASK-006, TASK-007, TASK-008, TASK-009, TASK-010, TASK-011, TASK-012, TASK-013, TASK-014, TASK-015, TASK-016, TASK-017, TASK-018, TASK-019, TASK-020, TASK-021, TASK-022, TASK-023, TASK-024, TASK-025, TASK-026, TASK-027, TASK-028, TASK-029, TASK-030, TASK-031, TASK-032
+Next Task:          TASK-034 — Path Traversal Guard Module (`path-policy.ts`)
 Blocked Tasks:      None
 Known Risks:        - Browser memory overhead during long-lived Yjs sessions.
                     - Ollama model inference latency on consumer hardware.
@@ -1330,7 +1330,7 @@ Human review UI operational for diff inspection and change set acceptance.
 
 ## TASK-032 — Containerized Test Runner & Output Parser (`TestRunner.ts`)
 
-Status: TODO  
+Status: DONE  
 Priority: P0  
 Component: Testing  
 Depends on: TASK-015  
@@ -1354,12 +1354,12 @@ Implement automated test execution engine running project tests inside Docker sa
 
 ### Acceptance Criteria
 
-- [ ] TestRunner executes containerized test command and returns structured `TestResult` object (`passed: boolean`, `failedSpecs: [...]`).
-- [ ] Failing assertion details are parsed into clean error summaries.
+- [x] TestRunner executes containerized test command and returns structured `TestResult` object (`passed: boolean`, `failedSpecs: [...]`).
+- [x] Failing assertion details are parsed into clean error summaries.
 
 ### Tests
 
-- [ ] `apps/runtime/tests/testRunner.test.ts` verifies parsing of failing test outputs.
+- [x] `apps/runtime/tests/testRunner.test.ts` verifies parsing of failing test outputs.
 
 ### Definition of Done
 
@@ -1369,7 +1369,7 @@ Automated test runner executes inside container and parses spec failures.
 
 ## TASK-033 — Test-Driven Agent Repair Loop (`repair.ts`)
 
-Status: TODO  
+Status: DONE  
 Priority: P0  
 Component: Agent  
 Depends on: TASK-028, TASK-032  
@@ -1392,13 +1392,13 @@ Integrate test-driven repair iteration loop into `AgentOrchestrator` automatical
 
 ### Acceptance Criteria
 
-- [ ] Failing test suite causes agent to transition to `needs_fix` state and generate revised patch.
-- [ ] If tests pass on attempt 2, task transitions to `awaiting_review`.
-- [ ] If tests fail after attempt 3, task transitions to `failed` state.
+- [x] Failing test suite causes agent to transition to `needs_fix` state and generate revised patch.
+- [x] If tests pass on attempt 2, task transitions to `awaiting_review`.
+- [x] If tests fail after attempt 3, task transitions to `failed` state.
 
 ### Tests
 
-- [ ] `packages/agent/tests/repair.test.ts` tests 3-attempt repair iteration loop.
+- [x] `packages/agent/tests/repair.test.ts` tests 3-attempt repair iteration loop.
 
 ### Definition of Done
 

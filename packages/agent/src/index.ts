@@ -7,3 +7,5 @@ export * from './tools/filesystem.js';
 export * from './tools/shell.js';
 export * from './orchestrator.js';
 export * from './changeset.js';
+export * from './validation.js';
+export * from './repair.js';
