@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { TerminalOutputPayload, WsEnvelope } from '@co-vibe/protocol';
+import { redactSecrets } from '@co-vibe/security';
 
 export interface StreamBufferOptions {
   processId: string;
@@ -48,7 +49,8 @@ export class StreamBuffer {
   }
 
   public write(chunk: Buffer | string): void {
-    const text = typeof chunk === 'string' ? chunk : chunk.toString('utf-8');
+    let text = typeof chunk === 'string' ? chunk : chunk.toString('utf-8');
+    text = redactSecrets(text);
     const bytes = Buffer.byteLength(text, 'utf-8');
     const now = Date.now();
 

@@ -32,9 +32,12 @@ app.get('/', (c) => {
 
 app.route('/ws/runtime', runtimeWsRoutes);
 
+import { auditMiddleware } from './middleware/audit.js';
+
 const apiV1 = new Hono<Env>();
 apiV1.route('/ws/runtime', runtimeWsRoutes);
 apiV1.use('*', authMiddleware);
+apiV1.use('*', auditMiddleware);
 apiV1.route('/auth', authRoutes);
 apiV1.route('/projects', projectRoutes);
 apiV1.route('/projects', workspaceRoutes);

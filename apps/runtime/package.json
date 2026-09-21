@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@co-vibe/protocol": "workspace:*",
+    "@co-vibe/security": "workspace:*",
     "@co-vibe/shared": "workspace:*",
     "dockerode": "^4.0.2"
   },

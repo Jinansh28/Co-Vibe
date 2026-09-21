@@ -21,9 +21,9 @@
 
 ```text
 Current Sprint:     Sprint 1 — Monorepo Foundation & Core Shell
-Current Task:       TASK-033 — Test-Driven Agent Repair Loop (`repair.ts`)
-Completed Tasks:    TASK-001, TASK-002, TASK-003, TASK-004, TASK-005, TASK-006, TASK-007, TASK-008, TASK-009, TASK-010, TASK-011, TASK-012, TASK-013, TASK-014, TASK-015, TASK-016, TASK-017, TASK-018, TASK-019, TASK-020, TASK-021, TASK-022, TASK-023, TASK-024, TASK-025, TASK-026, TASK-027, TASK-028, TASK-029, TASK-030, TASK-031, TASK-032
-Next Task:          TASK-034 — Path Traversal Guard Module (`path-policy.ts`)
+Current Task:       TASK-035 — Command Policy Allowlist & Sanitizer (`command-policy.ts`)
+Completed Tasks:    TASK-001, TASK-002, TASK-003, TASK-004, TASK-005, TASK-006, TASK-007, TASK-008, TASK-009, TASK-010, TASK-011, TASK-012, TASK-013, TASK-014, TASK-015, TASK-016, TASK-017, TASK-018, TASK-019, TASK-020, TASK-021, TASK-022, TASK-023, TASK-024, TASK-025, TASK-026, TASK-027, TASK-028, TASK-029, TASK-030, TASK-031, TASK-032, TASK-033, TASK-034, TASK-035
+Next Task:          TASK-036 — Secret Redactor & Log Masker (`redactor.ts`)
 Blocked Tasks:      None
 Known Risks:        - Browser memory overhead during long-lived Yjs sessions.
                     - Ollama model inference latency on consumer hardware.
@@ -1410,7 +1410,7 @@ Agent automatically diagnoses test failures and attempts source code repair.
 
 ## TASK-034 — Path Traversal Guard Module (`path-policy.ts`)
 
-Status: TODO  
+Status: DONE  
 Priority: P0  
 Component: Security  
 Depends on: TASK-001  
@@ -1433,22 +1433,28 @@ Create path validation module verifying that all filesystem operations remain st
 
 ### Acceptance Criteria
 
-- [ ] Path `../../etc/passwd` throws `PATH_NOT_ALLOWED` exception.
-- [ ] Path `src/app.ts` resolves correctly to `/workspace/root/src/app.ts`.
+- [x] Path `../../etc/passwd` throws `PATH_NOT_ALLOWED` exception.
+- [x] Path `src/app.ts` resolves correctly to `/workspace/root/src/app.ts`.
 
 ### Tests
 
-- [ ] `packages/security/tests/pathPolicy.test.ts` tests valid and malicious path strings.
+- [x] `packages/security/tests/pathPolicy.test.ts` tests valid and malicious path strings.
 
 ### Definition of Done
 
 Path policy module imported and enforcing path jail on all filesystem tools.
 
+### Completion Notes
+- **Completed Work**: Implemented `assertWorkspacePath` in `@co-vibe/security` to prevent path traversal and null byte injections. Applied it to filesystem tools in `@co-vibe/agent`.
+- **Files/Components**: `packages/security/src/path-policy.ts`, `packages/security/tests/pathPolicy.test.ts`, `packages/agent/src/tools/filesystem.ts`.
+- **Validation**: Ran `pnpm --filter @co-vibe/security test` (5/5 passed). Ran `pnpm --recursive run typecheck` across workspace (0 errors).
+- **Known Issues**: Tools currently rely on `process.cwd()` or `process.env.WORKSPACE_ROOT` to determine the jail root.
+
 ---
 
 ## TASK-035 — Command Policy Allowlist & Sanitizer (`command-policy.ts`)
 
-Status: TODO  
+Status: DONE  
 Priority: P0  
 Component: Security  
 Depends on: TASK-015  
@@ -1470,22 +1476,29 @@ Create command validation policy ensuring model tool requests invoke structured 
 
 ### Acceptance Criteria
 
-- [ ] Command `["npm", "test"]` passes policy validation.
-- [ ] Command `["sh", "-c", "rm -rf /"]` fails with `POLICY_VIOLATION` error.
+- [x] Command `["npm", "test"]` passes policy validation.
+- [x] Command `["sh", "-c", "rm -rf /"]` fails with `POLICY_VIOLATION` error.
 
 ### Tests
 
-- [ ] `packages/security/tests/commandPolicy.test.ts` tests command allowlist.
+- [x] `packages/security/tests/commandPolicy.test.ts` tests command allowlist.
 
 ### Definition of Done
 
 Command policy enforced on all runtime process spawning calls.
 
+### Completion Notes
+- **Completed Work**: Created `validateCommandPolicy` to ensure agent commands only execute allowlisted binaries, blocking raw shell execution. Enforced the policy in the shell tools of `@co-vibe/agent`.
+- **Files Changed**: `packages/security/src/command-policy.ts`, `packages/security/src/index.ts`, `packages/security/tests/commandPolicy.test.ts`, `packages/agent/src/tools/shell.ts`.
+- **Tests & Validation**: Ran `pnpm --filter @co-vibe/security test` (passed). Ran `pnpm --filter @co-vibe/agent test` (passed). Ran `pnpm run typecheck` across workspace (0 errors). Ran `pnpm run lint` (passed).
+- **Known Issues**: None.
+- **Next Task**: TASK-036 — Secret Redactor & Log Masker (`redactor.ts`)
+
 ---
 
 ## TASK-036 — Secret Redactor & Log Masker (`redactor.ts`)
 
-Status: TODO  
+Status: DONE  
 Priority: P0  
 Component: Security  
 Depends on: TASK-002  
@@ -1507,21 +1520,28 @@ Create stream redactor masking GitHub OAuth tokens, JWT secrets, and bearer toke
 
 ### Acceptance Criteria
 
-- [ ] Terminal stream containing `ghp_1234567890abcdefghijklmnopqrstuvwxyz` is masked to `[REDACTED_SECRET]`.
+- [x] Terminal stream containing `ghp_1234567890abcdefghijklmnopqrstuvwxyz` is masked to `[REDACTED_SECRET]`.
 
 ### Tests
 
-- [ ] `packages/security/tests/redactor.test.ts` tests regex masking patterns.
+- [x] `packages/security/tests/redactor.test.ts` tests regex masking patterns.
 
 ### Definition of Done
 
 Stream redactor applied to stdout/stderr log pipelines.
 
+### Completion Notes
+- **Completed Work**: Created `redactSecrets` function using regex to match and redact GitHub Personal Access Tokens, JWTs, and Authorization (Bearer/Basic) headers. Applied the redactor directly in the `StreamBuffer.write` method in `@co-vibe/runtime` to ensure all output logged or emitted via stdout/stderr is filtered.
+- **Files Changed**: `packages/security/src/redactor.ts`, `packages/security/tests/redactor.test.ts`, `packages/security/src/index.ts`, `apps/runtime/src/process/streamBuffer.ts`, `apps/runtime/package.json`.
+- **Tests & Validation**: Passed unit tests in `@co-vibe/security` validating multiple token permutations. Passed all typechecks and `@co-vibe/runtime` tests.
+- **Known Issues**: If a secret is split perfectly across a chunk boundary (e.g. half of the token in chunk 1, the other half in chunk 2), the redactor regex will miss it. Given current chunk size behavior this is rare, but possible.
+- **Next Task**: TASK-037 — Database Audit Logs Migration (`006_runtimes_git_audit.sql`)
+
 ---
 
 ## TASK-037 — Database Audit Logs Migration (`006_runtimes_git_audit.sql`)
 
-Status: TODO  
+Status: DONE  
 Priority: P0  
 Component: Security  
 Depends on: TASK-029  
@@ -1543,15 +1563,22 @@ Create database migration establishing `audit_logs` table for tracking mutations
 
 ### Acceptance Criteria
 
-- [ ] Mutations (project creation, workspace start, changeset accept) insert structured record into `audit_logs`.
+- [x] Mutations (project creation, workspace start, changeset accept) insert structured record into `audit_logs`.
 
 ### Tests
 
-- [ ] Integration test verifies audit event insertion.
+- [x] Integration test verifies audit event insertion.
 
 ### Definition of Done
 
 Audit logging active across all API write operations.
+
+### Completion Notes
+- **Completed Work**: Created `006_runtimes_git_audit.sql` migration script establishing the `audit_logs` table. Created an in-memory `auditService.ts` to log events (mirroring the MVP pattern of `projectService`) and created Hono middleware in `audit.ts` to intercept successful mutations (`POST`, `PUT`, etc.) and log them.
+- **Files Changed**: `infrastructure/db/migrations/006_runtimes_git_audit.sql`, `apps/api/src/services/auditService.ts`, `apps/api/src/middleware/audit.ts`, `apps/api/src/index.ts`, `apps/api/tests/audit.test.ts`.
+- **Tests & Validation**: Wrote integration tests in `apps/api/tests/audit.test.ts` to verify `project.created`, `workspace.started`, and `changeset.accepted` events are logged properly. Ran `vitest` and `tsc --noEmit` across `@co-vibe/api` and verified all checks pass.
+- **Known Issues**: Uses an in-memory array for audit logs to maintain parity with `projectService.ts` during MVP.
+- **Next Task**: TASK-038 — GitHub Actions CI Workflow (`ci.yml`)
 
 ---
 

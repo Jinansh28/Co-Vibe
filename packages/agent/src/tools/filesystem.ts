@@ -1,6 +1,11 @@
 import { z } from 'zod';
 import { ToolDefinition } from './registry.js';
 import * as fs from 'fs/promises';
+import { assertWorkspacePath } from '@co-vibe/security';
+
+function getWorkspaceRoot() {
+  return process.env.WORKSPACE_ROOT || process.cwd();
+}
 
 export const readFileTool: ToolDefinition = {
   name: 'read_file',
@@ -10,7 +15,8 @@ export const readFileTool: ToolDefinition = {
   }),
   timeoutMs: 5000,
   execute: async ({ path }) => {
-    const content = await fs.readFile(path, 'utf8');
+    const safePath = assertWorkspacePath(getWorkspaceRoot(), path);
+    const content = await fs.readFile(safePath, 'utf8');
     return content;
   },
 };
@@ -24,7 +30,8 @@ export const writeFileTool: ToolDefinition = {
   }),
   timeoutMs: 10000,
   execute: async ({ path, content }) => {
-    await fs.writeFile(path, content, 'utf8');
+    const safePath = assertWorkspacePath(getWorkspaceRoot(), path);
+    await fs.writeFile(safePath, content, 'utf8');
     return `Successfully wrote to ${path}`;
   },
 };
@@ -37,7 +44,8 @@ export const listDirTool: ToolDefinition = {
   }),
   timeoutMs: 5000,
   execute: async ({ path }) => {
-    const files = await fs.readdir(path);
+    const safePath = assertWorkspacePath(getWorkspaceRoot(), path);
+    const files = await fs.readdir(safePath);
     return files.join('\n');
   },
 };

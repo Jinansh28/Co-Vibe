@@ -12,7 +12,8 @@
   "dependencies": {
     "zod": "^3.25.76",
     "@co-vibe/context": "workspace:*",
-    "@co-vibe/protocol": "workspace:*"
+    "@co-vibe/protocol": "workspace:*",
+    "@co-vibe/security": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.6.3"

@@ -1,5 +1,7 @@
 import { z } from 'zod';
 import { ToolDefinition } from './registry.js';
+import { validateCommandPolicy } from '@co-vibe/security';
+
 import { exec } from 'child_process';
 import { promisify } from 'util';
 
@@ -14,6 +16,11 @@ export const runCommandTool: ToolDefinition = {
   }),
   timeoutMs: 60000,
   execute: async ({ command, args }) => {
+    try {
+        validateCommandPolicy([command, ...(args || [])]);
+    } catch (e: any) {
+        return `Command failed: ${e.message}`;
+    }
     const fullCommand = args && args.length > 0 ? `${command} ${args.join(' ')}` : command;
     try {
         const { stdout, stderr } = await execAsync(fullCommand);
@@ -32,9 +39,15 @@ export const runTestsTool: ToolDefinition = {
   }),
   timeoutMs: 60000,
   execute: async ({ testCommand }) => {
-    const cmd = testCommand || 'npm test';
+    const cmdStr = testCommand || 'npm test';
+    const cmdArray = cmdStr.split(' ').filter(Boolean);
     try {
-        const { stdout, stderr } = await execAsync(cmd);
+        validateCommandPolicy(cmdArray);
+    } catch (e: any) {
+        return `Tests failed: ${e.message}`;
+    }
+    try {
+        const { stdout, stderr } = await execAsync(cmdStr);
         return [stdout, stderr].filter(Boolean).join('\n');
     } catch (error: any) {
         return `Tests failed: ${error.message}\n${error.stdout || ''}\n${error.stderr || ''}`;
