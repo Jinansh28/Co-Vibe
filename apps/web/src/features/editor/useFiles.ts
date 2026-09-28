@@ -63,6 +63,19 @@ export function useFiles(workspaceId?: string | null) {
     await fetchTree(); // Refresh tree
   }, [fetchTree]);
 
+  const deleteFileOrFolder = useCallback(async (path: string): Promise<void> => {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (workspaceId) headers['X-Workspace-Id'] = workspaceId;
+
+    const res = await fetch(`${RUNTIME_URL}/api/v1/files?path=${encodeURIComponent(path)}`, {
+      method: 'DELETE',
+      headers,
+    });
+    const data = await res.json();
+    if (!res.ok || !data.ok) throw new Error(data.error || 'Failed to delete file/folder');
+    await fetchTree(); // Refresh tree
+  }, [fetchTree, workspaceId]);
+
   return {
     fileTree,
     isLoading,
@@ -70,6 +83,7 @@ export function useFiles(workspaceId?: string | null) {
     fetchTree,
     getFileContent,
     saveFileContent,
-    createFileOrFolder
+    createFileOrFolder,
+    deleteFileOrFolder
   };
 }

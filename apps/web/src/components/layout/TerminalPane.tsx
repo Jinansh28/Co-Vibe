@@ -4,6 +4,7 @@ export interface TerminalLine {
   stream: 'stdout' | 'stderr' | 'system' | 'exit';
   chunk?: string;
   exitCode?: number;
+  executionId?: string;
 }
 
 interface TerminalPaneProps {
@@ -12,6 +13,7 @@ interface TerminalPaneProps {
   onClear?: () => void;
   outputLines?: TerminalLine[];
   isRunning?: boolean;
+  onSendInput?: (input: string) => void;
 }
 
 export const TerminalPane: React.FC<TerminalPaneProps> = ({
@@ -20,8 +22,10 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({
   onClear,
   outputLines = [],
   isRunning = false,
+  onSendInput,
 }) => {
   const [activeTab, setActiveTab] = useState<'terminal' | 'output' | 'problems' | 'tests'>('terminal');
+  const [inputValue, setInputValue] = useState('');
   const outputEndRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to bottom when new output arrives
@@ -184,6 +188,35 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({
                     : line.chunk}
                 </div>
               ))
+            )}
+            {isRunning && onSendInput && (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (inputValue) {
+                    onSendInput(inputValue);
+                    setInputValue('');
+                  }
+                }}
+                style={{ display: 'flex', marginTop: '4px' }}
+              >
+                <span style={{ color: 'var(--success)', marginRight: '8px' }}>&gt;</span>
+                <input
+                  type="text"
+                  value={inputValue}
+                  onChange={(e) => setInputValue(e.target.value)}
+                  placeholder="Enter input for the running program..."
+                  style={{
+                    flex: 1,
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'var(--text-primary)',
+                    fontFamily: 'inherit',
+                    outline: 'none',
+                  }}
+                  autoComplete="off"
+                />
+              </form>
             )}
             <div ref={outputEndRef} />
           </div>

@@ -1,10 +1,13 @@
 import http from 'node:http';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
+import { spawn, ChildProcess } from 'node:child_process';
+import crypto from 'node:crypto';
 import { PairingVerifySchema } from '@co-vibe/protocol';
 import { TokenManager } from '../auth/tokenManager.js';
 import { assertWorkspacePath } from '@co-vibe/security';
+
+const activeProcesses = new Map<string, ChildProcess>();
 
 function getWorkspaceRoot(req?: http.IncomingMessage) {
   const baseRoot = process.env.WORKSPACE_ROOT || process.cwd();
@@ -19,7 +22,7 @@ function getWorkspaceRoot(req?: http.IncomingMessage) {
 
 export function setCorsHeaders(res: http.ServerResponse): void {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Workspace-Id');
 }
 
@@ -213,6 +216,10 @@ export function createPairingRequestHandler(tokenManager: TokenManager) {
         env: { ...process.env },
       });
 
+      const executionId = crypto.randomUUID();
+      activeProcesses.set(executionId, child);
+      res.write(JSON.stringify({ stream: 'system', executionId, chunk: `[System] Process started. Execution ID: ${executionId}\n` }) + '\n');
+
       const TIMEOUT_MS = 5 * 60 * 1000; // 5 minute hard limit for run commands
       const timer = setTimeout(() => {
         child.kill('SIGKILL');
@@ -228,18 +235,40 @@ export function createPairingRequestHandler(tokenManager: TokenManager) {
       });
 
       child.on('close', (code) => {
+        activeProcesses.delete(executionId);
         clearTimeout(timer);
         res.write(JSON.stringify({ stream: 'exit', exitCode: code ?? -1 }) + '\n');
         res.end();
       });
 
       child.on('error', (err) => {
+        activeProcesses.delete(executionId);
         clearTimeout(timer);
         res.write(JSON.stringify({ stream: 'system', chunk: `[Error] ${err.message}\n` }) + '\n');
         res.write(JSON.stringify({ stream: 'exit', exitCode: -1 }) + '\n');
         res.end();
       });
 
+      return;
+    }
+
+    if (pathname.startsWith('/api/v1/exec/') && pathname.endsWith('/stdin') && method === 'POST') {
+      const parts = pathname.split('/');
+      const executionId = parts[4];
+      const body = await parseJsonBody<any>(req);
+      const process = activeProcesses.get(executionId);
+
+      if (!process || !process.stdin) {
+        res.writeHead(404);
+        res.end(JSON.stringify({ ok: false, error: 'Process not found or stdin closed' }));
+        return;
+      }
+      
+      const input = typeof body?.input === 'string' ? body.input : '';
+      process.stdin.write(input + '\n');
+      
+      res.writeHead(200);
+      res.end(JSON.stringify({ ok: true }));
       return;
     }
 
@@ -342,6 +371,19 @@ export function createPairingRequestHandler(tokenManager: TokenManager) {
             await fs.mkdir(path.dirname(safePath), { recursive: true });
             await fs.writeFile(safePath, '', 'utf8');
           }
+          res.writeHead(200);
+          res.end(JSON.stringify({ ok: true }));
+        } catch (e: any) {
+          res.writeHead(500);
+          res.end(JSON.stringify({ ok: false, error: e.message }));
+        }
+        return;
+      }
+
+      if (pathname === '/api/v1/files' && method === 'DELETE') {
+        try {
+          // Remove the file or directory recursively
+          await fs.rm(safePath, { recursive: true, force: true });
           res.writeHead(200);
           res.end(JSON.stringify({ ok: true }));
         } catch (e: any) {

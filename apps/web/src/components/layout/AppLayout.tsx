@@ -31,6 +31,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
 
   const [outputLines, setOutputLines] = useState<TerminalLine[]>([]);
   const [isRunning, setIsRunning] = useState(false);
+  const [executionId, setExecutionId] = useState<string | null>(null);
 
   /**
    * Stream output from POST /api/v1/exec on the local runtime daemon.
@@ -45,6 +46,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
         setIsTerminalOpen(true);
         setOutputLines([{ stream: 'system', chunk: `$ ${[cmd, ...args].join(' ')}\n` }]);
         setIsRunning(true);
+        setExecutionId(null);
 
         try {
           const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -83,9 +85,13 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
             if (!line.trim()) continue;
             try {
               const parsed = JSON.parse(line) as TerminalLine;
+              if (parsed.executionId) {
+                setExecutionId(parsed.executionId);
+              }
               setOutputLines((prev) => [...prev, parsed]);
               if (parsed.stream === 'exit') {
                 setIsRunning(false);
+                setExecutionId(null);
                 return resolve(parsed.exitCode ?? 0);
               }
             } catch {
@@ -108,11 +114,30 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
       
       // If we exit loop without returning
       setIsRunning(false);
+      setExecutionId(null);
       return resolve(0);
     });
   },
-  [isRunning]
+  [isRunning, workspaceId]
 );
+
+  const handleSendInput = useCallback(async (input: string) => {
+    if (!executionId) return;
+    try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (workspaceId) headers['X-Workspace-Id'] = workspaceId;
+
+      await fetch(`${RUNTIME_URL}/api/v1/exec/${executionId}/stdin`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ input }),
+      });
+      // Optionally echo the input in the terminal output
+      setOutputLines((prev) => [...prev, { stream: 'stdout', chunk: input + '\n' }]);
+    } catch (err) {
+      console.error('Failed to send input', err);
+    }
+  }, [executionId, workspaceId]);
 
   const handleRunProject = useCallback(async () => {
     // Auto-save the active file before running so we execute the latest code
@@ -210,6 +235,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
         onClear={() => setOutputLines([])}
         outputLines={outputLines}
         isRunning={isRunning}
+        onSendInput={handleSendInput}
       />
     </div>
   );
