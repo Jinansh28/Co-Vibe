@@ -102,6 +102,7 @@ describe('EditorPane Integration with MonacoEditor', () => {
       openFiles: ['src/features/auth/LoginPage.tsx'],
       setActiveFile: vi.fn(),
       closeFile: vi.fn(),
+      registerSaveHandler: vi.fn(),
     } as any);
     render(<EditorPane />);
 
@@ -118,6 +119,7 @@ describe('EditorPane Integration with MonacoEditor', () => {
       openFiles: [],
       setActiveFile: vi.fn(),
       closeFile: vi.fn(),
+      registerSaveHandler: vi.fn(),
     } as any);
     render(<EditorPane />);
 
@@ -134,6 +136,7 @@ describe('EditorPane Integration with MonacoEditor', () => {
       openFiles: ['src/App.tsx'],
       setActiveFile: vi.fn(),
       closeFile: handleCloseTab,
+      registerSaveHandler: vi.fn(),
     } as any);
     render(<EditorPane />);
 

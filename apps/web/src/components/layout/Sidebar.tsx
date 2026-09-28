@@ -3,10 +3,12 @@ import { FileTree } from '../../features/editor/FileTree.js';
 
 interface SidebarProps {
   isOpen: boolean;
+  workspaceId?: string | null;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
   isOpen,
+  workspaceId,
 }) => {
   if (!isOpen) return null;
 
@@ -101,7 +103,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       {/* File Tree List */}
-      <FileTree />
+      <FileTree workspaceId={workspaceId} />
     </aside>
   );
 };

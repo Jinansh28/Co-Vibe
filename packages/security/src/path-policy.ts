@@ -1,4 +1,4 @@
-import path from 'node:path/posix';
+import path from 'node:path';
 
 export function assertWorkspacePath(rootPath: string, requestedPath: string): string {
   if (requestedPath.indexOf('\0') !== -1) {

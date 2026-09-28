@@ -3,6 +3,7 @@ import * as Y from 'yjs';
 import { WebsocketProvider } from 'y-websocket';
 import { YjsMonacoAdapter, AwarenessManager } from '@co-vibe/collaboration';
 import type { editor } from 'monaco-editor';
+import { useAuth } from '../auth/useAuth.js';
 
 export function useCollaboration(
   workspaceId: string,
@@ -16,21 +17,23 @@ export function useCollaboration(
   const awarenessManagerRef = useRef<AwarenessManager | null>(null);
 
   const [connected, setConnected] = useState(false);
+  const [synced, setSynced] = useState(false);
+
+  const { session } = useAuth();
+  const token = session?.access_token;
 
   useEffect(() => {
-    if (!workspaceId) return;
+    if (!workspaceId || !token) return;
 
     const doc = new Y.Doc();
     docRef.current = doc;
 
-    // Use current origin for WebSocket connection, assuming the API runs on the same domain or a specific port.
-    // In a real implementation this should use the environment configuration.
     const wsUrl = `ws://localhost:8787`; 
-    // Wait, the API might be on port 8787 or similar. 
+    const tokenQuery = `?token=${token}`;
 
     const provider = new WebsocketProvider(
-      `${wsUrl}/ws/workspace/${workspaceId}`,
-      workspaceId,
+      `${wsUrl}/api/v1/workspaces`,
+      `${workspaceId}/room${tokenQuery}`,
       doc,
       { connect: true }
     );
@@ -38,6 +41,10 @@ export function useCollaboration(
 
     provider.on('status', (event: { status: string }) => {
       setConnected(event.status === 'connected');
+    });
+
+    provider.on('sync', (isSynced: boolean) => {
+      setSynced(isSynced);
     });
 
     const awareness = provider.awareness;
@@ -49,35 +56,64 @@ export function useCollaboration(
       provider.disconnect();
       doc.destroy();
     };
-  }, [workspaceId]);
+  }, [workspaceId, token]);
 
-  // Bind the editor to the active file's Y.Text whenever filePath or editorInstance changes
   useEffect(() => {
-    if (!docRef.current || !filePath || !editorInstance || !awarenessManagerRef.current) {
+    if (!docRef.current || !filePath || !editorInstance || !awarenessManagerRef.current || !synced) {
       return;
     }
 
     const yMap = docRef.current.getMap('files');
     
-    // Yjs Map doesn't create sub-types automatically if they don't exist.
-    // However, for distributed consistency, if multiple clients try to create it, Yjs handles it.
-    if (!yMap.has(filePath)) {
-      yMap.set(filePath, new Y.Text());
-    }
-    
-    const yText = yMap.get(filePath) as Y.Text;
+    const initializeBinding = (yText: Y.Text) => {
+      // If we are re-binding, destroy the old one
+      if (bindingRef.current) {
+        bindingRef.current.destroy();
+      }
+      
+      const binding = new YjsMonacoAdapter(
+        yText,
+        editorInstance,
+        awarenessManagerRef.current!.getAwareness()
+      );
+      binding.bind();
+      bindingRef.current = binding;
+    };
 
-    const binding = new YjsMonacoAdapter(
-      yText,
-      editorInstance,
-      awarenessManagerRef.current.getAwareness()
-    );
-    binding.bind();
-    bindingRef.current = binding;
+    if (!yMap.has(filePath)) {
+      // Create empty first to avoid race conditions with other tabs
+      const yText = new Y.Text();
+      yMap.set(filePath, yText);
+      
+      const headers: Record<string, string> = {};
+      if (workspaceId) headers['X-Workspace-Id'] = workspaceId;
+
+      // Fetch content from local runtime
+      fetch(`http://127.0.0.1:7890/api/v1/files/content?path=${encodeURIComponent(filePath)}`, { headers })
+        .then(res => res.json())
+        .then(data => {
+          if (data.ok && typeof data.content === 'string') {
+            // Check if it's still empty, to prevent overwriting collaborative changes that might have happened during fetch
+            if (yText.length === 0) {
+              yText.insert(0, data.content);
+            }
+          }
+          initializeBinding(yText);
+        })
+        .catch(err => {
+          console.error('Failed to load file content:', err);
+          initializeBinding(yText);
+        });
+    } else {
+      const yText = yMap.get(filePath) as Y.Text;
+      initializeBinding(yText);
+    }
 
     return () => {
-      binding.destroy();
-      bindingRef.current = null;
+      if (bindingRef.current) {
+        bindingRef.current.destroy();
+        bindingRef.current = null;
+      }
     };
   }, [filePath, editorInstance]);
 

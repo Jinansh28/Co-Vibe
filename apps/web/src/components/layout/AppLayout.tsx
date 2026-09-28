@@ -1,9 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { TopBar } from './TopBar.js';
 import { Sidebar } from './Sidebar.js';
 import { EditorPane } from './EditorPane.js';
 import { AgentPanel } from '../../features/agent/AgentPanel.js';
-import { TerminalPane } from './TerminalPane.js';
+import { TerminalPane, type TerminalLine } from './TerminalPane.js';
+import { useEditorStore } from '../../features/editor/useEditorStore.js';
+
+const RUNTIME_URL = 'http://127.0.0.1:7890';
 
 interface AppLayoutProps {
   workspaceId?: string | null;
@@ -23,6 +26,134 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   const [isSidebarOpen, setIsSidebarOpen] = useState(initialSidebarOpen);
   const [isTerminalOpen, setIsTerminalOpen] = useState(initialTerminalOpen);
   const [isAgentOpen, setIsAgentOpen] = useState(initialAgentOpen);
+
+  const { activeFilePath, saveActiveFile } = useEditorStore();
+
+  const [outputLines, setOutputLines] = useState<TerminalLine[]>([]);
+  const [isRunning, setIsRunning] = useState(false);
+
+  /**
+   * Stream output from POST /api/v1/exec on the local runtime daemon.
+   * The daemon returns NDJSON: one JSON object per line.
+   */
+  const runCommand = useCallback(
+    (cmd: string, args: string[], label: string): Promise<number | null> => {
+      return new Promise(async (resolve) => {
+        if (isRunning) return resolve(null);
+
+        // Open terminal drawer and clear previous output
+        setIsTerminalOpen(true);
+        setOutputLines([{ stream: 'system', chunk: `$ ${[cmd, ...args].join(' ')}\n` }]);
+        setIsRunning(true);
+
+        try {
+          const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+          if (workspaceId) headers['X-Workspace-Id'] = workspaceId;
+
+          const res = await fetch(`${RUNTIME_URL}/api/v1/exec`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({ cmd, args, cwd: '.' }),
+          });
+
+          if (!res.ok || !res.body) {
+            const text = await res.text().catch(() => res.statusText);
+            setOutputLines((prev) => [
+              ...prev,
+              { stream: 'system', chunk: `[Error] Runtime returned ${res.status}: ${text}\n` },
+            ]);
+            setIsRunning(false);
+            return resolve(-1);
+          }
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          // NDJSON: process complete lines
+          const lines = buffer.split('\n');
+          buffer = lines.pop() ?? '';
+
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            try {
+              const parsed = JSON.parse(line) as TerminalLine;
+              setOutputLines((prev) => [...prev, parsed]);
+              if (parsed.stream === 'exit') {
+                setIsRunning(false);
+                return resolve(parsed.exitCode ?? 0);
+              }
+            } catch {
+              // non-JSON chunk — display as-is
+              setOutputLines((prev) => [...prev, { stream: 'stdout', chunk: line + '\n' }]);
+            }
+          }
+        }
+      } catch (err: any) {
+        setOutputLines((prev) => [
+          ...prev,
+          {
+            stream: 'system',
+            chunk: `[Error] Could not reach local runtime daemon at ${RUNTIME_URL}.\nMake sure "pnpm --filter runtime dev" is running.\nDetails: ${err.message}\n`,
+          },
+        ]);
+        setIsRunning(false);
+        return resolve(-1);
+      }
+      
+      // If we exit loop without returning
+      setIsRunning(false);
+      return resolve(0);
+    });
+  },
+  [isRunning]
+);
+
+  const handleRunProject = useCallback(async () => {
+    // Auto-save the active file before running so we execute the latest code
+    if (saveActiveFile) {
+      await saveActiveFile();
+    }
+
+    if (activeFilePath) {
+      if (activeFilePath.endsWith('.ts') || activeFilePath.endsWith('.tsx')) {
+        runCommand('npx', ['tsx', activeFilePath], `Run ${activeFilePath}`);
+      } else if (activeFilePath.endsWith('.js') || activeFilePath.endsWith('.jsx')) {
+        runCommand('node', [activeFilePath], `Run ${activeFilePath}`);
+      } else if (activeFilePath.endsWith('.py')) {
+        runCommand('python', [activeFilePath], `Run ${activeFilePath}`);
+      } else if (activeFilePath.endsWith('.sh')) {
+        runCommand('bash', [activeFilePath], `Run ${activeFilePath}`);
+      } else if (activeFilePath.endsWith('.go')) {
+        runCommand('go', ['run', activeFilePath], `Run ${activeFilePath}`);
+      } else if (activeFilePath.endsWith('.rs')) {
+        runCommand('cargo', ['run'], `Run Cargo project`);
+      } else if (activeFilePath.endsWith('.c')) {
+        const exitCode = await runCommand('gcc', [activeFilePath, '-o', 'main.exe'], `Compile ${activeFilePath}`);
+        if (exitCode === 0) {
+          runCommand('./main.exe', [], `Run main.exe`);
+        }
+      } else if (activeFilePath.endsWith('.cpp')) {
+        const exitCode = await runCommand('g++', [activeFilePath, '-o', 'main.exe'], `Compile ${activeFilePath}`);
+        if (exitCode === 0) {
+          runCommand('./main.exe', [], `Run main.exe`);
+        }
+      } else {
+        runCommand('npm', ['run', 'dev'], 'Run Project');
+      }
+    } else {
+      runCommand('npm', ['run', 'dev'], 'Run Project');
+    }
+  }, [runCommand, activeFilePath, saveActiveFile]);
+
+  const handleRunTests = useCallback(() => {
+    runCommand('npm', ['test'], 'Run Tests');
+  }, [runCommand]);
 
   return (
     <div
@@ -45,6 +176,8 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
         isAgentOpen={isAgentOpen}
         onToggleAgent={() => setIsAgentOpen((prev) => !prev)}
         onBackToDashboard={onBackToDashboard}
+        onRunProject={handleRunProject}
+        onRunTests={handleRunTests}
       />
 
       {/* Main Content Area (Sidebar + Editor + Agent Panel) */}
@@ -58,7 +191,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
         }}
       >
         {/* Left Explorer Sidebar */}
-        <Sidebar isOpen={isSidebarOpen} />
+        <Sidebar isOpen={isSidebarOpen} workspaceId={workspaceId} />
 
         {/* Central Editor Surface */}
         <EditorPane workspaceId={workspaceId} />
@@ -74,6 +207,9 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
       <TerminalPane
         isOpen={isTerminalOpen}
         onClose={() => setIsTerminalOpen(false)}
+        onClear={() => setOutputLines([])}
+        outputLines={outputLines}
+        isRunning={isRunning}
       />
     </div>
   );

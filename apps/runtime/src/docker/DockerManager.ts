@@ -59,6 +59,7 @@ export class DockerManager {
       Env: envArray,
       HostConfig: {
         Binds: binds,
+        Init: true,
         NanoCpus: 2 * 1e9, // 2 CPUs
         Memory: 1024 * 1024 * 1024, // 1GB
         MemorySwap: 1024 * 1024 * 1024, // 1GB (no extra swap)

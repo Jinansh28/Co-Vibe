@@ -13,7 +13,7 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
   onOpenWorkspace,
   initialProjects,
 }) => {
-  const { user, signOut } = useAuth();
+  const { user, session, signOut } = useAuth();
   const { showNotification } = useNotification();
 
   const [projects, setProjects] = useState<ProjectCardData[]>(initialProjects || []);
@@ -31,13 +31,23 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
         const res = await fetch('/api/v1/projects', {
           headers: {
             'Content-Type': 'application/json',
+            ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
           },
         });
 
         if (res.ok) {
           const data = await res.json();
           if (isMounted) {
-            setProjects(data.projects || []);
+            const mappedProjects = (data.projects || []).map((p: any) => ({
+              id: p.id,
+              name: p.name,
+              description: p.description,
+              createdAt: p.createdAt,
+              role: p.role || 'owner',
+              workspaceCount: p.workspaceCount || 1,
+              activeWorkspaceId: p.activeWorkspaceId || `ws-${p.id}`,
+            }));
+            setProjects(mappedProjects);
           }
         } else {
           // If API fails or backend offline, keep empty list or default
@@ -60,7 +70,10 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
     try {
       const res = await fetch('/api/v1/projects', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+        },
         body: JSON.stringify({
           name: data.name,
           description: data.description,

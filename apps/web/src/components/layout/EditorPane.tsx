@@ -7,6 +7,7 @@ import { useEditorStore } from '../../features/editor/useEditorStore.js';
 import { TabManager } from '../../features/editor/TabManager.js';
 import { useAuth } from '../../features/auth/useAuth.js';
 import { useCollaboration } from '../../features/collaboration/useCollaboration.js';
+import { useFiles } from '../../features/editor/useFiles.js';
 
 function stringToColor(str: string) {
   let hash = 0;
@@ -47,7 +48,7 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
   onMount,
   readOnly = false,
 }) => {
-  const { activeFilePath } = useEditorStore();
+  const { activeFilePath, registerSaveHandler } = useEditorStore();
   const fileName = activeFilePath ? activeFilePath.split('/').pop() || activeFilePath : '';
   const language = activeFilePath ? getLanguageFromPath(activeFilePath) : 'plaintext';
 
@@ -72,12 +73,36 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
     userState
   );
 
+  const { saveFileContent } = useFiles(workspaceId);
+
   const handleMount = useCallback((editor: editor.IStandaloneCodeEditor, monaco: Monaco) => {
     setEditorInstance(editor);
+
+    const doSave = async () => {
+      if (activeFilePath) {
+        try {
+          await saveFileContent(activeFilePath, editor.getValue());
+        } catch (err) {
+          console.error('Failed to save file:', err);
+        }
+      }
+    };
+
+    // Add Save Command (Ctrl+S / Cmd+S)
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, doSave);
+
+    // Register with global store so AppLayout can trigger auto-save before run
+    registerSaveHandler(doSave);
+
     if (onMount) {
       onMount(editor, monaco);
     }
-  }, [onMount]);
+  }, [onMount, activeFilePath, saveFileContent, registerSaveHandler]);
+
+  // Clean up global save handler on unmount
+  React.useEffect(() => {
+    return () => registerSaveHandler(null);
+  }, [registerSaveHandler]);
 
   return (
     <main

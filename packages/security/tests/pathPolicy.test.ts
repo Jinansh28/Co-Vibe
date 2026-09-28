@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import path from 'node:path';
 import { assertWorkspacePath } from '../src/path-policy.js';
 
 describe('assertWorkspacePath', () => {
@@ -7,18 +8,22 @@ describe('assertWorkspacePath', () => {
   });
 
   it('resolves valid relative paths correctly', () => {
-    const resolved = assertWorkspacePath('/workspace/root', 'src/app.ts');
-    expect(resolved).toBe('/workspace/root/src/app.ts');
+    const root = path.resolve('/workspace/root');
+    const resolved = assertWorkspacePath(root, 'src/app.ts');
+    expect(resolved).toBe(path.join(root, 'src', 'app.ts'));
   });
 
   it('resolves valid absolute paths correctly if they are within root', () => {
-    const resolved = assertWorkspacePath('/workspace/root', '/workspace/root/src/app.ts');
-    expect(resolved).toBe('/workspace/root/src/app.ts');
+    const root = path.resolve('/workspace/root');
+    const absPath = path.join(root, 'src', 'app.ts');
+    const resolved = assertWorkspacePath(root, absPath);
+    expect(resolved).toBe(absPath);
   });
 
   it('allows safe path traversal (..) that remains inside the root', () => {
-    const resolved = assertWorkspacePath('/workspace/root', 'src/../lib/app.ts');
-    expect(resolved).toBe('/workspace/root/lib/app.ts');
+    const root = path.resolve('/workspace/root');
+    const resolved = assertWorkspacePath(root, 'src/../lib/app.ts');
+    expect(resolved).toBe(path.join(root, 'lib', 'app.ts'));
   });
 
   it('throws on null bytes', () => {
@@ -26,7 +31,8 @@ describe('assertWorkspacePath', () => {
   });
 
   it('allows the root path itself', () => {
-    const resolved = assertWorkspacePath('/workspace/root', '.');
-    expect(resolved).toBe('/workspace/root');
+    const root = path.resolve('/workspace/root');
+    const resolved = assertWorkspacePath(root, '.');
+    expect(resolved).toBe(root);
   });
 });

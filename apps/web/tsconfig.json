@@ -5,9 +5,8 @@
     "module": "ESNext",
     "target": "ES2022",
     "jsx": "react-jsx",
-    "rootDir": "./src",
     "outDir": "./dist",
     "noEmit": true
   },
-  "include": ["src/**/*"]
+  "include": ["src/**/*", "vitest.config.ts", "vite.config.ts"]
 }

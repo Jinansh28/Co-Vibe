@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useEditorStore } from './useEditorStore.js';
+import { useFiles } from './useFiles.js';
 
 export interface FileItem {
   id: string;
@@ -8,37 +9,25 @@ export interface FileItem {
   children?: FileItem[];
 }
 
-const mockFiles: FileItem[] = [
-  {
-    id: 'src',
-    name: 'src',
-    type: 'folder',
-    children: [
-      { id: 'src/App.tsx', name: 'App.tsx', type: 'file' },
-      { id: 'src/main.tsx', name: 'main.tsx', type: 'file' },
-      { id: 'src/index.css', name: 'index.css', type: 'file' },
-    ],
-  },
-  {
-    id: 'packages',
-    name: 'packages',
-    type: 'folder',
-    children: [
-      { id: 'packages/protocol', name: 'protocol', type: 'folder', children: [{ id: 'packages/protocol/envelope.ts', name: 'envelope.ts', type: 'file' }] },
-      { id: 'packages/shared', name: 'shared', type: 'folder', children: [{ id: 'packages/shared/types.ts', name: 'types.ts', type: 'file' }] },
-    ],
-  },
-  { id: 'package.json', name: 'package.json', type: 'file' },
-  { id: 'tsconfig.json', name: 'tsconfig.json', type: 'file' },
-  { id: 'README.md', name: 'README.md', type: 'file' },
-];
+interface FileTreeProps {
+  workspaceId?: string | null;
+}
 
-export const FileTree: React.FC = () => {
+export const FileTree: React.FC<FileTreeProps> = ({ workspaceId }) => {
   const { activeFilePath, openFile } = useEditorStore();
-  const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({
-    src: true,
-    packages: false,
-  });
+  const { fileTree, fetchTree, createFileOrFolder } = useFiles(workspaceId);
+  const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    fetchTree();
+  }, [fetchTree]);
+
+  const handleCreate = async (type: 'file' | 'folder') => {
+    const name = prompt(`Enter ${type} name (include path if needed):`);
+    if (name) {
+      await createFileOrFolder(name, type);
+    }
+  };
 
   const toggleFolder = (folderId: string) => {
     setExpandedFolders((prev) => ({
@@ -139,8 +128,35 @@ export const FileTree: React.FC = () => {
   };
 
   return (
-    <div style={{ paddingTop: '4px', overflowY: 'auto', flex: 1 }}>
-      {mockFiles.map((item) => renderItem(item))}
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      <div style={{ display: 'flex', gap: '8px', padding: '8px 12px', borderBottom: '1px solid var(--border-subtle)' }}>
+        <button
+          onClick={() => handleCreate('file')}
+          style={{ fontSize: '11px', background: 'var(--bg-hover)', border: '1px solid var(--border-subtle)', borderRadius: '4px', padding: '4px 8px', cursor: 'pointer', color: 'var(--text-primary)' }}
+        >
+          + File
+        </button>
+        <button
+          onClick={() => handleCreate('folder')}
+          style={{ fontSize: '11px', background: 'var(--bg-hover)', border: '1px solid var(--border-subtle)', borderRadius: '4px', padding: '4px 8px', cursor: 'pointer', color: 'var(--text-primary)' }}
+        >
+          + Folder
+        </button>
+        <button
+          onClick={() => fetchTree()}
+          style={{ fontSize: '11px', background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', marginLeft: 'auto' }}
+          title="Refresh"
+        >
+          ↻
+        </button>
+      </div>
+      <div style={{ paddingTop: '4px', overflowY: 'auto', flex: 1 }}>
+        {fileTree.length === 0 ? (
+          <div style={{ padding: '12px', color: 'var(--text-muted)', fontSize: '12px' }}>Loading or empty...</div>
+        ) : (
+          fileTree.map((item) => renderItem(item))
+        )}
+      </div>
     </div>
   );
 };

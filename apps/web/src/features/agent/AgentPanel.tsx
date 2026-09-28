@@ -10,6 +10,21 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ isOpen, onClose }) => {
   const [prompt, setPrompt] = useState('');
   const [timelineEvents, setTimelineEvents] = useState<AgentTaskProgressPayload[]>([]);
 
+  const handleSend = () => {
+    if (!prompt.trim()) return;
+    
+    // Add a temporary optimistic event to the timeline
+    setTimelineEvents(prev => [...prev, {
+      type: 'agent.progress',
+      taskId: 'temp',
+      step: 'user_input',
+      details: prompt,
+      status: 'completed'
+    } as any]);
+    
+    setPrompt('');
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -145,6 +160,12 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ isOpen, onClose }) => {
           <textarea
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleSend();
+              }
+            }}
             placeholder="Ask agent to generate, modify, or run tests..."
             rows={3}
             style={{
@@ -161,6 +182,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ isOpen, onClose }) => {
             }}
           />
           <button
+            onClick={handleSend}
             title="Send prompt to agent"
             aria-label="Send prompt"
             disabled={!prompt.trim()}

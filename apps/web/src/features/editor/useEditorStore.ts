@@ -6,6 +6,8 @@ interface EditorState {
   openFile: (filePath: string) => void;
   closeFile: (filePath: string) => void;
   setActiveFile: (filePath: string) => void;
+  saveActiveFile: (() => Promise<void>) | null;
+  registerSaveHandler: (handler: (() => Promise<void>) | null) => void;
 }
 
 export const useEditorStore = create<EditorState>((set) => ({
@@ -31,4 +33,6 @@ export const useEditorStore = create<EditorState>((set) => ({
     };
   }),
   setActiveFile: (filePath) => set({ activeFilePath: filePath }),
+  saveActiveFile: null,
+  registerSaveHandler: (handler) => set({ saveActiveFile: handler }),
 }));

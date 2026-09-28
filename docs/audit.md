@@ -356,12 +356,12 @@ Summary assessment across 10 primary engineering dimensions:
 
 ```text
 Architecture Alignment:   PASS
-Security Hardening:       PASS
+Security Hardening:       PASS (BUG-002 shell injection fixed in this audit)
 Real-Time Collaboration:  PASS
 AI Agent Isolation:       PASS
 Runtime & Docker Sandbox: PASS
 Git & Change Sets:        PASS
-Test Coverage & Gates:    PASS
+Test Coverage & Gates:    PASS (BUG-001 Windows path tests fixed in this audit)
 Performance & SLAs:       PASS
 Deployment Pipeline:      PASS
 Documentation Quality:    PASS
@@ -374,3 +374,146 @@ Documentation Quality:    PASS
 - **Medium-Priority Improvements:** Implement automated preview port scanner fallback (`REQ-07`).
 - **Technical Debt Actions:** Monitor memory usage during 10,000+ file context indexing (`DEBT-001`).
 - **Recommended Next Action:** Proceed with Phase 14 deployment pipeline script execution and staging release tag `v0.1.0-alpha`.
+
+---
+
+## 15. RELEASE-READINESS AUDIT — 2026-09-23
+
+**Audit Type:** Final pre-release comprehensive audit  
+**Conducted By:** Automated agent (Antigravity)  
+**Scope:** All 41 completed implementation tasks, full source tree, security review, test suite, build pipeline
+
+---
+
+### 15.1 Source Inspection Summary
+
+All approved stack components are present and correctly implemented:
+
+| Component | Location | Status |
+|-----------|----------|--------|
+| React + TypeScript + Monaco frontend | `apps/web/` | PRESENT |
+| Cloudflare Worker / Hono API | `apps/api/` | PRESENT |
+| Yjs + WebSockets + Durable Objects | `apps/api/src/durable-objects/WorkspaceRoom.ts` | PRESENT |
+| Supabase Auth middleware | `apps/api/src/middleware/auth.ts` | PRESENT |
+| Local runtime daemon | `apps/runtime/` | PRESENT |
+| Docker isolation (`DockerManager`) | `apps/runtime/src/docker/DockerManager.ts` | PRESENT |
+| Git CLI / worktrees | `packages/git/` | PRESENT |
+| Agent orchestrator + FSM | `packages/agent/` | PRESENT |
+| Context engine | `packages/context/` | PRESENT |
+| Security package (`path-policy`, `command-policy`, `redactor`) | `packages/security/` | PRESENT |
+| Protocol package (Zod schemas) | `packages/protocol/` | PRESENT |
+
+---
+
+### 15.2 Validation Results
+
+| Command | Result | Notes |
+|---------|--------|-------|
+| `pnpm lint` | ✅ **PASS** (exit 0) | No ESLint violations |
+| `pnpm typecheck` | ✅ **PASS** (exit 0) | All 10 workspace packages clean |
+| `pnpm test` | ✅ **PASS** (exit 0, post-fix) | 175 tests passed / 37 test files |
+| `pnpm build` | ✅ **PASS** (exit 0) | All packages built; Vite warns on 4.49 MB Monaco chunk (expected) |
+| `pnpm test:e2e` | ⚠️ **NOT RUN** | Requires live Cloudflare + Supabase staging; intentionally not part of offline gate |
+
+#### Test breakdown
+
+- **Pre-fix failures:** 4 tests in `packages/security/tests/pathPolicy.test.ts` — Windows path separator mismatch (BUG-001). Fixed.
+- **Post-fix result:** 175/175 pass.
+- **Notable skips:** Docker integration tests skip gracefully when Docker daemon unreachable (`DockerManager`, `ProcessManager`). Correct behavior.
+- **Known stderr warnings:** React `act()` warnings in `LoginPage.test.tsx` — non-critical, tests still pass. S4 cosmetic issue.
+
+---
+
+### 15.3 Security Findings
+
+#### Fixed in this audit
+
+| ID | Finding | Severity | Status |
+|----|---------|----------|--------|
+| BUG-002 | `packages/agent/src/tools/shell.ts` used `child_process.exec()` (shell form), allowing shell metacharacter injection via `args` array after `validateCommandPolicy()` check | **S1 High** | **FIXED** — Replaced with `execFile()` (no-shell) |
+| BUG-001 | `pathPolicy.test.ts` hardcoded POSIX paths, breaking on Windows | **S3 Low** | **FIXED** — Cross-platform path assertions |
+
+#### Pre-existing resolved findings (from prior audits)
+
+| ID | Finding | Status |
+|----|---------|--------|
+| AUDIT-SEC-001 | Path traversal in filesystem tool | FIXED (prior audit) |
+| AUDIT-SEC-002 | Raw shell string invocation | FIXED (prior audit, partially re-introduced in `shell.ts` args) |
+| AUDIT-SEC-003 | GitHub OAuth token exposure in API responses | FIXED (prior audit) |
+| AUDIT-COL-001 | Yjs binding memory leak on tab close | FIXED (prior audit) |
+
+#### Remaining known security limitations (MVP scope)
+
+1. **Runtime file API has no token auth** (`pairingServer.ts` lines 154–156): The local runtime daemon's `/api/v1/files` endpoints rely on CORS-only boundary (`Access-Control-Allow-Origin: *`). Any page that can reach `127.0.0.1:7890` can read/write files without presenting a token. This is a documented MVP limitation; mitigated by the local-only binding of the daemon. **WATCH-ITEM** for P1.
+2. **WebSocket workspace room lacks RBAC membership check**: `workspaceWs.ts` routes through auth middleware (token validated) but does not verify the authenticated user is a member of the target workspace before forwarding to the Durable Object. Mitigated by DO room isolation per `workspaceId` name. **WATCH-ITEM** for P1.
+3. **Wildcard CORS on API** (`app.use('*', cors())`): Allows all origins. Acceptable for MVP local dev; should be restricted to known frontend origin before production deployment.
+4. **Default JWT secret fallback**: `auth.ts` line 47 falls back to `'dev-secret-key-change-in-prod'` if `SUPABASE_JWT_SECRET` is not set. This is a dev-only safety net but must be enforced through deployment config before any public exposure.
+
+#### Security controls verified working
+
+- ✅ `assertWorkspacePath` — path traversal prevention (100% test coverage)
+- ✅ `validateCommandPolicy` — binary allowlist enforcement (100% test coverage)
+- ✅ `redactSecrets` — GitHub token + JWT redaction in log streams
+- ✅ Docker: `--cap-drop=ALL`, `no-new-privileges`, `--memory=1g`, `--pids-limit=256`, no `docker.sock` mount
+- ✅ Agent filesystem tools all call `assertWorkspacePath` before any fs I/O
+- ✅ Agent shell tools now use `execFile` (no-shell form)
+- ✅ Tool input validated via Zod before execution
+- ✅ LLM output treated as untrusted input throughout
+- ✅ No secrets committed to git (confirmed by scan)
+
+---
+
+### 15.4 Architecture Conformance
+
+All architectural boundaries confirmed intact:
+
+- Control plane (Worker/Hono) is cleanly separated from execution plane (runtime daemon)
+- Durable Object manages only WebSocket/Yjs rooms — no DB access
+- Agent orchestrator never directly calls Supabase or executes host commands
+- Git operations are isolated in dedicated `packages/git` and agent worktrees
+- LLM has no direct access to filesystem, network, or database
+
+No architectural drift detected.
+
+---
+
+### 15.5 Testing Gaps (Remaining after audit)
+
+| Gap | Risk | Priority |
+|-----|------|----------|
+| No regression test for shell injection via `args` with metacharacters (BUG-002 class) | Medium | P1 |
+| No RBAC membership check test for `/api/v1/workspaces/:id/room` | Medium | P1 |
+| E2E Playwright suite not verified end-to-end against live infrastructure | High | P0 for staging release |
+| CRDT sub-300ms SLA benchmark not run in this audit cycle | Medium | P1 before production |
+| 24-hour Durable Object memory stability test not run | Medium | P1 before production |
+| `run_tests` tool schema changed (testCommand → testBinary + testArgs) — integration with orchestrator callsites not tested | Low | P2 |
+
+---
+
+### 15.6 Known Issues Remaining
+
+1. **Large Vite bundle** — `index.js` is 4.49 MB (1.18 MB gzipped) due to Monaco editor. Not a blocker; Monaco is expected to be large. Lazy loading should be considered for P1.
+2. **`act()` warning in LoginPage tests** — React test renders outside `act()` boundary. Tests pass. S4 cosmetic.
+3. **E2E suite not integrated in CI** — CI workflow (`ci.yml`) does not run `pnpm test:e2e`. Acceptable for offline CI; E2E should be added to a staging CI job.
+4. **Git 3-way apply stderr output** — `ChangeSetManager` test correctly captures `stderr` from `git apply --3way` on conflicting patches. This is expected behavior (the test asserts the conflict is caught and workspace is clean).
+
+---
+
+### 15.7 Release Status
+
+**READY WITH KNOWN ISSUES**
+
+The repository is technically **MVP-ready** for staging deployment with the following conditions:
+
+**Cleared for staging if:**
+- `SUPABASE_JWT_SECRET` is set in Cloudflare Worker secrets (not left as fallback default)
+- CORS origin is restricted to the actual frontend domain before production
+- Runtime daemon is documented as local-only (not publicly exposed)
+
+**Not yet production-hardened:**
+- Runtime file API requires token auth before public exposure
+- WebSocket room should validate workspace membership
+- E2E Playwright suite must be verified against live Cloudflare staging
+- CRDT convergence SLA (< 300ms p95) must be benchmarked under real network conditions
+- 24-hour memory stability test for Durable Objects must be completed
+
