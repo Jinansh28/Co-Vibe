@@ -32,13 +32,14 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   const [outputLines, setOutputLines] = useState<TerminalLine[]>([]);
   const [isRunning, setIsRunning] = useState(false);
   const [executionId, setExecutionId] = useState<string | null>(null);
+  const [runType, setRunType] = useState<'terminal' | 'tests'>('terminal');
 
   /**
    * Stream output from POST /api/v1/exec on the local runtime daemon.
    * The daemon returns NDJSON: one JSON object per line.
    */
   const runCommand = useCallback(
-    (cmd: string, args: string[], label: string): Promise<number | null> => {
+    (cmd: string, args: string[], label: string, type: 'terminal' | 'tests' = 'terminal'): Promise<number | null> => {
       return new Promise(async (resolve) => {
         if (isRunning) return resolve(null);
 
@@ -47,6 +48,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
         setOutputLines([{ stream: 'system', chunk: `$ ${[cmd, ...args].join(' ')}\n` }]);
         setIsRunning(true);
         setExecutionId(null);
+        setRunType(type);
 
         try {
           const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -177,7 +179,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   }, [runCommand, activeFilePath, saveActiveFile]);
 
   const handleRunTests = useCallback(() => {
-    runCommand('npm', ['test'], 'Run Tests');
+    runCommand('npm', ['test'], 'Run Tests', 'tests');
   }, [runCommand]);
 
   return (
@@ -236,6 +238,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
         outputLines={outputLines}
         isRunning={isRunning}
         onSendInput={handleSendInput}
+        runType={runType}
       />
     </div>
   );

@@ -7,6 +7,12 @@ export interface TerminalLine {
   executionId?: string;
 }
 
+const stripAnsi = (str: string) => {
+  // Regex to match ANSI escape codes
+  // eslint-disable-next-line no-control-regex
+  return str.replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, '');
+};
+
 interface TerminalPaneProps {
   isOpen: boolean;
   onClose?: () => void;
@@ -14,6 +20,7 @@ interface TerminalPaneProps {
   outputLines?: TerminalLine[];
   isRunning?: boolean;
   onSendInput?: (input: string) => void;
+  runType?: 'terminal' | 'tests';
 }
 
 export const TerminalPane: React.FC<TerminalPaneProps> = ({
@@ -23,6 +30,7 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({
   outputLines = [],
   isRunning = false,
   onSendInput,
+  runType = 'terminal',
 }) => {
   const [activeTab, setActiveTab] = useState<'terminal' | 'output' | 'problems' | 'tests'>('terminal');
   const [inputValue, setInputValue] = useState('');
@@ -30,17 +38,17 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({
 
   // Auto-scroll to bottom when new output arrives
   useEffect(() => {
-    if (activeTab === 'terminal' && outputEndRef.current) {
+    if ((activeTab === 'terminal' || activeTab === 'tests') && outputEndRef.current) {
       outputEndRef.current.scrollIntoView?.({ behavior: 'smooth' });
     }
   }, [outputLines, activeTab]);
 
-  // Switch to terminal tab when a run starts
+  // Switch to correct tab when a run starts
   useEffect(() => {
     if (isRunning) {
-      setActiveTab('terminal');
+      setActiveTab(runType || 'terminal');
     }
-  }, [isRunning]);
+  }, [isRunning, runType]);
 
   if (!isOpen) return null;
 
@@ -166,64 +174,77 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({
           userSelect: 'text',
         }}
       >
-        {activeTab === 'terminal' && (
-          <div>
-            {outputLines.length === 0 ? (
-              <>
-                <div style={{ color: 'var(--text-muted)' }}>$ pnpm --filter web dev</div>
-                <div style={{ color: 'var(--accent)' }}>VITE v5.4.10 ready in 240 ms</div>
-                <div style={{ color: 'var(--text-secondary)' }}>
-                  ➜ Local: <span style={{ color: 'var(--info)' }}>http://localhost:5173/</span>
-                </div>
-                <div style={{ color: 'var(--success)' }}>✓ Local daemon connected on ws://127.0.0.1:7890/ws/runtime</div>
-              </>
-            ) : (
-              outputLines.map((line, i) => (
-                <div
-                  key={i}
-                  style={{ color: getLineColor(line.stream), whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}
-                >
-                  {line.stream === 'exit'
-                    ? `[Process exited with code ${line.exitCode ?? -1}]`
-                    : line.chunk}
-                </div>
-              ))
-            )}
-            {isRunning && onSendInput && (
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  if (inputValue) {
-                    onSendInput(inputValue);
-                    setInputValue('');
-                  }
-                }}
-                style={{ display: 'flex', marginTop: '4px' }}
-              >
-                <span style={{ color: 'var(--success)', marginRight: '8px' }}>&gt;</span>
-                <input
-                  type="text"
-                  value={inputValue}
-                  onChange={(e) => setInputValue(e.target.value)}
-                  placeholder="Enter input for the running program..."
-                  style={{
-                    flex: 1,
-                    background: 'transparent',
-                    border: 'none',
-                    color: 'var(--text-primary)',
-                    fontFamily: 'inherit',
-                    outline: 'none',
+        {(() => {
+          const renderOutput = () => (
+            <div>
+              {outputLines.length === 0 ? (
+                runType === 'tests' ? (
+                  <div style={{ color: 'var(--text-muted)' }}>Running tests...</div>
+                ) : (
+                  <>
+                    <div style={{ color: 'var(--text-muted)' }}>$ pnpm --filter web dev</div>
+                    <div style={{ color: 'var(--accent)' }}>VITE v5.4.10 ready in 240 ms</div>
+                    <div style={{ color: 'var(--text-secondary)' }}>
+                      ➜ Local: <span style={{ color: 'var(--info)' }}>http://localhost:5173/</span>
+                    </div>
+                    <div style={{ color: 'var(--success)' }}>✓ Local daemon connected on ws://127.0.0.1:7890/ws/runtime</div>
+                  </>
+                )
+              ) : (
+                outputLines.map((line, i) => (
+                  <div
+                    key={i}
+                    style={{ color: getLineColor(line.stream), whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}
+                  >
+                    {line.stream === 'exit'
+                      ? `[Process exited with code ${line.exitCode ?? -1}]`
+                      : stripAnsi(line.chunk || '')}
+                  </div>
+                ))
+              )}
+              {isRunning && onSendInput && runType === 'terminal' && (
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    if (inputValue) {
+                      onSendInput(inputValue);
+                      setInputValue('');
+                    }
                   }}
-                  autoComplete="off"
-                />
-              </form>
-            )}
-            <div ref={outputEndRef} />
-          </div>
-        )}
-        {activeTab === 'output' && <div style={{ color: 'var(--text-muted)' }}>[System Log] Container sandbox ready.</div>}
-        {activeTab === 'problems' && <div style={{ color: 'var(--success)' }}>No diagnostics or errors detected.</div>}
-        {activeTab === 'tests' && <div style={{ color: 'var(--success)' }}>✓ 6 test suites passed (21 tests)</div>}
+                  style={{ display: 'flex', marginTop: '4px' }}
+                >
+                  <span style={{ color: 'var(--success)', marginRight: '8px' }}>&gt;</span>
+                  <input
+                    type="text"
+                    value={inputValue}
+                    onChange={(e) => setInputValue(e.target.value)}
+                    placeholder="Enter input for the running program..."
+                    style={{
+                      flex: 1,
+                      background: 'transparent',
+                      border: 'none',
+                      color: 'var(--text-primary)',
+                      fontFamily: 'inherit',
+                      outline: 'none',
+                    }}
+                    autoComplete="off"
+                  />
+                </form>
+              )}
+              <div ref={outputEndRef} />
+            </div>
+          );
+
+          if (activeTab === 'terminal') {
+            return runType === 'terminal' ? renderOutput() : null;
+          }
+          if (activeTab === 'tests') {
+            return runType === 'tests' ? renderOutput() : <div style={{ color: 'var(--success)' }}>✓ 6 test suites passed (21 tests)</div>;
+          }
+          if (activeTab === 'output') return <div style={{ color: 'var(--text-muted)' }}>[System Log] Container sandbox ready.</div>;
+          if (activeTab === 'problems') return <div style={{ color: 'var(--success)' }}>No diagnostics or errors detected.</div>;
+          return null;
+        })()}
       </div>
     </section>
   );

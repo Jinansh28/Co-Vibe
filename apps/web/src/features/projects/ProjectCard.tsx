@@ -13,9 +13,10 @@ export interface ProjectCardData {
 interface ProjectCardProps {
   project: ProjectCardData;
   onOpenWorkspace: (projectId: string, workspaceId?: string) => void;
+  onInvite?: (projectId: string) => void;
 }
 
-export const ProjectCard: React.FC<ProjectCardProps> = ({ project, onOpenWorkspace }) => {
+export const ProjectCard: React.FC<ProjectCardProps> = ({ project, onOpenWorkspace, onInvite }) => {
   const formattedDate = project.createdAt
     ? new Date(project.createdAt).toLocaleDateString(undefined, {
         year: 'numeric',
@@ -129,7 +130,46 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({ project, onOpenWorkspa
           )}
         </div>
 
-        <button
+        <div style={{ display: 'flex', gap: '8px' }}>
+          {project.role === 'owner' && onInvite && (
+            <button
+              type="button"
+              onClick={() => onInvite(project.id)}
+              aria-label={`Invite to ${project.name}`}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '8px 12px',
+                borderRadius: '8px',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
+                backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                color: '#cbd5e1',
+                fontSize: '13px',
+                fontWeight: 600,
+                cursor: 'pointer',
+                transition: 'background-color 0.2s ease',
+              }}
+            >
+              Invite
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                <circle cx="8.5" cy="7" r="4" />
+                <line x1="20" y1="8" x2="20" y2="14" />
+                <line x1="23" y1="11" x2="17" y2="11" />
+              </svg>
+            </button>
+          )}
+          <button
           type="button"
           onClick={() => onOpenWorkspace(project.id, project.activeWorkspaceId)}
           aria-label={`Open workspace for ${project.name}`}
@@ -164,6 +204,7 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({ project, onOpenWorkspa
             <path d="M12 5l7 7-7 7" />
           </svg>
         </button>
+        </div>
       </div>
     </div>
   );

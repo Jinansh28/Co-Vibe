@@ -3,6 +3,7 @@ import { useAuth } from '../auth/useAuth.js';
 import { useNotification } from '../../context/NotificationContext.js';
 import { ProjectCard, ProjectCardData } from './ProjectCard.js';
 import { CreateProjectModal } from './CreateProjectModal.js';
+import { InviteCollaboratorModal } from './InviteCollaboratorModal.js';
 
 interface ProjectsPageProps {
   onOpenWorkspace?: (projectId: string, workspaceId?: string) => void;
@@ -20,6 +21,7 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
   const [isLoading, setIsLoading] = useState<boolean>(!initialProjects);
   const [searchQuery, setSearchQuery] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [inviteProjectId, setInviteProjectId] = useState<string | null>(null);
 
   useEffect(() => {
     if (initialProjects) return;
@@ -117,6 +119,22 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
       if (onOpenWorkspace) {
         onOpenWorkspace(newProjectData.id, newProjectData.activeWorkspaceId);
       }
+    }
+  };
+
+  const handleInviteCollaborator = async (data: { email: string; role: 'editor' | 'viewer' }) => {
+    if (!inviteProjectId) return;
+    const res = await fetch(`/api/v1/projects/${inviteProjectId}/invite`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+      },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      const errorData = await res.json().catch(() => ({}));
+      throw new Error(errorData.message || 'Failed to invite collaborator');
     }
   };
 
@@ -360,6 +378,7 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
                 onOpenWorkspace={(projectId, wsId) =>
                   onOpenWorkspace ? onOpenWorkspace(projectId, wsId) : null
                 }
+                onInvite={(projectId) => setInviteProjectId(projectId)}
               />
             ))}
           </div>
@@ -371,6 +390,13 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         onCreateProject={handleCreateProject}
+      />
+      
+      {/* Invite Collaborator Modal */}
+      <InviteCollaboratorModal
+        isOpen={inviteProjectId !== null}
+        onClose={() => setInviteProjectId(null)}
+        onInvite={handleInviteCollaborator}
       />
     </div>
   );

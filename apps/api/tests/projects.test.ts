@@ -250,5 +250,71 @@ describe('Projects & Workspaces API Endpoints (TASK-010)', () => {
       expect(listBody.workspaces).toHaveLength(1);
       expect(listBody.workspaces[0].name).toBe('WS 1');
     });
+  describe('POST /api/v1/projects/:id/invite', () => {
+    let projectId: string;
+
+    beforeEach(async () => {
+      const res = await app.request('/api/v1/projects', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${ownerToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ name: 'Project For Invite' }),
+      });
+      const data = (await res.json()) as any;
+      projectId = data.project.id;
+      
+      // Add a member so we can test non-owner access
+      projectService.addMember(projectId, memberSub, memberEmail, 'editor');
+    });
+
+    it('returns 403 Forbidden if user is not the owner', async () => {
+      const res = await app.request(`/api/v1/projects/${projectId}/invite`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${memberToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email: 'new@example.com', role: 'editor' }),
+      });
+      expect(res.status).toBe(403);
+    });
+
+    it('returns 400 Bad Request if email is invalid', async () => {
+      const res = await app.request(`/api/v1/projects/${projectId}/invite`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${ownerToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email: 'not-an-email', role: 'editor' }),
+      });
+      expect(res.status).toBe(400);
+    });
+
+    it('invites member successfully as owner and returns 201', async () => {
+      const res = await app.request(`/api/v1/projects/${projectId}/invite`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${ownerToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email: 'new@example.com', role: 'viewer' }),
+      });
+      expect(res.status).toBe(201);
+      
+      const body = (await res.json()) as any;
+      expect(body.member).toBeDefined();
+      expect(body.member.role).toBe('viewer');
+      
+      // Verify member is added to project
+      const getRes = await app.request(`/api/v1/projects/${projectId}`, {
+        headers: { Authorization: `Bearer ${ownerToken}` },
+      });
+      const getBody = (await getRes.json()) as any;
+      expect(getBody.members).toHaveLength(3); // owner, member, and the new invited one
+    });
   });
+});
 });

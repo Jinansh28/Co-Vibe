@@ -212,7 +212,7 @@ export function createPairingRequestHandler(tokenManager: TokenManager) {
 
       const child = spawn(actualCmd, args, {
         cwd: safeCwd,
-        shell: false,      // no shell — args are passed as literal array
+        shell: isWin && actualCmd.endsWith('.cmd'),      // require shell for .cmd files on Windows to avoid EINVAL (CVE-2024-27980)
         env: { ...process.env },
       });
 
