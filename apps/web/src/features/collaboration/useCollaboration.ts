@@ -63,7 +63,7 @@ export function useCollaboration(
       return;
     }
 
-    const yMap = docRef.current.getMap('files');
+    const yText = docRef.current.getText(filePath);
     
     const initializeBinding = (yText: Y.Text) => {
       // If we are re-binding, destroy the old one
@@ -80,11 +80,11 @@ export function useCollaboration(
       bindingRef.current = binding;
     };
 
-    if (!yMap.has(filePath)) {
-      // Create empty first to avoid race conditions with other tabs
-      const yText = new Y.Text();
-      yMap.set(filePath, yText);
-      
+    // If the text is empty, it might be a newly opened file that needs initial content from the runtime.
+    // However, Yjs doesn't provide a direct `has` for top-level types. We rely on length === 0.
+    // To prevent race conditions with multiple clients fetching and inserting initial content,
+    // we only fetch if length === 0, and we check again before inserting.
+    if (yText.length === 0) {
       const headers: Record<string, string> = {};
       if (workspaceId) headers['X-Workspace-Id'] = workspaceId;
 
@@ -94,7 +94,7 @@ export function useCollaboration(
         .then(data => {
           if (data.ok && typeof data.content === 'string') {
             // Check if it's still empty, to prevent overwriting collaborative changes that might have happened during fetch
-            if (yText.length === 0) {
+            if (yText.length === 0 && data.content.length > 0) {
               yText.insert(0, data.content);
             }
           }
@@ -105,7 +105,6 @@ export function useCollaboration(
           initializeBinding(yText);
         });
     } else {
-      const yText = yMap.get(filePath) as Y.Text;
       initializeBinding(yText);
     }
 

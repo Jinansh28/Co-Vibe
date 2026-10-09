@@ -1,4 +1,4 @@
-﻿import type { MiddlewareHandler } from 'hono';
+import type { MiddlewareHandler } from 'hono';
 import { verify } from 'hono/jwt';
 import { getCookie } from 'hono/cookie';
 
@@ -15,6 +15,7 @@ export type Env = {
   Bindings: {
     SUPABASE_URL?: string;
     SUPABASE_JWT_SECRET?: string;
+    SUPABASE_SERVICE_ROLE_KEY?: string;
     WORKSPACE_ROOM?: DurableObjectNamespace;
   };
   Variables: {

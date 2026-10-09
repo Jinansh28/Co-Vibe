@@ -137,9 +137,61 @@ projectRoutes.post('/:id/invite', async (c) => {
     );
   }
 
-  // Create or add the member (mocking the authUserId for now with invite_ prefix)
-  const mockAuthUserId = `invite_${parseResult.data.email}`;
-  const member = projectService.addMember(id, mockAuthUserId, parseResult.data.email, parseResult.data.role);
+  // Attempt to send an email invite via Supabase if configured
+  const supabaseUrl = c.env?.SUPABASE_URL || (typeof process !== 'undefined' ? process.env?.SUPABASE_URL : undefined);
+  const serviceRoleKey = c.env?.SUPABASE_SERVICE_ROLE_KEY || (typeof process !== 'undefined' ? process.env?.SUPABASE_SERVICE_ROLE_KEY : undefined);
+
+  let authUserId = `invite_${parseResult.data.email}`;
+
+  if (supabaseUrl && serviceRoleKey) {
+    try {
+      const inviteRes = await fetch(`${supabaseUrl}/auth/v1/invite`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': serviceRoleKey,
+          'Authorization': `Bearer ${serviceRoleKey}`,
+        },
+        body: JSON.stringify({ email: parseResult.data.email }),
+      });
+      
+      if (inviteRes.ok) {
+        const inviteData = await inviteRes.json() as { id?: string };
+        if (inviteData?.id) {
+          authUserId = inviteData.id;
+        }
+      } else {
+        const errText = await inviteRes.text();
+        console.error('Supabase invite failed:', errText);
+        
+        try {
+          const errData = JSON.parse(errText);
+          if (errData.error_code === 'email_exists') {
+            // User already exists. Fetch users list to find their UUID
+            const usersRes = await fetch(`${supabaseUrl}/auth/v1/admin/users`, {
+              headers: {
+                'apikey': serviceRoleKey,
+                'Authorization': `Bearer ${serviceRoleKey}`,
+              }
+            });
+            if (usersRes.ok) {
+              const usersData = await usersRes.json() as { users: Array<{ id: string, email: string }> };
+              const existingUser = usersData.users?.find(u => u.email === parseResult.data.email);
+              if (existingUser?.id) {
+                authUserId = existingUser.id;
+              }
+            }
+          }
+        } catch (e) {
+          console.error('Error parsing invite error or fetching users:', e);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to send Supabase invite:', err);
+    }
+  }
+
+  const member = projectService.addMember(id, authUserId, parseResult.data.email, parseResult.data.role);
 
   return c.json({ member }, 201);
 });
