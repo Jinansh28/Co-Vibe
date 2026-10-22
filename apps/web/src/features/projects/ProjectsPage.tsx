@@ -3,7 +3,7 @@ import { useAuth } from '../auth/useAuth.js';
 import { useNotification } from '../../context/NotificationContext.js';
 import { ProjectCard, ProjectCardData } from './ProjectCard.js';
 import { CreateProjectModal } from './CreateProjectModal.js';
-import { InviteCollaboratorModal } from './InviteCollaboratorModal.js';
+import { JoinProjectModal } from './JoinProjectModal.js';
 
 interface ProjectsPageProps {
   onOpenWorkspace?: (projectId: string, workspaceId?: string) => void;
@@ -21,7 +21,7 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
   const [isLoading, setIsLoading] = useState<boolean>(!initialProjects);
   const [searchQuery, setSearchQuery] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [inviteProjectId, setInviteProjectId] = useState<string | null>(null);
+  const [isJoinModalOpen, setIsJoinModalOpen] = useState(false);
 
   useEffect(() => {
     if (initialProjects) return;
@@ -48,6 +48,7 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
               role: p.role || 'owner',
               workspaceCount: p.workspaceCount || 1,
               activeWorkspaceId: p.activeWorkspaceId || `ws-${p.id}`,
+              joinCode: p.joinCode,
             }));
             setProjects(mappedProjects);
           }
@@ -122,19 +123,42 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
     }
   };
 
-  const handleInviteCollaborator = async (data: { email: string; role: 'editor' | 'viewer' }) => {
-    if (!inviteProjectId) return;
-    const res = await fetch(`/api/v1/projects/${inviteProjectId}/invite`, {
+  const handleJoinProject = async (joinCode: string) => {
+    const res = await fetch(`/api/v1/projects/join`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
       },
-      body: JSON.stringify(data),
+      body: JSON.stringify({ joinCode }),
     });
+
     if (!res.ok) {
       const errorData = await res.json().catch(() => ({}));
-      throw new Error(errorData.message || 'Failed to invite collaborator');
+      throw new Error(errorData.message || 'Failed to join project');
+    }
+
+    const data = await res.json();
+    const newProjectData: ProjectCardData = {
+      id: data.project.id,
+      name: data.project.name,
+      description: data.project.description,
+      createdAt: data.project.createdAt,
+      role: data.member.role,
+      workspaceCount: 1,
+      activeWorkspaceId: `ws-${data.project.id}`,
+      joinCode: data.project.joinCode,
+    };
+
+    setProjects((prev) => {
+      if (prev.some((p) => p.id === newProjectData.id)) {
+        return prev;
+      }
+      return [newProjectData, ...prev];
+    });
+
+    if (onOpenWorkspace) {
+      onOpenWorkspace(newProjectData.id, newProjectData.activeWorkspaceId);
     }
   };
 
@@ -260,31 +284,58 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
             </p>
           </div>
 
-          <button
-            type="button"
-            data-testid="create-project-btn"
-            onClick={() => setIsModalOpen(true)}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '8px',
-              padding: '12px 20px',
-              borderRadius: '10px',
-              border: 'none',
-              backgroundColor: '#6366f1',
-              color: '#ffffff',
-              fontSize: '14px',
-              fontWeight: 700,
-              cursor: 'pointer',
-              boxShadow: '0 4px 14px rgba(99, 102, 241, 0.4)',
-              transition: 'transform 0.15s ease, background-color 0.15s ease',
-            }}
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-              <path d="M12 5v14M5 12h14" />
-            </svg>
-            Create Project
-          </button>
+            <button
+              type="button"
+              data-testid="join-project-btn"
+              onClick={() => setIsJoinModalOpen(true)}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '12px 20px',
+                borderRadius: '10px',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
+                backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                color: '#cbd5e1',
+                fontSize: '14px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                transition: 'background-color 0.15s ease',
+              }}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
+                <polyline points="10 17 15 12 10 7" />
+                <line x1="15" y1="12" x2="3" y2="12" />
+              </svg>
+              Join Project
+            </button>
+
+            <button
+              type="button"
+              data-testid="create-project-btn"
+              onClick={() => setIsModalOpen(true)}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '12px 20px',
+                borderRadius: '10px',
+                border: 'none',
+                backgroundColor: '#6366f1',
+                color: '#ffffff',
+                fontSize: '14px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                boxShadow: '0 4px 14px rgba(99, 102, 241, 0.4)',
+                transition: 'transform 0.15s ease, background-color 0.15s ease',
+              }}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+              Create Project
+            </button>
         </div>
 
         {/* Filter & Search Bar */}
@@ -378,7 +429,6 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
                 onOpenWorkspace={(projectId, wsId) =>
                   onOpenWorkspace ? onOpenWorkspace(projectId, wsId) : null
                 }
-                onInvite={(projectId) => setInviteProjectId(projectId)}
               />
             ))}
           </div>
@@ -392,11 +442,11 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
         onCreateProject={handleCreateProject}
       />
       
-      {/* Invite Collaborator Modal */}
-      <InviteCollaboratorModal
-        isOpen={inviteProjectId !== null}
-        onClose={() => setInviteProjectId(null)}
-        onInvite={handleInviteCollaborator}
+      {/* Join Project Modal */}
+      <JoinProjectModal
+        isOpen={isJoinModalOpen}
+        onClose={() => setIsJoinModalOpen(false)}
+        onJoin={handleJoinProject}
       />
     </div>
   );

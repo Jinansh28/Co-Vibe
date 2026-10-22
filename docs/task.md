@@ -20,10 +20,11 @@
 ## 2. CURRENT STATE & BACKLOG TRACKING
 
 ```text
-Current Sprint:     COMPLETE — All planned implementation tasks finished
-Current Task:       AUDIT — Release-Readiness Audit (2026-09-23)
+Current Sprint:     UX Refinements
+Current Task:       None
 Completed Tasks:    TASK-001 through TASK-041 (all tasks complete)
                     AUDIT — Final release-readiness audit complete (2026-09-23)
+                    TASK-042 — Replace Email Invitation with Join Code (COMPLETE)
 Next Task:          None — Implementation backlog complete. Ready for staging deployment.
 Blocked Tasks:      None
 Known Risks:        - Browser memory overhead during long-lived Yjs sessions.

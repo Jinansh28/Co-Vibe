@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { CreateProjectSchema, InviteProjectMemberSchema } from '@co-vibe/protocol';
+import { CreateProjectSchema, JoinProjectSchema } from '@co-vibe/protocol';
 import type { Env } from '../middleware/auth.js';
 import { projectService } from '../services/projectService.js';
 
@@ -98,26 +98,9 @@ projectRoutes.get('/:id', (c) => {
   });
 });
 
-// POST /api/v1/projects/:id/invite - Invite a collaborator to a project
-projectRoutes.post('/:id/invite', async (c) => {
+// POST /api/v1/projects/join - Join a project using a collaboration code
+projectRoutes.post('/join', async (c) => {
   const authUser = c.get('authUser');
-  const id = c.req.param('id');
-
-  // Check if user is owner
-  const result = projectService.getProject(id, authUser.sub);
-  if (result.status === 'invalid_id') {
-    return c.json({ error: 'Bad Request', message: 'Invalid UUID format' }, 400);
-  }
-  if (result.status === 'not_found') {
-    return c.json({ error: 'Not Found', message: 'Project not found' }, 404);
-  }
-  if (result.status === 'forbidden') {
-    return c.json({ error: 'Forbidden', message: 'User is not a member of this project' }, 403);
-  }
-  if (result.role !== 'owner') {
-    return c.json({ error: 'Forbidden', message: 'Only project owners can invite members' }, 403);
-  }
-
   let body: unknown;
   try {
     body = await c.req.json();
@@ -125,7 +108,7 @@ projectRoutes.post('/:id/invite', async (c) => {
     return c.json({ error: 'Bad Request', message: 'Invalid JSON payload' }, 400);
   }
 
-  const parseResult = InviteProjectMemberSchema.safeParse(body);
+  const parseResult = JoinProjectSchema.safeParse(body);
   if (!parseResult.success) {
     return c.json(
       {
@@ -137,61 +120,18 @@ projectRoutes.post('/:id/invite', async (c) => {
     );
   }
 
-  // Attempt to send an email invite via Supabase if configured
-  const supabaseUrl = c.env?.SUPABASE_URL || (typeof process !== 'undefined' ? process.env?.SUPABASE_URL : undefined);
-  const serviceRoleKey = c.env?.SUPABASE_SERVICE_ROLE_KEY || (typeof process !== 'undefined' ? process.env?.SUPABASE_SERVICE_ROLE_KEY : undefined);
+  const result = projectService.joinProjectByCode(
+    parseResult.data.joinCode,
+    authUser.sub,
+    authUser.email || `${authUser.sub}@co-vibe.dev`
+  );
 
-  let authUserId = `invite_${parseResult.data.email}`;
-
-  if (supabaseUrl && serviceRoleKey) {
-    try {
-      const inviteRes = await fetch(`${supabaseUrl}/auth/v1/invite`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': serviceRoleKey,
-          'Authorization': `Bearer ${serviceRoleKey}`,
-        },
-        body: JSON.stringify({ email: parseResult.data.email }),
-      });
-      
-      if (inviteRes.ok) {
-        const inviteData = await inviteRes.json() as { id?: string };
-        if (inviteData?.id) {
-          authUserId = inviteData.id;
-        }
-      } else {
-        const errText = await inviteRes.text();
-        console.error('Supabase invite failed:', errText);
-        
-        try {
-          const errData = JSON.parse(errText);
-          if (errData.error_code === 'email_exists') {
-            // User already exists. Fetch users list to find their UUID
-            const usersRes = await fetch(`${supabaseUrl}/auth/v1/admin/users`, {
-              headers: {
-                'apikey': serviceRoleKey,
-                'Authorization': `Bearer ${serviceRoleKey}`,
-              }
-            });
-            if (usersRes.ok) {
-              const usersData = await usersRes.json() as { users: Array<{ id: string, email: string }> };
-              const existingUser = usersData.users?.find(u => u.email === parseResult.data.email);
-              if (existingUser?.id) {
-                authUserId = existingUser.id;
-              }
-            }
-          }
-        } catch (e) {
-          console.error('Error parsing invite error or fetching users:', e);
-        }
-      }
-    } catch (err) {
-      console.error('Failed to send Supabase invite:', err);
-    }
+  if (result.status === 'not_found') {
+    return c.json({ error: 'Not Found', message: 'Invalid or expired collaboration code' }, 404);
+  }
+  if (result.status === 'already_member') {
+    return c.json({ error: 'Conflict', message: 'You are already a member of this project' }, 409);
   }
 
-  const member = projectService.addMember(id, authUserId, parseResult.data.email, parseResult.data.role);
-
-  return c.json({ member }, 201);
+  return c.json({ project: result.project, member: result.member }, 201);
 });

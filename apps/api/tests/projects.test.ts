@@ -250,8 +250,8 @@ describe('Projects & Workspaces API Endpoints (TASK-010)', () => {
       expect(listBody.workspaces).toHaveLength(1);
       expect(listBody.workspaces[0].name).toBe('WS 1');
     });
-  describe('POST /api/v1/projects/:id/invite', () => {
-    let projectId: string;
+  describe('POST /api/v1/projects/join', () => {
+    let joinCode: string;
 
     beforeEach(async () => {
       const res = await app.request('/api/v1/projects', {
@@ -260,60 +260,73 @@ describe('Projects & Workspaces API Endpoints (TASK-010)', () => {
           Authorization: `Bearer ${ownerToken}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ name: 'Project For Invite' }),
+        body: JSON.stringify({ name: 'Project For Join' }),
       });
       const data = (await res.json()) as any;
-      projectId = data.project.id;
-      
-      // Add a member so we can test non-owner access
-      projectService.addMember(projectId, memberSub, memberEmail, 'editor');
+      joinCode = data.project.joinCode;
     });
 
-    it('returns 403 Forbidden if user is not the owner', async () => {
-      const res = await app.request(`/api/v1/projects/${projectId}/invite`, {
+    it('returns 400 Bad Request if code is missing', async () => {
+      const res = await app.request(`/api/v1/projects/join`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${memberToken}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ email: 'new@example.com', role: 'editor' }),
-      });
-      expect(res.status).toBe(403);
-    });
-
-    it('returns 400 Bad Request if email is invalid', async () => {
-      const res = await app.request(`/api/v1/projects/${projectId}/invite`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${ownerToken}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email: 'not-an-email', role: 'editor' }),
+        body: JSON.stringify({ }),
       });
       expect(res.status).toBe(400);
     });
 
-    it('invites member successfully as owner and returns 201', async () => {
-      const res = await app.request(`/api/v1/projects/${projectId}/invite`, {
+    it('returns 404 Not Found for invalid code', async () => {
+      const res = await app.request(`/api/v1/projects/join`, {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${ownerToken}`,
+          Authorization: `Bearer ${memberToken}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ email: 'new@example.com', role: 'viewer' }),
+        body: JSON.stringify({ joinCode: 'INVALID' }),
+      });
+      expect(res.status).toBe(404);
+    });
+
+    it('joins project successfully with valid code and returns 201', async () => {
+      const res = await app.request(`/api/v1/projects/join`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${outsiderToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ joinCode }),
       });
       expect(res.status).toBe(201);
       
       const body = (await res.json()) as any;
       expect(body.member).toBeDefined();
-      expect(body.member.role).toBe('viewer');
-      
-      // Verify member is added to project
-      const getRes = await app.request(`/api/v1/projects/${projectId}`, {
-        headers: { Authorization: `Bearer ${ownerToken}` },
+      expect(body.member.role).toBe('editor');
+      expect(body.project).toBeDefined();
+      expect(body.project.name).toBe('Project For Join');
+    });
+
+    it('returns 409 Conflict if already a member', async () => {
+      await app.request(`/api/v1/projects/join`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${outsiderToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ joinCode }),
       });
-      const getBody = (await getRes.json()) as any;
-      expect(getBody.members).toHaveLength(3); // owner, member, and the new invited one
+
+      const res2 = await app.request(`/api/v1/projects/join`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${outsiderToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ joinCode }),
+      });
+      expect(res2.status).toBe(409);
     });
   });
 });

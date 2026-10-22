@@ -39,36 +39,35 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
    * The daemon returns NDJSON: one JSON object per line.
    */
   const runCommand = useCallback(
-    (cmd: string, args: string[], label: string, type: 'terminal' | 'tests' = 'terminal'): Promise<number | null> => {
-      return new Promise(async (resolve) => {
-        if (isRunning) return resolve(null);
+    async (cmd: string, args: string[], label: string, type: 'terminal' | 'tests' = 'terminal'): Promise<number | null> => {
+      if (isRunning) return null;
 
-        // Open terminal drawer and clear previous output
-        setIsTerminalOpen(true);
-        setOutputLines([{ stream: 'system', chunk: `$ ${[cmd, ...args].join(' ')}\n` }]);
-        setIsRunning(true);
-        setExecutionId(null);
-        setRunType(type);
+      // Open terminal drawer and clear previous output
+      setIsTerminalOpen(true);
+      setOutputLines([{ stream: 'system', chunk: `$ ${[cmd, ...args].join(' ')}\n` }]);
+      setIsRunning(true);
+      setExecutionId(null);
+      setRunType(type);
 
-        try {
-          const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-          if (workspaceId) headers['X-Workspace-Id'] = workspaceId;
+      try {
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (workspaceId) headers['X-Workspace-Id'] = workspaceId;
 
-          const res = await fetch(`${RUNTIME_URL}/api/v1/exec`, {
-            method: 'POST',
-            headers,
-            body: JSON.stringify({ cmd, args, cwd: '.' }),
-          });
+        const res = await fetch(`${RUNTIME_URL}/api/v1/exec`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ cmd, args, cwd: '.' }),
+        });
 
-          if (!res.ok || !res.body) {
-            const text = await res.text().catch(() => res.statusText);
-            setOutputLines((prev) => [
-              ...prev,
-              { stream: 'system', chunk: `[Error] Runtime returned ${res.status}: ${text}\n` },
-            ]);
-            setIsRunning(false);
-            return resolve(-1);
-          }
+        if (!res.ok || !res.body) {
+          const text = await res.text().catch(() => res.statusText);
+          setOutputLines((prev) => [
+            ...prev,
+            { stream: 'system', chunk: `[Error] Runtime returned ${res.status}: ${text}\n` },
+          ]);
+          setIsRunning(false);
+          return -1;
+        }
 
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
@@ -94,7 +93,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
               if (parsed.stream === 'exit') {
                 setIsRunning(false);
                 setExecutionId(null);
-                return resolve(parsed.exitCode ?? 0);
+                return parsed.exitCode ?? 0;
               }
             } catch {
               // non-JSON chunk — display as-is
@@ -111,14 +110,13 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
           },
         ]);
         setIsRunning(false);
-        return resolve(-1);
+        return -1;
       }
       
       // If we exit loop without returning
       setIsRunning(false);
       setExecutionId(null);
-      return resolve(0);
-    });
+      return 0;
   },
   [isRunning, workspaceId]
 );

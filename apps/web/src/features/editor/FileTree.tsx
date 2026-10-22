@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useEditorStore } from './useEditorStore.js';
 import { useFiles } from './useFiles.js';
 
@@ -13,27 +13,121 @@ interface FileTreeProps {
   workspaceId?: string | null;
 }
 
+const InlineInput = ({
+  depth,
+  type,
+  onSubmit,
+  onCancel,
+}: {
+  depth: number;
+  type: 'file' | 'folder';
+  onSubmit: (val: string) => void;
+  onCancel: () => void;
+}) => {
+  const inputRef = useRef<HTMLInputElement>(null);
+  
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '6px',
+        paddingLeft: `${12 + depth * 14}px`,
+        paddingRight: '12px',
+        height: '24px',
+        backgroundColor: 'var(--bg-selected)',
+      }}
+    >
+      <span style={{ width: '12px' }} />
+      <span style={{ color: type === 'folder' ? 'var(--accent)' : 'var(--text-muted)', display: 'flex' }}>
+        {type === 'folder' ? (
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+          </svg>
+        ) : (
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" />
+            <polyline points="13 2 13 9 20 9" />
+          </svg>
+        )}
+      </span>
+      <input
+        ref={inputRef}
+        type="text"
+        style={{
+          flex: 1,
+          background: 'transparent',
+          border: '1px solid var(--accent)',
+          color: 'var(--text-primary)',
+          fontSize: type === 'folder' ? '12px' : '11.5px',
+          fontFamily: type === 'folder' ? 'inherit' : 'var(--font-code)',
+          outline: 'none',
+          padding: '0 2px',
+          height: '18px',
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            onSubmit(e.currentTarget.value);
+          } else if (e.key === 'Escape') {
+            onCancel();
+          }
+        }}
+        onBlur={(e) => {
+          if (!e.currentTarget.value.trim()) {
+            onCancel();
+          } else {
+            onSubmit(e.currentTarget.value);
+          }
+        }}
+      />
+    </div>
+  );
+};
+
 export const FileTree: React.FC<FileTreeProps> = ({ workspaceId }) => {
   const { activeFilePath, openFile, closeFile, openFiles } = useEditorStore();
   const { fileTree, fetchTree, createFileOrFolder, deleteFileOrFolder } = useFiles(workspaceId);
   const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({});
   const [hoveredItemId, setHoveredItemId] = useState<string | null>(null);
+  const [creationMode, setCreationMode] = useState<{ type: 'file' | 'folder'; basePath: string } | null>(null);
+  const isCreatingRef = useRef(false);
 
   useEffect(() => {
     fetchTree();
   }, [fetchTree]);
 
-  const handleCreate = async (type: 'file' | 'folder', basePath: string = '') => {
-    const name = prompt(`Enter ${type} name${basePath ? ` (in ${basePath})` : ' (include path if needed)'}:`);
-    if (name) {
-      const fullPath = basePath ? `${basePath}/${name}` : name;
-      await createFileOrFolder(fullPath, type);
-      if (basePath) {
-        setExpandedFolders(prev => ({ ...prev, [basePath]: true }));
-      }
+  const handleStartCreate = (type: 'file' | 'folder', basePath: string = '') => {
+    setCreationMode({ type, basePath });
+    if (basePath) {
+      setExpandedFolders(prev => ({ ...prev, [basePath]: true }));
     }
   };
 
+  const commitCreation = async (name: string) => {
+    if (!creationMode || isCreatingRef.current) return;
+    const { type, basePath } = creationMode;
+    const trimmed = name.trim();
+    
+    if (!trimmed) {
+      setCreationMode(null);
+      return;
+    }
+    
+    isCreatingRef.current = true;
+    const fullPath = basePath ? `${basePath}/${trimmed}` : trimmed;
+    try {
+      await createFileOrFolder(fullPath, type);
+      setCreationMode(null);
+    } catch (err: any) {
+      alert(err.message || `Failed to create ${type}`);
+    } finally {
+      isCreatingRef.current = false;
+    }
+  };
   const handleDelete = async (id: string, type: 'file' | 'folder') => {
     if (confirm(`Are you sure you want to delete ${id}?`)) {
       try {
@@ -153,7 +247,7 @@ export const FileTree: React.FC<FileTreeProps> = ({ workspaceId }) => {
                   <span
                     onClick={(e) => {
                       e.stopPropagation();
-                      handleCreate('file', item.id);
+                      handleStartCreate('file', item.id);
                     }}
                     style={{
                       display: 'flex',
@@ -182,7 +276,7 @@ export const FileTree: React.FC<FileTreeProps> = ({ workspaceId }) => {
                   <span
                     onClick={(e) => {
                       e.stopPropagation();
-                      handleCreate('folder', item.id);
+                      handleStartCreate('folder', item.id);
                     }}
                     style={{
                       display: 'flex',
@@ -240,8 +334,18 @@ export const FileTree: React.FC<FileTreeProps> = ({ workspaceId }) => {
           )}
         </div>
 
-        {isFolder && isExpanded && item.children && (
-          <div>{item.children.map((child) => renderItem(child, depth + 1))}</div>
+        {isFolder && isExpanded && (
+          <div>
+            {creationMode?.basePath === item.id && (
+              <InlineInput
+                type={creationMode.type}
+                depth={depth + 1}
+                onSubmit={commitCreation}
+                onCancel={() => setCreationMode(null)}
+              />
+            )}
+            {item.children?.map((child) => renderItem(child, depth + 1))}
+          </div>
         )}
       </div>
     );
@@ -274,7 +378,7 @@ export const FileTree: React.FC<FileTreeProps> = ({ workspaceId }) => {
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
           <button
-            onClick={() => handleCreate('file')}
+            onClick={() => handleStartCreate('file')}
             title="New File"
             aria-label="New File"
             style={{
@@ -296,7 +400,7 @@ export const FileTree: React.FC<FileTreeProps> = ({ workspaceId }) => {
             </svg>
           </button>
           <button
-            onClick={() => handleCreate('folder')}
+            onClick={() => handleStartCreate('folder')}
             title="New Folder"
             aria-label="New Folder"
             style={{
@@ -357,7 +461,15 @@ export const FileTree: React.FC<FileTreeProps> = ({ workspaceId }) => {
         <span style={{ textTransform: 'uppercase', letterSpacing: '0.3px' }}>Co-Vibe Monorepo</span>
       </div>
       <div style={{ paddingTop: '4px', overflowY: 'auto', flex: 1 }}>
-        {fileTree.length === 0 ? (
+        {creationMode?.basePath === '' && (
+          <InlineInput
+            type={creationMode.type}
+            depth={0}
+            onSubmit={commitCreation}
+            onCancel={() => setCreationMode(null)}
+          />
+        )}
+        {fileTree.length === 0 && !creationMode ? (
           <div style={{ padding: '12px', color: 'var(--text-muted)', fontSize: '12px' }}>Loading or empty...</div>
         ) : (
           fileTree.map((item) => renderItem(item))

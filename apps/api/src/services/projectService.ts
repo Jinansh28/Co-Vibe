@@ -72,11 +72,14 @@ export class ProjectService {
     const user = this.getOrCreateUser(authUserId, email);
     const now = new Date().toISOString();
 
+    const joinCode = Array.from({length: 6}, () => 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'[Math.floor(Math.random() * 36)]).join('');
+
     const project: Project = {
       id: generateUUID(),
       ownerId: user.id,
       name: input.name,
       description: input.description,
+      joinCode,
       createdAt: now,
       updatedAt: now,
     };
@@ -297,6 +300,49 @@ export class ProjectService {
     };
     this.projectMembers.set(`${projectId}:${user.id}`, member);
     return member;
+  }
+
+  /**
+   * Joins a project using a collaboration code
+   */
+  public joinProjectByCode(
+    joinCode: string,
+    authUserId: string,
+    email: string
+  ):
+    | { status: 'ok'; project: Project; member: ProjectMember }
+    | { status: 'not_found' }
+    | { status: 'already_member' } {
+    let targetProject: Project | null = null;
+    for (const proj of this.projects.values()) {
+      if (proj.joinCode === joinCode) {
+        targetProject = proj;
+        break;
+      }
+    }
+
+    if (!targetProject) {
+      return { status: 'not_found' };
+    }
+
+    const user = this.getOrCreateUser(authUserId, email);
+    const memberKey = `${targetProject.id}:${user.id}`;
+    if (this.projectMembers.has(memberKey)) {
+      return { status: 'already_member' };
+    }
+
+    const now = new Date().toISOString();
+    const member: ProjectMember = {
+      id: generateUUID(),
+      projectId: targetProject.id,
+      userId: user.id,
+      role: 'editor',
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.projectMembers.set(memberKey, member);
+
+    return { status: 'ok', project: targetProject, member };
   }
 }
 

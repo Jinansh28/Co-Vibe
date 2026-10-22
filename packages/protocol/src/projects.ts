@@ -21,8 +21,7 @@ export const AddProjectMemberSchema = z.object({
 });
 export type AddProjectMemberInput = z.infer<typeof AddProjectMemberSchema>;
 
-export const InviteProjectMemberSchema = z.object({
-  email: z.string().email('Invalid email address'),
-  role: ProjectMemberRoleSchema.optional().default('editor'),
+export const JoinProjectSchema = z.object({
+  joinCode: z.string().trim().min(1, 'Join code is required'),
 });
-export type InviteProjectMemberInput = z.infer<typeof InviteProjectMemberSchema>;
+export type JoinProjectInput = z.infer<typeof JoinProjectSchema>;

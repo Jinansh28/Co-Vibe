@@ -13,6 +13,7 @@ export interface Project {
   ownerId: string;
   name: string;
   description?: string;
+  joinCode?: string;
   createdAt: string;
   updatedAt: string;
 }
