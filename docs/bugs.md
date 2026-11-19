@@ -312,6 +312,10 @@ The quality engineering manager monitors basic bug health metrics per release cy
 | **BUG-005** | Editor code vanishes on refresh: Yjs collaboration binding overwrites document before remote sync | S1 | Collaboration / Frontend | **FIXED** | 2026-09-24 | None |
 | **BUG-006** | Orphan background tasks leaking and causing terminal lag upon project close | S2 | Docker / Runtime | **FIXED** | 2026-09-27 | None |
 | **BUG-007** | Project disappears when returning to dashboard: Projects API fetch missing Authorization header | S2 | Frontend / Authentication | **FIXED** | 2026-09-28 | None |
+| **BUG-008** | Code executes without output when running user scripts via terminal | S2 | Frontend / Runtime | **FIXED** | 2026-09-28 | None |
+| **BUG-009** | Stale closure in `handleMount` saves active file content to previously opened file tab | S1 | Frontend / Editor | **FIXED** | 2026-11-19 | None |
+| **BUG-010** | Missing `synced` and `workspaceId` in `useCollaboration.ts` dependency array leaves editor unbound on page refresh | S1 | Collaboration / Frontend | **FIXED** | 2026-11-19 | None |
+| **BUG-011** | Windows binary execution failure on `./main.exe` in `AppLayout.tsx` | S3 | Frontend / Runtime | **FIXED** | 2026-11-19 | None |
 
 ---
 
@@ -581,4 +585,94 @@ All tests in `@co-vibe/web` pass successfully.
 ### Verification
 
 Manual verification confirms that the saved code correctly maps to the executed workspace file and output is shown in the IDE terminal.
+
+---
+
+## BUG-009 — Stale closure in handleMount saves active file content to previously opened file tab
+
+Status: FIXED
+Severity: S1
+Component: Frontend / Editor
+Found in: v0.1.0-alpha
+Reported: 2026-11-19
+Related Task: None
+
+### Summary
+
+When opening File A and then switching to File B, pressing `Ctrl+S` or clicking "Run" saved the editor content into File A instead of File B. Monaco Editor mounts only once, causing the initial `activeFilePath` value to be trapped inside the command handler closure.
+
+### Root Cause
+
+`State` — Stale closure in `handleMount` callback registered with `editor.addCommand()`.
+
+### Fix
+
+Refactored `EditorPane.tsx` to use `saveHandlerRef` and a dynamic `performSave` callback that reads the current active file path directly via `useEditorStore.getState().activeFilePath`.
+
+### Regression Test
+
+All 37 test suites in `@co-vibe/web` pass.
+
+### Verification
+
+Manual verification confirms switching tabs and saving cleanly writes to the active file tab without overwriting previously opened tabs.
+
+---
+
+## BUG-010 — Missing synced and workspaceId in useCollaboration dependency array
+
+Status: FIXED
+Severity: S1
+Component: Collaboration / Frontend
+Found in: v0.1.0-alpha
+Reported: 2026-11-19
+Related Task: None
+
+### Summary
+
+On page refresh or initial load, the Monaco editor failed to bind to the Yjs collaboration document. The secondary `useEffect` checked `if (!synced) return;` but omitted `synced` from the dependency array, preventing the effect from re-running when the WebSocket connection transitioned to `synced = true`.
+
+### Root Cause
+
+`Concurrency` / `State` — Missing dependencies in React `useEffect` dependency array in `useCollaboration.ts`.
+
+### Fix
+
+Added `synced` and `workspaceId` to the dependency array on `useEffect` in `useCollaboration.ts`. Also dynamically resolved WebSocket URL scheme (`wss:` vs `ws:`) using `VITE_WS_URL` or `window.location.protocol`.
+
+### Regression Test
+
+`@co-vibe/collaboration` and `@co-vibe/web` test suites pass (180/180).
+
+### Verification
+
+Verified that reloading the editor immediately binds the Yjs document and awareness manager once WebSocket synchronization completes.
+
+---
+
+## BUG-011 — Windows binary execution failure on ./main.exe
+
+Status: FIXED
+Severity: S3
+Component: Frontend / Runtime
+Found in: v0.1.0-alpha
+Reported: 2026-11-19
+Related Task: None
+
+### Summary
+
+Running compiled C or C++ programs on Windows threw `ENOENT` because `AppLayout.tsx` spawned `./main.exe`. Windows requires executable names without the POSIX `./` relative prefix.
+
+### Root Cause
+
+`Configuration` / `Logic` — POSIX-specific path prefix `./` in `runCommand` calls on Windows.
+
+### Fix
+
+Updated `AppLayout.tsx` to detect Windows via `navigator.userAgent` and execute `main.exe` rather than `./main.exe`.
+
+### Regression Test
+
+`apps/web/src/components/layout/AppLayout.test.tsx` passes.
+
 

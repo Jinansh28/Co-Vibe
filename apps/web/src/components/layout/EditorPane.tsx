@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import type { editor } from 'monaco-editor';
 import type { Monaco } from '@monaco-editor/react';
 import { MonacoEditor } from '../../features/editor/MonacoEditor.js';
@@ -75,34 +75,43 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
 
   const { saveFileContent } = useFiles(workspaceId);
 
+  const saveHandlerRef = React.useRef<(() => Promise<void>) | null>(null);
+
+  // Dynamic save function fetching the latest active file path from store
+  const performSave = useCallback(async () => {
+    const currentPath = useEditorStore.getState().activeFilePath;
+    if (currentPath && editorInstance) {
+      try {
+        await saveFileContent(currentPath, editorInstance.getValue());
+      } catch (err) {
+        console.error('Failed to save file:', err);
+      }
+    }
+  }, [editorInstance, saveFileContent]);
+
+  // Keep save handler reference in sync with latest state
+  useEffect(() => {
+    saveHandlerRef.current = performSave;
+    registerSaveHandler(performSave);
+    return () => {
+      registerSaveHandler(null);
+    };
+  }, [performSave, registerSaveHandler]);
+
   const handleMount = useCallback((editor: editor.IStandaloneCodeEditor, monaco: Monaco) => {
     setEditorInstance(editor);
 
-    const doSave = async () => {
-      if (activeFilePath) {
-        try {
-          await saveFileContent(activeFilePath, editor.getValue());
-        } catch (err) {
-          console.error('Failed to save file:', err);
-        }
+    // Add Save Command once — invoking latest save handler ref to avoid stale closures
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
+      if (saveHandlerRef.current) {
+        saveHandlerRef.current();
       }
-    };
-
-    // Add Save Command (Ctrl+S / Cmd+S)
-    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, doSave);
-
-    // Register with global store so AppLayout can trigger auto-save before run
-    registerSaveHandler(doSave);
+    });
 
     if (onMount) {
       onMount(editor, monaco);
     }
-  }, [onMount, activeFilePath, saveFileContent, registerSaveHandler]);
-
-  // Clean up global save handler on unmount
-  React.useEffect(() => {
-    return () => registerSaveHandler(null);
-  }, [registerSaveHandler]);
+  }, [onMount]);
 
   return (
     <main
