@@ -161,12 +161,14 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
       } else if (activeFilePath.endsWith('.c')) {
         const exitCode = await runCommand('gcc', [activeFilePath, '-o', 'main.exe'], `Compile ${activeFilePath}`);
         if (exitCode === 0) {
-          runCommand('./main.exe', [], `Run main.exe`);
+          const exeName = navigator.userAgent.includes('Windows') ? 'main.exe' : './main.exe';
+          runCommand(exeName, [], `Run ${exeName}`);
         }
       } else if (activeFilePath.endsWith('.cpp')) {
         const exitCode = await runCommand('g++', [activeFilePath, '-o', 'main.exe'], `Compile ${activeFilePath}`);
         if (exitCode === 0) {
-          runCommand('./main.exe', [], `Run main.exe`);
+          const exeName = navigator.userAgent.includes('Windows') ? 'main.exe' : './main.exe';
+          runCommand(exeName, [], `Run ${exeName}`);
         }
       } else {
         runCommand('npm', ['run', 'dev'], 'Run Project');

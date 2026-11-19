@@ -288,7 +288,10 @@ describe('ProcessManager Integration Tests (Live Container)', () => {
   beforeAll(async () => {
     dockerManager = new DockerManager();
     try {
-      await dockerManager.getDockerInstance().ping();
+      const pingPromise = dockerManager.getDockerInstance().ping();
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 1500));
+      await Promise.race([pingPromise, timeoutPromise]);
+      await dockerManager.getDockerInstance().getImage('node:22-bookworm-slim').inspect();
       isDockerAvailable = true;
     } catch (_err) {
       isDockerAvailable = false;
