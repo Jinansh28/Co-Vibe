@@ -12,6 +12,7 @@
   "dependencies": {
     "@co-vibe/protocol": "workspace:*",
     "@co-vibe/shared": "workspace:*",
+    "@supabase/supabase-js": "^2.116.0",
     "hono": "^4.6.9",
     "lib0": "^0.2.117",
     "y-protocols": "^1.0.7",

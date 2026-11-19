@@ -25,6 +25,7 @@ Current Task:       None
 Completed Tasks:    TASK-001 through TASK-041 (all tasks complete)
                     AUDIT — Final release-readiness audit complete (2026-09-23)
                     TASK-042 — Replace Email Invitation with Join Code (COMPLETE)
+                    TASK-043 — Supabase PostgreSQL Persistence Wiring & Edge Adapter (COMPLETE)
 Next Task:          None — Implementation backlog complete. Ready for staging deployment.
 Blocked Tasks:      None
 Known Risks:        - Browser memory overhead during long-lived Yjs sessions.
@@ -1769,6 +1770,63 @@ Write comprehensive project `README.md` providing system architecture overview, 
 - **Tests & Validation**: N/A for documentation task.
 - **Known Issues**: None.
 - **Next Task**: None
+
+---
+
+## TASK-043 — Supabase PostgreSQL Persistence Wiring & Edge Adapter
+
+Status: DONE  
+Priority: P0  
+Component: API / Database  
+Depends on: TASK-010, TASK-042  
+Estimated effort: M
+
+### Objective
+
+Replace ephemeral in-memory `Map` storage in `apps/api` with live Supabase PostgreSQL persistence via PostgREST client, preserving fast offline unit testing via dual-mode repository adapter pattern.
+
+### Implementation
+
+- Created `infrastructure/db/migrations/007_project_join_code.sql` adding `join_code TEXT UNIQUE` and index to `projects` table.
+- Installed `@supabase/supabase-js` in `apps/api`.
+- Refactored `apps/api/src/services/projectService.ts` to implement `IProjectService`:
+  - `SupabaseProjectService`: Executes PostgREST queries with single-roundtrip joins (`projects`, `project_members`, `workspaces`).
+  - `InMemoryProjectService`: Offline fallback store for CI and local unit tests when Supabase credentials are not provided.
+  - `getProjectService(env)`: Factory providing the cached PostgREST client when `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are present.
+- Updated `apps/api/src/routes/projects.ts` and `apps/api/src/routes/workspaces.ts` to utilize `getProjectService(c.env)` and `await` all service calls.
+- Created `apps/api/tests/supabaseProjectService.test.ts` mocking `@supabase/supabase-js` chained calls to verify all Supabase queries.
+
+### Files
+
+- `apps/api/package.json`
+- `apps/api/src/services/projectService.ts`
+- `apps/api/src/routes/projects.ts`
+- `apps/api/src/routes/workspaces.ts`
+- `apps/api/tests/supabaseProjectService.test.ts`
+- `infrastructure/db/migrations/007_project_join_code.sql`
+
+### Acceptance Criteria
+
+- [x] Project creation, retrieval, listing, membership, and join-by-code query Supabase PostgreSQL tables.
+- [x] API routes dynamically select `SupabaseProjectService` when environment credentials exist, falling back to `InMemoryProjectService` in offline CI/test environments.
+- [x] All 185 unit and integration tests pass cleanly with 0 failures.
+
+### Tests
+
+- [x] `apps/api/tests/supabaseProjectService.test.ts` verifies PostgREST calls for create, find, list, addMember, and join code lookup.
+- [x] `apps/api/tests/projects.test.ts` verifies project CRUD API routes with offline fallback.
+
+### Definition of Done
+
+API fully wired to Supabase PostgreSQL, tested with mock and offline fallbacks, with monorepo passing all validation checks.
+
+### Completion Notes
+
+- **Completed Work**: Implemented dual-mode repository pattern in `apps/api`, integrated `@supabase/supabase-js`, created migration `007_project_join_code.sql`, and added complete test suite.
+- **Files Changed**: `apps/api/package.json`, `pnpm-lock.yaml`, `apps/api/src/services/projectService.ts`, `apps/api/src/routes/projects.ts`, `apps/api/src/routes/workspaces.ts`, `apps/api/tests/supabaseProjectService.test.ts`, `infrastructure/db/migrations/007_project_join_code.sql`, `docs/task.md`.
+- **Tests & Validation**: `pnpm typecheck` (10/10 clean), `pnpm lint` (0 errors), `pnpm test` (38 files, 185 tests pass), `pnpm build` (all 10 workspaces build cleanly).
+- **Known Issues**: None.
+- **Next Task**: None — Implementation backlog complete.
 
 ---
 

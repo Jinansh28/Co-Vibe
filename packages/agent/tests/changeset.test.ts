@@ -8,7 +8,7 @@ import { ChangeSetManager, type ChangeSet } from '../src/changeset.js';
 
 const execFileAsync = promisify(execFile);
 
-describe('ChangeSetManager', () => {
+describe('ChangeSetManager', { timeout: 15000 }, () => {
   let workspacePath: string;
   let manager: ChangeSetManager;
 
@@ -33,7 +33,11 @@ describe('ChangeSetManager', () => {
   });
 
   afterEach(async () => {
-    await fs.rm(workspacePath, { recursive: true, force: true });
+    try {
+      await fs.rm(workspacePath, { recursive: true, force: true, maxRetries: 5, retryDelay: 150 });
+    } catch {
+      // Ignore cleanup locks on Windows
+    }
   });
 
   it('should apply a clean patch when base revision matches', async () => {

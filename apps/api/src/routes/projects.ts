@@ -1,14 +1,15 @@
 import { Hono } from 'hono';
 import { CreateProjectSchema, JoinProjectSchema } from '@co-vibe/protocol';
 import type { Env } from '../middleware/auth.js';
-import { projectService } from '../services/projectService.js';
+import { getProjectService } from '../services/projectService.js';
 
 export const projectRoutes = new Hono<Env>();
 
 // GET /api/v1/projects - List user's projects
-projectRoutes.get('/', (c) => {
+projectRoutes.get('/', async (c) => {
   const authUser = c.get('authUser');
-  const projects = projectService.listUserProjects(authUser.sub, authUser.email);
+  const service = getProjectService(c.env);
+  const projects = await service.listUserProjects(authUser.sub, authUser.email);
   return c.json({ projects });
 });
 
@@ -42,7 +43,8 @@ projectRoutes.post('/', async (c) => {
   }
 
   const email = authUser.email || `${authUser.sub}@co-vibe.dev`;
-  const { project, member } = projectService.createProject(authUser.sub, email, result.data);
+  const service = getProjectService(c.env);
+  const { project, member } = await service.createProject(authUser.sub, email, result.data);
 
   return c.json(
     {
@@ -54,11 +56,12 @@ projectRoutes.post('/', async (c) => {
 });
 
 // GET /api/v1/projects/:id - Get project details with RBAC authorization check
-projectRoutes.get('/:id', (c) => {
+projectRoutes.get('/:id', async (c) => {
   const authUser = c.get('authUser');
   const id = c.req.param('id');
+  const service = getProjectService(c.env);
 
-  const result = projectService.getProject(id, authUser.sub);
+  const result = await service.getProject(id, authUser.sub);
 
   if (result.status === 'invalid_id') {
     return c.json(
@@ -120,7 +123,8 @@ projectRoutes.post('/join', async (c) => {
     );
   }
 
-  const result = projectService.joinProjectByCode(
+  const service = getProjectService(c.env);
+  const result = await service.joinProjectByCode(
     parseResult.data.joinCode,
     authUser.sub,
     authUser.email || `${authUser.sub}@co-vibe.dev`

@@ -1,6 +1,8 @@
 import crypto from 'node:crypto';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import type { User, Project, Workspace, ProjectMember } from '@co-vibe/shared';
 import type { CreateProjectInput, CreateWorkspaceInput, ProjectMemberRole } from '@co-vibe/protocol';
+import type { Env } from '../middleware/auth.js';
 
 function generateUUID(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -19,16 +21,509 @@ export function isValidUuid(id: string): boolean {
   return UUID_REGEX.test(id);
 }
 
-export class ProjectService {
-  private users: Map<string, User> = new Map(); // key: id
-  private userAuthMap: Map<string, string> = new Map(); // key: authUserId -> user.id
-  private projects: Map<string, Project> = new Map(); // key: id
-  private projectMembers: Map<string, ProjectMember> = new Map(); // key: `${projectId}:${userId}`
-  private workspaces: Map<string, Workspace> = new Map(); // key: id
+export type GetProjectResult =
+  | { status: 'ok'; project: Project; role: ProjectMemberRole; members: ProjectMember[]; workspaces: Workspace[] }
+  | { status: 'invalid_id' }
+  | { status: 'not_found' }
+  | { status: 'forbidden' };
 
-  /**
-   * Resets internal in-memory store (useful for testing)
-   */
+export type CreateWorkspaceResult =
+  | { status: 'ok'; workspace: Workspace }
+  | { status: 'invalid_id' }
+  | { status: 'not_found' }
+  | { status: 'forbidden'; message?: string };
+
+export type ListWorkspacesResult =
+  | { status: 'ok'; workspaces: Workspace[] }
+  | { status: 'invalid_id' }
+  | { status: 'not_found' }
+  | { status: 'forbidden' };
+
+export type JoinProjectResult =
+  | { status: 'ok'; project: Project; member: ProjectMember }
+  | { status: 'not_found' }
+  | { status: 'already_member' };
+
+export interface IProjectService {
+  reset(): void;
+  getOrCreateUser(authUserId: string, email: string): Promise<User>;
+  createProject(
+    authUserId: string,
+    email: string,
+    input: CreateProjectInput
+  ): Promise<{ project: Project; member: ProjectMember }>;
+  getProject(projectId: string, authUserId: string): Promise<GetProjectResult>;
+  listUserProjects(authUserId: string, email?: string): Promise<Project[]>;
+  createWorkspace(
+    projectId: string,
+    authUserId: string,
+    input: CreateWorkspaceInput
+  ): Promise<CreateWorkspaceResult>;
+  listWorkspaces(projectId: string, authUserId: string): Promise<ListWorkspacesResult>;
+  addMember(
+    projectId: string,
+    authUserId: string,
+    email: string,
+    role: ProjectMemberRole
+  ): Promise<ProjectMember>;
+  joinProjectByCode(
+    joinCode: string,
+    authUserId: string,
+    email: string
+  ): Promise<JoinProjectResult>;
+}
+
+// ---------------------------------------------------------------------------
+// Helpers: Map Database Rows (snake_case) to TypeScript Models (camelCase)
+// ---------------------------------------------------------------------------
+
+function mapUser(row: any): User {
+  return {
+    id: row.id,
+    authUserId: row.auth_user_id,
+    email: row.email,
+    displayName: row.display_name ?? undefined,
+    avatarUrl: row.avatar_url ?? undefined,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function mapProject(row: any): Project {
+  return {
+    id: row.id,
+    ownerId: row.owner_id,
+    name: row.name,
+    description: row.description ?? undefined,
+    joinCode: row.join_code ?? undefined,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function mapMember(row: any): ProjectMember {
+  return {
+    id: row.id,
+    projectId: row.project_id,
+    userId: row.user_id,
+    role: row.role,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function mapWorkspace(row: any): Workspace {
+  return {
+    id: row.id,
+    projectId: row.project_id,
+    name: row.name,
+    activeBranch: row.active_branch ?? 'main',
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Implementation 1: Supabase PostgreSQL Service (Production / Dev)
+// ---------------------------------------------------------------------------
+
+export class SupabaseProjectService implements IProjectService {
+  constructor(private client: SupabaseClient) {}
+
+  public reset(): void {
+    // No-op for persistent database
+  }
+
+  public async getOrCreateUser(authUserId: string, email: string): Promise<User> {
+    const { data: existingUser } = await this.client
+      .from('users')
+      .select('*')
+      .eq('auth_user_id', authUserId)
+      .maybeSingle();
+
+    if (existingUser) {
+      return mapUser(existingUser);
+    }
+
+    const now = new Date().toISOString();
+    const newUser = {
+      auth_user_id: authUserId,
+      email,
+      display_name: email.split('@')[0],
+      created_at: now,
+      updated_at: now,
+    };
+
+    const { data: created, error } = await this.client
+      .from('users')
+      .insert(newUser)
+      .select('*')
+      .single();
+
+    if (error || !created) {
+      // Handle race condition: check if inserted concurrently
+      const { data: retryUser } = await this.client
+        .from('users')
+        .select('*')
+        .eq('auth_user_id', authUserId)
+        .maybeSingle();
+      if (retryUser) return mapUser(retryUser);
+
+      throw new Error(`Failed to create user: ${error?.message}`);
+    }
+
+    return mapUser(created);
+  }
+
+  public async createProject(
+    authUserId: string,
+    email: string,
+    input: CreateProjectInput
+  ): Promise<{ project: Project; member: ProjectMember }> {
+    const user = await this.getOrCreateUser(authUserId, email);
+    const now = new Date().toISOString();
+    const joinCode = Array.from({ length: 6 }, () =>
+      'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'[Math.floor(Math.random() * 36)]
+    ).join('');
+
+    const newProject = {
+      owner_id: user.id,
+      name: input.name,
+      description: input.description ?? null,
+      join_code: joinCode,
+      created_at: now,
+      updated_at: now,
+    };
+
+    const { data: projectRow, error: pErr } = await this.client
+      .from('projects')
+      .insert(newProject)
+      .select('*')
+      .single();
+
+    if (pErr || !projectRow) {
+      throw new Error(`Failed to create project: ${pErr?.message}`);
+    }
+
+    const newMember = {
+      project_id: projectRow.id,
+      user_id: user.id,
+      role: 'owner',
+      created_at: now,
+      updated_at: now,
+    };
+
+    const { data: memberRow, error: mErr } = await this.client
+      .from('project_members')
+      .insert(newMember)
+      .select('*')
+      .single();
+
+    if (mErr || !memberRow) {
+      throw new Error(`Failed to add project owner: ${mErr?.message}`);
+    }
+
+    return {
+      project: mapProject(projectRow),
+      member: mapMember(memberRow),
+    };
+  }
+
+  public async getProject(projectId: string, authUserId: string): Promise<GetProjectResult> {
+    if (!isValidUuid(projectId)) {
+      return { status: 'invalid_id' };
+    }
+
+    // High-performance single-roundtrip join via PostgREST
+    const { data: projectRow, error: pErr } = await this.client
+      .from('projects')
+      .select(`
+        *,
+        project_members (*),
+        workspaces (*)
+      `)
+      .eq('id', projectId)
+      .maybeSingle();
+
+    if (pErr || !projectRow) {
+      return { status: 'not_found' };
+    }
+
+    const { data: userRow } = await this.client
+      .from('users')
+      .select('id')
+      .eq('auth_user_id', authUserId)
+      .maybeSingle();
+
+    if (!userRow) {
+      return { status: 'forbidden' };
+    }
+
+    const members: ProjectMember[] = (projectRow.project_members || []).map(mapMember);
+    const currentMember = members.find((m) => m.userId === userRow.id);
+
+    if (!currentMember) {
+      return { status: 'forbidden' };
+    }
+
+    const workspaces: Workspace[] = (projectRow.workspaces || []).map(mapWorkspace);
+
+    return {
+      status: 'ok',
+      project: mapProject(projectRow),
+      role: currentMember.role,
+      members,
+      workspaces,
+    };
+  }
+
+  public async listUserProjects(authUserId: string, email?: string): Promise<Project[]> {
+    const { data: userRow } = await this.client
+      .from('users')
+      .select('id')
+      .eq('auth_user_id', authUserId)
+      .maybeSingle();
+
+    let userId = userRow?.id;
+    if (!userId) {
+      if (email) {
+        const newUser = await this.getOrCreateUser(authUserId, email);
+        userId = newUser.id;
+      } else {
+        return [];
+      }
+    }
+
+    const { data: memberRows, error: mErr } = await this.client
+      .from('project_members')
+      .select(`
+        project_id,
+        projects (*)
+      `)
+      .eq('user_id', userId);
+
+    if (mErr || !memberRows) {
+      return [];
+    }
+
+    const result: Project[] = [];
+    for (const row of memberRows) {
+      if (row.projects) {
+        result.push(mapProject(row.projects));
+      }
+    }
+    return result;
+  }
+
+  public async createWorkspace(
+    projectId: string,
+    authUserId: string,
+    input: CreateWorkspaceInput
+  ): Promise<CreateWorkspaceResult> {
+    if (!isValidUuid(projectId)) {
+      return { status: 'invalid_id' };
+    }
+
+    const { data: projectRow } = await this.client
+      .from('projects')
+      .select('id')
+      .eq('id', projectId)
+      .maybeSingle();
+
+    if (!projectRow) {
+      return { status: 'not_found' };
+    }
+
+    const { data: userRow } = await this.client
+      .from('users')
+      .select('id')
+      .eq('auth_user_id', authUserId)
+      .maybeSingle();
+
+    if (!userRow) {
+      return { status: 'forbidden', message: 'User is not a member of this project' };
+    }
+
+    const { data: memberRow } = await this.client
+      .from('project_members')
+      .select('role')
+      .eq('project_id', projectId)
+      .eq('user_id', userRow.id)
+      .maybeSingle();
+
+    if (!memberRow) {
+      return { status: 'forbidden', message: 'User is not a member of this project' };
+    }
+
+    if (memberRow.role === 'viewer') {
+      return { status: 'forbidden', message: 'Viewer role cannot create workspaces' };
+    }
+
+    const now = new Date().toISOString();
+    const workspaceRow = {
+      project_id: projectId,
+      name: input.name,
+      active_branch: input.activeBranch || 'main',
+      created_at: now,
+      updated_at: now,
+    };
+
+    const { data: wsData, error: wsErr } = await this.client
+      .from('workspaces')
+      .insert(workspaceRow)
+      .select('*')
+      .single();
+
+    if (wsErr || !wsData) {
+      throw new Error(`Failed to create workspace: ${wsErr?.message}`);
+    }
+
+    return { status: 'ok', workspace: mapWorkspace(wsData) };
+  }
+
+  public async listWorkspaces(projectId: string, authUserId: string): Promise<ListWorkspacesResult> {
+    if (!isValidUuid(projectId)) {
+      return { status: 'invalid_id' };
+    }
+
+    const { data: projectRow } = await this.client
+      .from('projects')
+      .select('id')
+      .eq('id', projectId)
+      .maybeSingle();
+
+    if (!projectRow) {
+      return { status: 'not_found' };
+    }
+
+    const { data: userRow } = await this.client
+      .from('users')
+      .select('id')
+      .eq('auth_user_id', authUserId)
+      .maybeSingle();
+
+    if (!userRow) {
+      return { status: 'forbidden' };
+    }
+
+    const { data: memberRow } = await this.client
+      .from('project_members')
+      .select('role')
+      .eq('project_id', projectId)
+      .eq('user_id', userRow.id)
+      .maybeSingle();
+
+    if (!memberRow) {
+      return { status: 'forbidden' };
+    }
+
+    const { data: wsRows, error: wsErr } = await this.client
+      .from('workspaces')
+      .select('*')
+      .eq('project_id', projectId);
+
+    if (wsErr || !wsRows) {
+      return { status: 'ok', workspaces: [] };
+    }
+
+    return { status: 'ok', workspaces: wsRows.map(mapWorkspace) };
+  }
+
+  public async addMember(
+    projectId: string,
+    authUserId: string,
+    email: string,
+    role: ProjectMemberRole
+  ): Promise<ProjectMember> {
+    const user = await this.getOrCreateUser(authUserId, email);
+    const now = new Date().toISOString();
+    const memberRow = {
+      project_id: projectId,
+      user_id: user.id,
+      role,
+      created_at: now,
+      updated_at: now,
+    };
+
+    const { data: createdMember, error: mErr } = await this.client
+      .from('project_members')
+      .upsert(memberRow, { onConflict: 'project_id,user_id' })
+      .select('*')
+      .single();
+
+    if (mErr || !createdMember) {
+      throw new Error(`Failed to add member: ${mErr?.message}`);
+    }
+
+    return mapMember(createdMember);
+  }
+
+  public async joinProjectByCode(
+    joinCode: string,
+    authUserId: string,
+    email: string
+  ): Promise<JoinProjectResult> {
+    const { data: projectRow, error: pErr } = await this.client
+      .from('projects')
+      .select('*')
+      .eq('join_code', joinCode)
+      .maybeSingle();
+
+    if (pErr || !projectRow) {
+      return { status: 'not_found' };
+    }
+
+    const user = await this.getOrCreateUser(authUserId, email);
+
+    const { data: existingMember } = await this.client
+      .from('project_members')
+      .select('*')
+      .eq('project_id', projectRow.id)
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    if (existingMember) {
+      return { status: 'already_member' };
+    }
+
+    const now = new Date().toISOString();
+    const memberRow = {
+      project_id: projectRow.id,
+      user_id: user.id,
+      role: 'editor',
+      created_at: now,
+      updated_at: now,
+    };
+
+    const { data: createdMember, error: mErr } = await this.client
+      .from('project_members')
+      .insert(memberRow)
+      .select('*')
+      .single();
+
+    if (mErr || !createdMember) {
+      throw new Error(`Failed to join project: ${mErr?.message}`);
+    }
+
+    return {
+      status: 'ok',
+      project: mapProject(projectRow),
+      member: mapMember(createdMember),
+    };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Implementation 2: In-Memory Service (Offline Vitest Tests & Fallback)
+// ---------------------------------------------------------------------------
+
+export class InMemoryProjectService implements IProjectService {
+  private users: Map<string, User> = new Map();
+  private userAuthMap: Map<string, string> = new Map();
+  private projects: Map<string, Project> = new Map();
+  private projectMembers: Map<string, ProjectMember> = new Map();
+  private workspaces: Map<string, Workspace> = new Map();
+
   public reset(): void {
     this.users.clear();
     this.userAuthMap.clear();
@@ -37,10 +532,7 @@ export class ProjectService {
     this.workspaces.clear();
   }
 
-  /**
-   * Gets or creates a internal user record linked to authUserId (Supabase sub)
-   */
-  public getOrCreateUser(authUserId: string, email: string): User {
+  public async getOrCreateUser(authUserId: string, email: string): Promise<User> {
     const userId = this.userAuthMap.get(authUserId);
     if (userId && this.users.has(userId)) {
       return this.users.get(userId)!;
@@ -61,18 +553,16 @@ export class ProjectService {
     return newUser;
   }
 
-  /**
-   * Creates a new project and assigns creator as owner in project_members
-   */
-  public createProject(
+  public async createProject(
     authUserId: string,
     email: string,
     input: CreateProjectInput
-  ): { project: Project; member: ProjectMember } {
-    const user = this.getOrCreateUser(authUserId, email);
+  ): Promise<{ project: Project; member: ProjectMember }> {
+    const user = await this.getOrCreateUser(authUserId, email);
     const now = new Date().toISOString();
-
-    const joinCode = Array.from({length: 6}, () => 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'[Math.floor(Math.random() * 36)]).join('');
+    const joinCode = Array.from({ length: 6 }, () =>
+      'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'[Math.floor(Math.random() * 36)]
+    ).join('');
 
     const project: Project = {
       id: generateUUID(),
@@ -99,17 +589,7 @@ export class ProjectService {
     return { project, member };
   }
 
-  /**
-   * Retrieves a project details + members + workspaces if user has membership
-   */
-  public getProject(
-    projectId: string,
-    authUserId: string
-  ):
-    | { status: 'ok'; project: Project; role: ProjectMemberRole; members: ProjectMember[]; workspaces: Workspace[] }
-    | { status: 'invalid_id' }
-    | { status: 'not_found' }
-    | { status: 'forbidden' } {
+  public async getProject(projectId: string, authUserId: string): Promise<GetProjectResult> {
     if (!isValidUuid(projectId)) {
       return { status: 'invalid_id' };
     }
@@ -153,14 +633,11 @@ export class ProjectService {
     };
   }
 
-  /**
-   * Lists projects accessible to the authenticated user
-   */
-  public listUserProjects(authUserId: string, email?: string): Project[] {
+  public async listUserProjects(authUserId: string, email?: string): Promise<Project[]> {
     const userId = this.userAuthMap.get(authUserId);
     if (!userId) {
       if (email) {
-        this.getOrCreateUser(authUserId, email);
+        await this.getOrCreateUser(authUserId, email);
       } else {
         return [];
       }
@@ -188,18 +665,11 @@ export class ProjectService {
     return result;
   }
 
-  /**
-   * Spawns a new workspace for a project (RBAC: requires owner or editor role)
-   */
-  public createWorkspace(
+  public async createWorkspace(
     projectId: string,
     authUserId: string,
     input: CreateWorkspaceInput
-  ):
-    | { status: 'ok'; workspace: Workspace }
-    | { status: 'invalid_id' }
-    | { status: 'not_found' }
-    | { status: 'forbidden'; message?: string } {
+  ): Promise<CreateWorkspaceResult> {
     if (!isValidUuid(projectId)) {
       return { status: 'invalid_id' };
     }
@@ -238,17 +708,7 @@ export class ProjectService {
     return { status: 'ok', workspace };
   }
 
-  /**
-   * Lists all workspaces for a given project (requires member role)
-   */
-  public listWorkspaces(
-    projectId: string,
-    authUserId: string
-  ):
-    | { status: 'ok'; workspaces: Workspace[] }
-    | { status: 'invalid_id' }
-    | { status: 'not_found' }
-    | { status: 'forbidden' } {
+  public async listWorkspaces(projectId: string, authUserId: string): Promise<ListWorkspacesResult> {
     if (!isValidUuid(projectId)) {
       return { status: 'invalid_id' };
     }
@@ -279,16 +739,13 @@ export class ProjectService {
     return { status: 'ok', workspaces: result };
   }
 
-  /**
-   * Helper to add a member to a project with specific role (used in tests/invites)
-   */
-  public addMember(
+  public async addMember(
     projectId: string,
     authUserId: string,
     email: string,
     role: ProjectMemberRole
-  ): ProjectMember {
-    const user = this.getOrCreateUser(authUserId, email);
+  ): Promise<ProjectMember> {
+    const user = await this.getOrCreateUser(authUserId, email);
     const now = new Date().toISOString();
     const member: ProjectMember = {
       id: generateUUID(),
@@ -302,17 +759,11 @@ export class ProjectService {
     return member;
   }
 
-  /**
-   * Joins a project using a collaboration code
-   */
-  public joinProjectByCode(
+  public async joinProjectByCode(
     joinCode: string,
     authUserId: string,
     email: string
-  ):
-    | { status: 'ok'; project: Project; member: ProjectMember }
-    | { status: 'not_found' }
-    | { status: 'already_member' } {
+  ): Promise<JoinProjectResult> {
     let targetProject: Project | null = null;
     for (const proj of this.projects.values()) {
       if (proj.joinCode === joinCode) {
@@ -325,7 +776,7 @@ export class ProjectService {
       return { status: 'not_found' };
     }
 
-    const user = this.getOrCreateUser(authUserId, email);
+    const user = await this.getOrCreateUser(authUserId, email);
     const memberKey = `${targetProject.id}:${user.id}`;
     if (this.projectMembers.has(memberKey)) {
       return { status: 'already_member' };
@@ -346,4 +797,37 @@ export class ProjectService {
   }
 }
 
-export const projectService = new ProjectService();
+// ---------------------------------------------------------------------------
+// Singleton & Factory resolution
+// ---------------------------------------------------------------------------
+
+export const inMemoryProjectService = new InMemoryProjectService();
+export const projectService = inMemoryProjectService;
+
+let cachedClient: SupabaseClient | null = null;
+let cachedKey = '';
+
+export function getProjectService(env?: Env['Bindings']): IProjectService {
+  const supabaseUrl =
+    env?.SUPABASE_URL ||
+    (typeof process !== 'undefined' ? process.env?.SUPABASE_URL : undefined);
+  const serviceRoleKey =
+    (env as any)?.SUPABASE_SERVICE_ROLE_KEY ||
+    (typeof process !== 'undefined' ? process.env?.SUPABASE_SERVICE_ROLE_KEY : undefined);
+
+  if (supabaseUrl && serviceRoleKey) {
+    const keyPair = `${supabaseUrl}::${serviceRoleKey}`;
+    if (!cachedClient || cachedKey !== keyPair) {
+      cachedClient = createClient(supabaseUrl, serviceRoleKey, {
+        auth: {
+          persistSession: false,
+          autoRefreshToken: false,
+        },
+      });
+      cachedKey = keyPair;
+    }
+    return new SupabaseProjectService(cachedClient);
+  }
+
+  return inMemoryProjectService;
+}

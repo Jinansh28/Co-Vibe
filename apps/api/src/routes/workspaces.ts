@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { CreateWorkspaceSchema } from '@co-vibe/protocol';
 import type { Env } from '../middleware/auth.js';
-import { projectService } from '../services/projectService.js';
+import { getProjectService } from '../services/projectService.js';
 
 export const workspaceRoutes = new Hono<Env>();
 
@@ -35,7 +35,8 @@ workspaceRoutes.post('/:id/workspaces', async (c) => {
     );
   }
 
-  const res = projectService.createWorkspace(id, authUser.sub, result.data);
+  const service = getProjectService(c.env);
+  const res = await service.createWorkspace(id, authUser.sub, result.data);
 
   if (res.status === 'invalid_id') {
     return c.json(
@@ -76,11 +77,12 @@ workspaceRoutes.post('/:id/workspaces', async (c) => {
 });
 
 // GET /api/v1/projects/:id/workspaces - List workspaces in a project
-workspaceRoutes.get('/:id/workspaces', (c) => {
+workspaceRoutes.get('/:id/workspaces', async (c) => {
   const authUser = c.get('authUser');
   const id = c.req.param('id');
 
-  const res = projectService.listWorkspaces(id, authUser.sub);
+  const service = getProjectService(c.env);
+  const res = await service.listWorkspaces(id, authUser.sub);
 
   if (res.status === 'invalid_id') {
     return c.json(
