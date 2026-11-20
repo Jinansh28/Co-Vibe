@@ -28,10 +28,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children, initialSes
 
     async function getInitialSession() {
       try {
-        const { data: { session: currentSession }, error } = await supabase.auth.getSession();
-        if (error) {
-          console.warn('Error fetching Supabase session:', error.message);
-        }
+        const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), 1500));
+        const sessionPromise = supabase.auth.getSession().then(({ data, error }) => {
+          if (error) {
+            console.warn('Error fetching Supabase session:', error.message);
+          }
+          return data?.session ?? null;
+        }).catch(() => null);
+
+        const currentSession = await Promise.race([sessionPromise, timeoutPromise]);
         if (mounted) {
           setSession(currentSession);
           setUser(currentSession?.user ?? null);

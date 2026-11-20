@@ -1,7 +1,13 @@
 import React, { useRef, useCallback } from 'react';
-import Editor, { OnMount, BeforeMount, Monaco } from '@monaco-editor/react';
+import Editor, { OnMount, BeforeMount, Monaco, loader } from '@monaco-editor/react';
+import * as monaco from 'monaco-editor';
 import type { editor } from 'monaco-editor';
 import { DEFAULT_EDITOR_OPTIONS, getLanguageFromPath } from './editorConfig.js';
+
+// Configure @monaco-editor/react to use local bundled Monaco Editor instead of remote CDN in browser
+if (typeof window !== 'undefined' && process.env.NODE_ENV !== 'test') {
+  loader.config({ monaco });
+}
 
 export interface MonacoEditorProps {
   filePath?: string;

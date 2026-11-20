@@ -3,8 +3,22 @@ import type { FileItem } from './FileTree.js';
 
 const RUNTIME_URL = 'http://127.0.0.1:7890';
 
+export const DEFAULT_STARTER_FILES: FileItem[] = [
+  {
+    id: 'src',
+    name: 'src',
+    type: 'folder',
+    children: [
+      { id: 'src/App.tsx', name: 'App.tsx', type: 'file' },
+      { id: 'src/main.ts', name: 'main.ts', type: 'file' },
+    ],
+  },
+  { id: 'package.json', name: 'package.json', type: 'file' },
+  { id: 'README.md', name: 'README.md', type: 'file' },
+];
+
 export function useFiles(workspaceId?: string | null) {
-  const [fileTree, setFileTree] = useState<FileItem[]>([]);
+  const [fileTree, setFileTree] = useState<FileItem[]>(DEFAULT_STARTER_FILES);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -15,16 +29,21 @@ export function useFiles(workspaceId?: string | null) {
       const headers: Record<string, string> = {};
       if (workspaceId) headers['X-Workspace-Id'] = workspaceId;
       
-      const res = await fetch(`${RUNTIME_URL}/api/v1/files`, { headers });
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 2000);
+
+      const res = await fetch(`${RUNTIME_URL}/api/v1/files`, { headers, signal: controller.signal });
+      clearTimeout(timeoutId);
       const data = await res.json();
       if (!res.ok || !data.ok) throw new Error(data.error || 'Failed to fetch files');
-      setFileTree(data.files || []);
+      setFileTree(data.files && data.files.length > 0 ? data.files : DEFAULT_STARTER_FILES);
     } catch (err: any) {
       setError(err.message);
+      setFileTree((prev) => (prev.length > 0 ? prev : DEFAULT_STARTER_FILES));
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [workspaceId]);
 
   const getFileContent = useCallback(async (path: string): Promise<string> => {
     const headers: Record<string, string> = {};

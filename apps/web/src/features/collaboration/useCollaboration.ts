@@ -104,9 +104,18 @@ export function useCollaboration(
       const headers: Record<string, string> = {};
       if (workspaceId) headers['X-Workspace-Id'] = workspaceId;
 
-      // Fetch content from local runtime
-      fetch(`http://127.0.0.1:7890/api/v1/files/content?path=${encodeURIComponent(filePath)}`, { headers })
-        .then(res => res.json())
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 2000);
+
+      // Fetch content from local runtime with 2s timeout
+      fetch(`http://127.0.0.1:7890/api/v1/files/content?path=${encodeURIComponent(filePath)}`, {
+        headers,
+        signal: controller.signal,
+      })
+        .then(res => {
+          clearTimeout(timeoutId);
+          return res.json();
+        })
         .then(data => {
           if (data.ok && typeof data.content === 'string') {
             // Check if it's still empty, to prevent overwriting collaborative changes that might have happened during fetch
@@ -117,6 +126,7 @@ export function useCollaboration(
           initializeBinding(yText);
         })
         .catch(err => {
+          clearTimeout(timeoutId);
           console.error('Failed to load file content:', err);
           initializeBinding(yText);
         });
