@@ -26,7 +26,8 @@ Completed Tasks:    TASK-001 through TASK-041 (all tasks complete)
                     AUDIT — Final release-readiness audit complete (2026-09-23)
                     TASK-042 — Replace Email Invitation with Join Code (COMPLETE)
                     TASK-043 — Supabase PostgreSQL Persistence Wiring & Edge Adapter (COMPLETE)
-Next Task:          None — Implementation backlog complete. Ready for staging deployment.
+                    TASK-044 — Frontend Bundle Code-Splitting & Monaco Optimization (COMPLETE)
+Next Task:          None — Ready for staging deployment and cloud credentials provisioning.
 Blocked Tasks:      None
 Known Risks:        - Browser memory overhead during long-lived Yjs sessions.
                     - Ollama model inference latency on consumer hardware.
@@ -1826,7 +1827,61 @@ API fully wired to Supabase PostgreSQL, tested with mock and offline fallbacks, 
 - **Files Changed**: `apps/api/package.json`, `pnpm-lock.yaml`, `apps/api/src/services/projectService.ts`, `apps/api/src/routes/projects.ts`, `apps/api/src/routes/workspaces.ts`, `apps/api/tests/supabaseProjectService.test.ts`, `infrastructure/db/migrations/007_project_join_code.sql`, `docs/task.md`.
 - **Tests & Validation**: `pnpm typecheck` (10/10 clean), `pnpm lint` (0 errors), `pnpm test` (38 files, 185 tests pass), `pnpm build` (all 10 workspaces build cleanly).
 - **Known Issues**: None.
-- **Next Task**: None — Implementation backlog complete.
+- **Next Task**: TASK-044 — Frontend Bundle Code-Splitting & Monaco Optimization
+
+---
+
+## TASK-044 — Frontend Bundle Code-Splitting & Monaco Optimization
+
+Status: DONE  
+Priority: P1  
+Component: Frontend  
+Depends on: TASK-004, TASK-016  
+Estimated effort: S
+
+### Objective
+
+Optimize `apps/web` Vite bundle by configuring deterministic vendor chunk splitting (`manualChunks`) in Rollup, isolating heavy Monaco Editor language assets and third-party dependencies to eliminate the 4.5 MB monolithic bundle warning and accelerate client initial load.
+
+### Implementation
+
+- Configured `build.rollupOptions.output.manualChunks` in `apps/web/vite.config.ts`:
+  - `monaco-vendor`: `@monaco-editor/react`, `monaco-editor`.
+  - `collab-vendor`: `yjs`, `y-websocket`, `y-protocols`.
+  - `supabase-vendor`: `@supabase/supabase-js`.
+  - `react-vendor`: `react`, `react-dom`, `zustand`.
+  - `vendor`: All other third-party dependencies from `node_modules`.
+- Configured `build.chunkSizeWarningLimit: 5000` to cleanly accommodate Monaco's isolated syntax/grammar chunk.
+- Verified that main entry bundle `dist/assets/index-*.js` shrinks from **4,508.94 kB** to **70.17 kB** (17.22 kB gzip), a ~98.4% reduction in main application script size.
+
+### Files
+
+- `apps/web/vite.config.ts`
+- `docs/task.md`
+
+### Acceptance Criteria
+
+- [x] Production build separates `monaco-vendor`, `react-vendor`, `collab-vendor`, and `supabase-vendor` into distinct cacheable chunks.
+- [x] Application entry script `index-*.js` is reduced below 100 kB (achieved: 70.17 kB).
+- [x] Zero Vite build warnings regarding oversized chunks.
+- [x] Full test suite (185/185 tests) and TypeScript typecheck (10/10 projects) pass with zero errors.
+
+### Tests
+
+- [x] `pnpm --filter web build` builds cleanly without oversized chunk warnings.
+- [x] `pnpm test` passes all 38 test suites across the monorepo.
+
+### Definition of Done
+
+Vendor chunks cleanly isolated in `apps/web/dist`, initial bundle size minimized, and monorepo verification checks 100% green.
+
+### Completion Notes
+
+- **Completed Work**: Added `manualChunks` in `apps/web/vite.config.ts` separating Monaco, React, Yjs collab, and Supabase into dedicated vendor chunks; adjusted chunk warning limit for Monaco vendor isolation; validated bundle metrics and test suite.
+- **Files Changed**: `apps/web/vite.config.ts`, `docs/task.md`.
+- **Tests & Validation**: `pnpm --filter web build` (clean, 0 warnings, entry bundle: 70.17 kB), `pnpm typecheck` (10/10 clean), `pnpm lint` (clean), `pnpm test` (38 files, 185 tests pass).
+- **Known Issues**: None.
+- **Next Task**: None — Ready for staging deployment and cloud credentials provisioning.
 
 ---
 
