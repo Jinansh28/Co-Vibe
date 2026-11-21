@@ -5,6 +5,45 @@ import { ProjectCard, ProjectCardData } from './ProjectCard.js';
 import { CreateProjectModal } from './CreateProjectModal.js';
 import { JoinProjectModal } from './JoinProjectModal.js';
 
+const LOCAL_STORAGE_PROJECTS_KEY = 'co_vibe_projects_cache';
+
+const DEFAULT_STARTER_PROJECT: ProjectCardData = {
+  id: 'starter-playground',
+  name: 'Co-Vibe Playground',
+  description: 'Default collaborative starter workspace with Monaco editor, terminal execution, and AI agent.',
+  createdAt: new Date().toISOString(),
+  role: 'owner',
+  workspaceCount: 1,
+  activeWorkspaceId: 'ws-starter',
+};
+
+function getLocalCachedProjects(): ProjectCardData[] {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const cached = localStorage.getItem(LOCAL_STORAGE_PROJECTS_KEY);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      }
+    }
+  } catch {
+    /* ignore localStorage errors */
+  }
+  return [DEFAULT_STARTER_PROJECT];
+}
+
+function saveLocalCachedProjects(projects: ProjectCardData[]): void {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      localStorage.setItem(LOCAL_STORAGE_PROJECTS_KEY, JSON.stringify(projects));
+    }
+  } catch {
+    /* ignore localStorage errors */
+  }
+}
+
 interface ProjectsPageProps {
   onOpenWorkspace?: (projectId: string, workspaceId?: string) => void;
   initialProjects?: ProjectCardData[];
@@ -17,8 +56,8 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
   const { user, session, signOut } = useAuth();
   const { showNotification } = useNotification();
 
-  const [projects, setProjects] = useState<ProjectCardData[]>(initialProjects || []);
-  const [isLoading, setIsLoading] = useState<boolean>(!initialProjects);
+  const [projects, setProjects] = useState<ProjectCardData[]>(() => initialProjects || getLocalCachedProjects());
+  const [isLoading, setIsLoading] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isJoinModalOpen, setIsJoinModalOpen] = useState(false);
@@ -50,14 +89,26 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
               activeWorkspaceId: p.activeWorkspaceId || `ws-${p.id}`,
               joinCode: p.joinCode,
             }));
-            setProjects(mappedProjects);
+            if (mappedProjects.length > 0) {
+              setProjects(mappedProjects);
+              saveLocalCachedProjects(mappedProjects);
+            } else {
+              const cached = getLocalCachedProjects();
+              setProjects(cached);
+            }
           }
         } else {
-          // If API fails or backend offline, keep empty list or default
-          if (isMounted) setProjects([]);
+          // If API fails or backend offline, retain local cached projects
+          if (isMounted) {
+            const cached = getLocalCachedProjects();
+            setProjects(cached);
+          }
         }
       } catch (err) {
-        if (isMounted) setProjects([]);
+        if (isMounted) {
+          const cached = getLocalCachedProjects();
+          setProjects(cached);
+        }
       } finally {
         if (isMounted) setIsLoading(false);
       }
@@ -67,7 +118,7 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [initialProjects]);
+  }, [initialProjects, session?.access_token]);
 
   const handleCreateProject = async (data: { name: string; description?: string; repoUrl?: string }) => {
     try {
@@ -99,7 +150,11 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
         activeWorkspaceId: `ws-${created.project?.id || Date.now()}`,
       };
 
-      setProjects((prev) => [newProjectData, ...prev]);
+      setProjects((prev) => {
+        const next = [newProjectData, ...prev.filter((p) => p.id !== newProjectData.id)];
+        saveLocalCachedProjects(next);
+        return next;
+      });
 
       // Automatically open workspace if callback provided
       if (onOpenWorkspace) {
@@ -116,7 +171,11 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
         workspaceCount: 1,
         activeWorkspaceId: `ws-${Date.now()}`,
       };
-      setProjects((prev) => [newProjectData, ...prev]);
+      setProjects((prev) => {
+        const next = [newProjectData, ...prev.filter((p) => p.id !== newProjectData.id)];
+        saveLocalCachedProjects(next);
+        return next;
+      });
       if (onOpenWorkspace) {
         onOpenWorkspace(newProjectData.id, newProjectData.activeWorkspaceId);
       }
@@ -151,10 +210,10 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
     };
 
     setProjects((prev) => {
-      if (prev.some((p) => p.id === newProjectData.id)) {
-        return prev;
-      }
-      return [newProjectData, ...prev];
+      const filtered = prev.filter((p) => p.id !== newProjectData.id);
+      const next = [newProjectData, ...filtered];
+      saveLocalCachedProjects(next);
+      return next;
     });
 
     if (onOpenWorkspace) {

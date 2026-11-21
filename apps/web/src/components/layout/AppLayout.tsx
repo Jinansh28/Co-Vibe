@@ -29,13 +29,6 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
 
   const { activeFilePath, openFiles, openFile, saveActiveFile } = useEditorStore();
 
-  // If no file is open when workspace loads, open default starter file to provide an immediate interactive playground
-  React.useEffect(() => {
-    if (!activeFilePath && openFiles.length === 0) {
-      openFile('src/App.tsx');
-    }
-  }, [activeFilePath, openFiles.length, openFile]);
-
   const [outputLines, setOutputLines] = useState<TerminalLine[]>([]);
   const [isRunning, setIsRunning] = useState(false);
   const [executionId, setExecutionId] = useState<string | null>(null);
@@ -233,6 +226,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
         {/* Right AI Agent Drawer */}
         <AgentPanel
           isOpen={isAgentOpen}
+          workspaceId={workspaceId}
           onClose={() => setIsAgentOpen(false)}
         />
       </div>

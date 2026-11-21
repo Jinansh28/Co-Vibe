@@ -1,6 +1,23 @@
 import type { Server } from 'node:http';
+import fs from 'node:fs';
+import path from 'node:path';
 import { TokenManager } from './auth/tokenManager.js';
 import { createPairingServer } from './server/pairingServer.js';
+
+// Automatically load runtime .env if present
+for (const envPath of [
+  path.resolve(process.cwd(), 'apps/runtime/.env'),
+  path.resolve(process.cwd(), '.env'),
+]) {
+  if (fs.existsSync(envPath) && typeof process.loadEnvFile === 'function') {
+    try {
+      process.loadEnvFile(envPath);
+      break;
+    } catch {
+      // Ignore env parsing error
+    }
+  }
+}
 
 export const PORT = Number(process.env.RUNTIME_PORT || 7890);
 

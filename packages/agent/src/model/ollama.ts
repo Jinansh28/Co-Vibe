@@ -3,19 +3,22 @@ import { AIProvider, GenerateOptions, GenerateResponse } from './interface.js';
 export class OllamaProvider implements AIProvider {
   public supportsToolCalling = true;
   private baseUrl: string;
+  private defaultModel: string;
 
-  constructor(baseUrl: string = 'http://127.0.0.1:11434') {
+  constructor(baseUrl: string = 'http://127.0.0.1:11434', defaultModel: string = 'qwen2.5-coder:7b') {
     this.baseUrl = baseUrl;
+    this.defaultModel = defaultModel;
   }
 
   async generate(options: GenerateOptions): Promise<GenerateResponse> {
+    const model = options.model === 'default' || !options.model ? this.defaultModel : options.model;
     const response = await fetch(`${this.baseUrl}/api/chat`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: options.model,
+        model,
         messages: options.messages,
         tools: options.tools,
         stream: false,
@@ -38,13 +41,14 @@ export class OllamaProvider implements AIProvider {
   }
 
   async *stream(options: GenerateOptions): AsyncGenerator<string, void, unknown> {
+    const model = options.model === 'default' || !options.model ? this.defaultModel : options.model;
     const response = await fetch(`${this.baseUrl}/api/chat`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: options.model,
+        model,
         messages: options.messages,
         tools: options.tools,
         stream: true,

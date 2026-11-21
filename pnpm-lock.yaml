@@ -78,6 +78,12 @@ importers:
 
   apps/runtime:
     dependencies:
+      '@co-vibe/agent':
+        specifier: workspace:*
+        version: link:../../packages/agent
+      '@co-vibe/context':
+        specifier: workspace:*
+        version: link:../../packages/context
       '@co-vibe/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol

@@ -101,6 +101,15 @@ function mapProject(row: any): Project {
   };
 }
 
+function isTableMissingError(err: any): boolean {
+  if (!err) return false;
+  return (
+    err.code === 'PGRST205' ||
+    (typeof err.message === 'string' &&
+      (err.message.includes('PGRST205') || err.message.includes('Could not find the table')))
+  );
+}
+
 function mapMember(row: any): ProjectMember {
   return {
     id: row.id,
@@ -128,18 +137,24 @@ function mapWorkspace(row: any): Workspace {
 // ---------------------------------------------------------------------------
 
 export class SupabaseProjectService implements IProjectService {
+  private fallback: InMemoryProjectService = inMemoryProjectService;
+
   constructor(private client: SupabaseClient) {}
 
   public reset(): void {
-    // No-op for persistent database
+    this.fallback.reset();
   }
 
   public async getOrCreateUser(authUserId: string, email: string): Promise<User> {
-    const { data: existingUser } = await this.client
+    const { data: existingUser, error: findErr } = await this.client
       .from('users')
       .select('*')
       .eq('auth_user_id', authUserId)
       .maybeSingle();
+
+    if (isTableMissingError(findErr)) {
+      return this.fallback.getOrCreateUser(authUserId, email);
+    }
 
     if (existingUser) {
       return mapUser(existingUser);
@@ -161,6 +176,9 @@ export class SupabaseProjectService implements IProjectService {
       .single();
 
     if (error || !created) {
+      if (isTableMissingError(error)) {
+        return this.fallback.getOrCreateUser(authUserId, email);
+      }
       // Handle race condition: check if inserted concurrently
       const { data: retryUser } = await this.client
         .from('users')
@@ -201,6 +219,10 @@ export class SupabaseProjectService implements IProjectService {
       .select('*')
       .single();
 
+    if (isTableMissingError(pErr)) {
+      return this.fallback.createProject(authUserId, email, input);
+    }
+
     if (pErr || !projectRow) {
       throw new Error(`Failed to create project: ${pErr?.message}`);
     }
@@ -218,6 +240,10 @@ export class SupabaseProjectService implements IProjectService {
       .insert(newMember)
       .select('*')
       .single();
+
+    if (isTableMissingError(mErr)) {
+      return this.fallback.createProject(authUserId, email, input);
+    }
 
     if (mErr || !memberRow) {
       throw new Error(`Failed to add project owner: ${mErr?.message}`);
@@ -244,6 +270,10 @@ export class SupabaseProjectService implements IProjectService {
       `)
       .eq('id', projectId)
       .maybeSingle();
+
+    if (isTableMissingError(pErr)) {
+      return this.fallback.getProject(projectId, authUserId);
+    }
 
     if (pErr || !projectRow) {
       return { status: 'not_found' };
@@ -278,11 +308,15 @@ export class SupabaseProjectService implements IProjectService {
   }
 
   public async listUserProjects(authUserId: string, email?: string): Promise<Project[]> {
-    const { data: userRow } = await this.client
+    const { data: userRow, error: uErr } = await this.client
       .from('users')
       .select('id')
       .eq('auth_user_id', authUserId)
       .maybeSingle();
+
+    if (isTableMissingError(uErr)) {
+      return this.fallback.listUserProjects(authUserId, email);
+    }
 
     let userId = userRow?.id;
     if (!userId) {
@@ -301,6 +335,10 @@ export class SupabaseProjectService implements IProjectService {
         projects (*)
       `)
       .eq('user_id', userId);
+
+    if (isTableMissingError(mErr)) {
+      return this.fallback.listUserProjects(authUserId, email);
+    }
 
     if (mErr || !memberRows) {
       return [];
@@ -324,11 +362,15 @@ export class SupabaseProjectService implements IProjectService {
       return { status: 'invalid_id' };
     }
 
-    const { data: projectRow } = await this.client
+    const { data: projectRow, error: pErr } = await this.client
       .from('projects')
       .select('id')
       .eq('id', projectId)
       .maybeSingle();
+
+    if (isTableMissingError(pErr)) {
+      return this.fallback.createWorkspace(projectId, authUserId, input);
+    }
 
     if (!projectRow) {
       return { status: 'not_found' };
@@ -374,6 +416,10 @@ export class SupabaseProjectService implements IProjectService {
       .select('*')
       .single();
 
+    if (isTableMissingError(wsErr)) {
+      return this.fallback.createWorkspace(projectId, authUserId, input);
+    }
+
     if (wsErr || !wsData) {
       throw new Error(`Failed to create workspace: ${wsErr?.message}`);
     }
@@ -386,11 +432,15 @@ export class SupabaseProjectService implements IProjectService {
       return { status: 'invalid_id' };
     }
 
-    const { data: projectRow } = await this.client
+    const { data: projectRow, error: pErr } = await this.client
       .from('projects')
       .select('id')
       .eq('id', projectId)
       .maybeSingle();
+
+    if (isTableMissingError(pErr)) {
+      return this.fallback.listWorkspaces(projectId, authUserId);
+    }
 
     if (!projectRow) {
       return { status: 'not_found' };
@@ -422,6 +472,10 @@ export class SupabaseProjectService implements IProjectService {
       .select('*')
       .eq('project_id', projectId);
 
+    if (isTableMissingError(wsErr)) {
+      return this.fallback.listWorkspaces(projectId, authUserId);
+    }
+
     if (wsErr || !wsRows) {
       return { status: 'ok', workspaces: [] };
     }
@@ -451,6 +505,10 @@ export class SupabaseProjectService implements IProjectService {
       .select('*')
       .single();
 
+    if (isTableMissingError(mErr)) {
+      return this.fallback.addMember(projectId, authUserId, email, role);
+    }
+
     if (mErr || !createdMember) {
       throw new Error(`Failed to add member: ${mErr?.message}`);
     }
@@ -468,6 +526,10 @@ export class SupabaseProjectService implements IProjectService {
       .select('*')
       .eq('join_code', joinCode)
       .maybeSingle();
+
+    if (isTableMissingError(pErr)) {
+      return this.fallback.joinProjectByCode(joinCode, authUserId, email);
+    }
 
     if (pErr || !projectRow) {
       return { status: 'not_found' };
@@ -500,6 +562,10 @@ export class SupabaseProjectService implements IProjectService {
       .insert(memberRow)
       .select('*')
       .single();
+
+    if (isTableMissingError(mErr)) {
+      return this.fallback.joinProjectByCode(joinCode, authUserId, email);
+    }
 
     if (mErr || !createdMember) {
       throw new Error(`Failed to join project: ${mErr?.message}`);

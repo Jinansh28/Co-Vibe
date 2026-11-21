@@ -125,4 +125,72 @@ describe('Pairing Server HTTP Endpoints', () => {
     });
     expect(res.status).toBe(204);
   });
+
+  it('GET /api/v1/files initializes workspace directory and seeds files once', async () => {
+    const testWsId = `test-ws-${Date.now()}`;
+    const res = await fetch(`${baseUrl}/api/v1/files`, {
+      headers: { 'X-Workspace-Id': testWsId },
+    });
+    expect(res.status).toBe(200);
+    const data = (await res.json()) as Record<string, any>;
+    expect(data.ok).toBe(true);
+    expect(Array.isArray(data.files)).toBe(true);
+
+    const fileNames = data.files.map((f: any) => f.name);
+    expect(fileNames).toContain('README.md');
+    expect(fileNames).toContain('package.json');
+    expect(fileNames).toContain('src');
+
+    // Delete a file
+    const delRes = await fetch(`${baseUrl}/api/v1/files?path=README.md`, {
+      method: 'DELETE',
+      headers: { 'X-Workspace-Id': testWsId },
+    });
+    expect(delRes.status).toBe(200);
+
+    // Fetch again: README.md must NOT reappear
+    const res2 = await fetch(`${baseUrl}/api/v1/files`, {
+      headers: { 'X-Workspace-Id': testWsId },
+    });
+    const data2 = (await res2.json()) as Record<string, any>;
+    const fileNames2 = data2.files.map((f: any) => f.name);
+    expect(fileNames2).not.toContain('README.md');
+  });
+
+  it('POST /api/v1/agent/run rejects missing prompt with 400 Bad Request', async () => {
+    const res = await fetch(`${baseUrl}/api/v1/agent/run`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    expect(res.status).toBe(400);
+    const data = (await res.json()) as any;
+    expect(data.ok).toBe(false);
+  });
+
+  it('POST /api/v1/agent/run executes agent and streams NDJSON progress events', async () => {
+    process.env.AI_PROVIDER = 'mock';
+    const testWsId = `test-ws-agent-${Date.now()}`;
+
+    const res = await fetch(`${baseUrl}/api/v1/agent/run`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Workspace-Id': testWsId,
+      },
+      body: JSON.stringify({ prompt: 'Create a greeting file' }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toContain('application/x-ndjson');
+
+    const text = await res.text();
+    const lines = text.trim().split('\n').map((l) => JSON.parse(l));
+
+    expect(lines.length).toBeGreaterThan(0);
+    const states = lines.map((l: any) => l.state);
+    expect(states).toContain('PLANNING');
+    expect(states).toContain('EXECUTING');
+    expect(states).toContain('SUCCESS');
+  });
 });

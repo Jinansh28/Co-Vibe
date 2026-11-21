@@ -31,15 +31,6 @@ interface EditorPaneProps {
   readOnly?: boolean;
 }
 
-const DEFAULT_SAMPLE_CONTENT = `import React from 'react';
-import { AppLayout } from './components/layout/AppLayout';
-
-// Co-Vibe IDE — Collaborative AI Vibe-Coding Workspace
-export default function App() {
-  return <AppLayout />;
-}
-`;
-
 export const EditorPane: React.FC<EditorPaneProps> = ({
   workspaceId,
   value,
@@ -143,7 +134,7 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
           <MonacoEditor
             filePath={activeFilePath}
             value={value}
-            defaultValue={defaultValue ?? (value === undefined ? DEFAULT_SAMPLE_CONTENT : undefined)}
+            defaultValue={defaultValue ?? (value === undefined ? '' : undefined)}
             language={language}
             theme="vs-dark"
             onChange={onChange}

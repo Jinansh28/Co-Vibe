@@ -1,13 +1,63 @@
 import http from 'node:http';
 import fs from 'node:fs/promises';
+import syncFs from 'node:fs';
 import path from 'node:path';
 import { spawn, ChildProcess } from 'node:child_process';
 import crypto from 'node:crypto';
-import { PairingVerifySchema } from '@co-vibe/protocol';
+import { PairingVerifySchema, type AgentTaskProgressPayload } from '@co-vibe/protocol';
 import { TokenManager } from '../auth/tokenManager.js';
 import { assertWorkspacePath } from '@co-vibe/security';
+import {
+  AgentOrchestrator,
+  AgentStateMachine,
+  ToolRegistry,
+  readFileTool,
+  writeFileTool,
+  listDirTool,
+  runCommandTool,
+  runTestsTool,
+  createAIProvider,
+} from '@co-vibe/agent';
+import { ContextRetriever } from '@co-vibe/context';
 
 const activeProcesses = new Map<string, ChildProcess>();
+
+function loadEnvConfig() {
+  const envPaths = [
+    path.resolve(process.cwd(), 'apps/runtime/.env'),
+    path.resolve(process.cwd(), '.env'),
+    path.resolve(process.cwd(), '../.env'),
+    path.resolve(process.cwd(), '../../.env'),
+  ];
+  for (const envPath of envPaths) {
+    if (syncFs.existsSync(envPath)) {
+      if (typeof process.loadEnvFile === 'function') {
+        try {
+          process.loadEnvFile(envPath);
+        } catch {
+          // Ignore
+        }
+      }
+      try {
+        const content = syncFs.readFileSync(envPath, 'utf8');
+        for (const line of content.split('\n')) {
+          const trimmed = line.trim();
+          if (!trimmed || trimmed.startsWith('#')) continue;
+          const idx = trimmed.indexOf('=');
+          if (idx > 0) {
+            const key = trimmed.slice(0, idx).trim();
+            const val = trimmed.slice(idx + 1).trim().replace(/^["']|["']$/g, '');
+            if (!process.env[key] || process.env[key] === '') {
+              process.env[key] = val;
+            }
+          }
+        }
+      } catch {
+        // Ignore read error
+      }
+    }
+  }
+}
 
 function getWorkspaceRoot(req?: http.IncomingMessage) {
   const baseRoot = process.env.WORKSPACE_ROOT || process.cwd();
@@ -75,6 +125,18 @@ export function createPairingRequestHandler(tokenManager: TokenManager) {
           version: '0.1.0',
         })
       );
+      return;
+    }
+
+    if (pathname === '/api/v1/agent/info' && method === 'GET') {
+      loadEnvConfig();
+      const hasGemini = Boolean(process.env.GEMINI_API_KEY);
+      const provider = hasGemini ? 'Gemini' : 'Ollama';
+      const model = hasGemini
+        ? (process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite')
+        : (process.env.OLLAMA_MODEL || 'qwen3.5:4b');
+      res.writeHead(200);
+      res.end(JSON.stringify({ ok: true, provider, model }));
       return;
     }
 
@@ -272,6 +334,117 @@ export function createPairingRequestHandler(tokenManager: TokenManager) {
       return;
     }
 
+    // -------------------------------------------------------------------------
+    // POST /api/v1/agent/run — Autonomous AI Agent Task Execution (NDJSON Stream)
+    // -------------------------------------------------------------------------
+    if ((pathname === '/api/v1/agent/run' || pathname === '/api/v1/agent/task') && method === 'POST') {
+      const body = await parseJsonBody<{ prompt?: string }>(req);
+      if (!body || typeof body.prompt !== 'string' || !body.prompt.trim()) {
+        res.writeHead(400);
+        res.end(JSON.stringify({ ok: false, error: 'Missing required field: prompt' }));
+        return;
+      }
+
+      const workspaceRoot = getWorkspaceRoot(req);
+      await fs.mkdir(workspaceRoot, { recursive: true });
+
+      // Stream progress events as NDJSON
+      res.setHeader('Content-Type', 'application/x-ndjson');
+      res.setHeader('Transfer-Encoding', 'chunked');
+      res.writeHead(200);
+
+      const taskId = crypto.randomUUID();
+      const runId = crypto.randomUUID();
+
+      const writeProgress = (payload: AgentTaskProgressPayload) => {
+        try {
+          res.write(JSON.stringify(payload) + '\n');
+        } catch {
+          // Client stream connection closed or write error
+        }
+      };
+
+      try {
+        // Collect existing workspace files for context retrieval
+        const workspaceFiles = new Map<string, string>();
+        const readFilesRecursively = async (dir: string, relative: string) => {
+          try {
+            const entries = await fs.readdir(dir, { withFileTypes: true });
+            for (const entry of entries) {
+              if (entry.name === 'node_modules' || entry.name === '.git' || entry.name === '.workspaces') continue;
+              const fullPath = path.join(dir, entry.name);
+              const relPath = relative ? `${relative}/${entry.name}` : entry.name;
+              if (entry.isDirectory()) {
+                await readFilesRecursively(fullPath, relPath);
+              } else if (entry.isFile()) {
+                try {
+                  const content = await fs.readFile(fullPath, 'utf8');
+                  workspaceFiles.set(relPath, content);
+                } catch {
+                  // Ignore unreadable binary or permission-restricted files
+                }
+              }
+            }
+          } catch {
+            // Ignore unreadable directory
+          }
+        };
+
+        await readFilesRecursively(workspaceRoot, '');
+
+        // Initialize tool registry with filesystem & shell execution tools
+        const toolRegistry = new ToolRegistry();
+        toolRegistry.register(readFileTool);
+        toolRegistry.register(writeFileTool);
+        toolRegistry.register(listDirTool);
+        toolRegistry.register(runCommandTool);
+        toolRegistry.register(runTestsTool);
+
+        // Configure workspace root for filesystem tools
+        process.env.WORKSPACE_ROOT = workspaceRoot;
+
+        // Ensure .env is loaded
+        loadEnvConfig();
+
+        // Create configured AI provider (Gemini or Ollama)
+        const provider = createAIProvider();
+
+        const orchestrator = new AgentOrchestrator({
+          provider,
+          toolRegistry,
+          stateMachine: new AgentStateMachine('created'),
+          contextRetriever: new ContextRetriever(),
+          taskId,
+          runId,
+          workspaceFiles,
+          onProgress: writeProgress,
+        });
+
+        const result = await orchestrator.executeTask(body.prompt);
+
+        writeProgress({
+          taskId,
+          runId,
+          state: 'SUCCESS',
+          stepName: 'Task Complete',
+          message: result || 'Agent completed task successfully.',
+          percentage: 100,
+        });
+      } catch (err: any) {
+        writeProgress({
+          taskId,
+          runId,
+          state: 'FAILED',
+          stepName: 'Execution Error',
+          message: err?.message || String(err),
+          percentage: 100,
+        });
+      } finally {
+        res.end();
+      }
+      return;
+    }
+
     // File System Endpoints
     if (pathname.startsWith('/api/v1/files')) {
       // Very basic token validation for files (in MVP, local is trusted if CORS allows)
@@ -289,11 +462,54 @@ export function createPairingRequestHandler(tokenManager: TokenManager) {
 
       if (pathname === '/api/v1/files' && method === 'GET') {
         try {
+          await fs.mkdir(safePath, { recursive: true });
+
+          // Seed real starter files if newly initialized workspace directory
+          const workspaceId = req.headers['x-workspace-id'];
+          if (workspaceId && typeof workspaceId === 'string') {
+            const workspaceRoot = getWorkspaceRoot(req);
+            const initMarker = path.join(workspaceRoot, '.initialized');
+            let isInitialized = false;
+            try {
+              await fs.access(initMarker);
+              isInitialized = true;
+            } catch {
+              isInitialized = false;
+            }
+
+            if (!isInitialized) {
+              try {
+                const existing = await fs.readdir(workspaceRoot);
+                if (existing.length === 0) {
+                  await fs.writeFile(
+                    path.join(workspaceRoot, 'README.md'),
+                    '# Workspace\n\nWelcome to your collaborative workspace.\n',
+                    'utf8'
+                  );
+                  await fs.writeFile(
+                    path.join(workspaceRoot, 'package.json'),
+                    JSON.stringify({ name: 'workspace', version: '1.0.0', type: 'module' }, null, 2),
+                    'utf8'
+                  );
+                  await fs.mkdir(path.join(workspaceRoot, 'src'), { recursive: true });
+                  await fs.writeFile(
+                    path.join(workspaceRoot, 'src', 'index.js'),
+                    "console.log('Hello from Co-Vibe!');\n",
+                    'utf8'
+                  );
+                }
+                await fs.writeFile(initMarker, new Date().toISOString(), 'utf8');
+              } catch {
+                // Ignore seeding errors in constrained environments
+              }
+            }
+          }
+
           const buildTree = async (currentPath: string, relativePath: string): Promise<any[]> => {
             const items = await fs.readdir(currentPath, { withFileTypes: true });
             const result = [];
             for (const item of items) {
-              if (item.name === 'node_modules' || item.name === '.git') continue;
+              if (item.name === 'node_modules' || item.name === '.git' || item.name === '.initialized') continue;
               const itemRelativePath = relativePath === '.' ? item.name : `${relativePath}/${item.name}`;
               if (item.isDirectory()) {
                 result.push({

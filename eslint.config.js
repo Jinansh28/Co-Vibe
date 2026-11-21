@@ -5,7 +5,7 @@ export default tseslint.config(
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
-    ignores: ['**/dist/**', '**/build/**', '**/.vite/**', '**/.wrangler/**', '**/coverage/**'],
+    ignores: ['**/dist/**', '**/build/**', '**/.vite/**', '**/.wrangler/**', '**/coverage/**', '**/.workspaces/**'],
   },
   {
     files: ['**/*.ts', '**/*.tsx'],

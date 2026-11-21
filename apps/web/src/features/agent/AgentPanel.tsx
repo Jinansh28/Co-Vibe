@@ -1,28 +1,130 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ToolTimeline } from './ToolTimeline.js';
 import { AgentTaskProgressPayload } from '@co-vibe/protocol';
+
+const RUNTIME_URL = 'http://127.0.0.1:7890';
+
 interface AgentPanelProps {
   isOpen: boolean;
+  workspaceId?: string | null;
   onClose?: () => void;
 }
 
-export const AgentPanel: React.FC<AgentPanelProps> = ({ isOpen, onClose }) => {
+export const AgentPanel: React.FC<AgentPanelProps> = ({ isOpen, workspaceId, onClose }) => {
   const [prompt, setPrompt] = useState('');
+  const [isExecuting, setIsExecuting] = useState(false);
+  const [activeGoal, setActiveGoal] = useState<string | null>(null);
   const [timelineEvents, setTimelineEvents] = useState<AgentTaskProgressPayload[]>([]);
+  const [modelInfo, setModelInfo] = useState<{ provider: string; model: string }>({
+    provider: 'Gemini',
+    model: 'gemini-3.5-flash-lite',
+  });
 
-  const handleSend = () => {
-    if (!prompt.trim()) return;
-    
-    // Add a temporary optimistic event to the timeline
-    setTimelineEvents(prev => [...prev, {
-      type: 'agent.progress',
-      taskId: 'temp',
-      step: 'user_input',
-      details: prompt,
-      status: 'completed'
-    } as any]);
-    
+  useEffect(() => {
+    if (!isOpen) return;
+    fetch(`${RUNTIME_URL}/api/v1/agent/info`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.ok) {
+          setModelInfo({ provider: data.provider, model: data.model });
+        }
+      })
+      .catch(() => {
+        // Fallback default
+      });
+  }, [isOpen]);
+
+  const handleSend = async () => {
+    const text = prompt.trim();
+    if (!text || isExecuting) return;
+
+    setIsExecuting(true);
+    setActiveGoal(text);
     setPrompt('');
+
+    // Add optimistic start event
+    const startEvent: AgentTaskProgressPayload = {
+      taskId: 'client-task',
+      runId: 'client-run',
+      state: 'PENDING',
+      stepName: 'User Request',
+      message: text,
+      percentage: 5,
+    };
+    setTimelineEvents((prev) => [...prev, startEvent]);
+
+    try {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      if (workspaceId) {
+        headers['X-Workspace-Id'] = workspaceId;
+      }
+
+      const res = await fetch(`${RUNTIME_URL}/api/v1/agent/run`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ prompt: text }),
+      });
+
+      if (!res.ok || !res.body) {
+        const errorText = await res.text().catch(() => res.statusText);
+        setTimelineEvents((prev) => [
+          ...prev,
+          {
+            taskId: 'err',
+            runId: 'err',
+            state: 'FAILED',
+            stepName: 'Connection Error',
+            message: `Runtime error (${res.status}): ${errorText || 'Failed to start agent task'}`,
+            percentage: 100,
+          },
+        ]);
+        setIsExecuting(false);
+        return;
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() ?? '';
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed) continue;
+          try {
+            const event = JSON.parse(trimmed) as AgentTaskProgressPayload;
+            setTimelineEvents((prev) => [...prev, event]);
+          } catch {
+            // Ignore non-json chunk
+          }
+        }
+      }
+    } catch (err: any) {
+      setTimelineEvents((prev) => [
+        ...prev,
+        {
+          taskId: 'err',
+          runId: 'err',
+          state: 'FAILED',
+          stepName: 'Network Error',
+          message:
+            err?.message?.includes('Failed to fetch') || err?.name === 'TypeError'
+              ? 'Could not connect to the local runtime daemon on http://127.0.0.1:7890. Ensure "pnpm dev:all" or the runtime daemon is running.'
+              : `Agent execution failed: ${err?.message || String(err)}`,
+          percentage: 100,
+        },
+      ]);
+    } finally {
+      setIsExecuting(false);
+    }
   };
 
   if (!isOpen) return null;
@@ -71,12 +173,14 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ isOpen, onClose }) => {
               fontWeight: 600,
               padding: '1px 6px',
               borderRadius: 'var(--radius-xs)',
-              backgroundColor: 'var(--success-subtle)',
-              color: 'var(--success)',
-              border: '1px solid rgba(63, 185, 80, 0.3)',
+              backgroundColor: isExecuting ? 'rgba(234, 179, 8, 0.15)' : 'var(--success-subtle)',
+              color: isExecuting ? 'rgb(234, 179, 8)' : 'var(--success)',
+              border: isExecuting
+                ? '1px solid rgba(234, 179, 8, 0.3)'
+                : '1px solid rgba(63, 185, 80, 0.3)',
             }}
           >
-            Ready
+            {isExecuting ? 'Running...' : 'Ready'}
           </span>
         </div>
 
@@ -109,7 +213,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ isOpen, onClose }) => {
           fontSize: '11px',
         }}
       >
-        <span style={{ color: 'var(--text-muted)' }}>Model:</span>
+        <span style={{ color: 'var(--text-muted)' }}>Provider / Model:</span>
         <span
           style={{
             fontFamily: 'var(--font-code)',
@@ -118,7 +222,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ isOpen, onClose }) => {
             fontWeight: 600,
           }}
         >
-          qwen2.5-coder:7b
+          {modelInfo.provider} ({modelInfo.model})
         </span>
       </div>
 
@@ -137,10 +241,10 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ isOpen, onClose }) => {
             ACTIVE GOAL
           </div>
           <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)' }}>
-            TASK-004 — IDE Shell Layout
+            {activeGoal ? 'Current Task' : 'Idle — Ready for prompt'}
           </div>
           <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-            Building responsive grid layout with collapsible panels.
+            {activeGoal || 'Enter instructions below to have the agent analyze files, write code, or execute tests.'}
           </div>
         </div>
 
@@ -160,13 +264,14 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ isOpen, onClose }) => {
           <textarea
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
+            disabled={isExecuting}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
                 handleSend();
               }
             }}
-            placeholder="Ask agent to generate, modify, or run tests..."
+            placeholder={isExecuting ? 'Agent is working on current task...' : 'Ask agent to generate, modify, or run tests...'}
             rows={3}
             style={{
               width: '100%',
@@ -179,26 +284,28 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ isOpen, onClose }) => {
               fontFamily: 'inherit',
               resize: 'none',
               outline: 'none',
+              opacity: isExecuting ? 0.6 : 1,
             }}
           />
           <button
             onClick={handleSend}
             title="Send prompt to agent"
             aria-label="Send prompt"
-            disabled={!prompt.trim()}
+            disabled={!prompt.trim() || isExecuting}
             style={{
               position: 'absolute',
               bottom: '8px',
               right: '8px',
               padding: '4px 8px',
               borderRadius: 'var(--radius-xs)',
-              backgroundColor: prompt.trim() ? 'var(--accent)' : 'var(--border-subtle)',
-              color: prompt.trim() ? '#ffffff' : 'var(--text-disabled)',
+              backgroundColor: prompt.trim() && !isExecuting ? 'var(--accent)' : 'var(--border-subtle)',
+              color: prompt.trim() && !isExecuting ? '#ffffff' : 'var(--text-disabled)',
               fontSize: '11px',
               fontWeight: 600,
+              cursor: prompt.trim() && !isExecuting ? 'pointer' : 'default',
             }}
           >
-            Send
+            {isExecuting ? 'Running...' : 'Send'}
           </button>
         </div>
       </div>

@@ -3,22 +3,10 @@ import type { FileItem } from './FileTree.js';
 
 const RUNTIME_URL = 'http://127.0.0.1:7890';
 
-export const DEFAULT_STARTER_FILES: FileItem[] = [
-  {
-    id: 'src',
-    name: 'src',
-    type: 'folder',
-    children: [
-      { id: 'src/App.tsx', name: 'App.tsx', type: 'file' },
-      { id: 'src/main.ts', name: 'main.ts', type: 'file' },
-    ],
-  },
-  { id: 'package.json', name: 'package.json', type: 'file' },
-  { id: 'README.md', name: 'README.md', type: 'file' },
-];
+export const DEFAULT_STARTER_FILES: FileItem[] = [];
 
 export function useFiles(workspaceId?: string | null) {
-  const [fileTree, setFileTree] = useState<FileItem[]>(DEFAULT_STARTER_FILES);
+  const [fileTree, setFileTree] = useState<FileItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -36,10 +24,10 @@ export function useFiles(workspaceId?: string | null) {
       clearTimeout(timeoutId);
       const data = await res.json();
       if (!res.ok || !data.ok) throw new Error(data.error || 'Failed to fetch files');
-      setFileTree(data.files && data.files.length > 0 ? data.files : DEFAULT_STARTER_FILES);
+      setFileTree(Array.isArray(data.files) ? data.files : []);
     } catch (err: any) {
       setError(err.message);
-      setFileTree((prev) => (prev.length > 0 ? prev : DEFAULT_STARTER_FILES));
+      setFileTree((prev) => prev);
     } finally {
       setIsLoading(false);
     }
@@ -53,7 +41,7 @@ export function useFiles(workspaceId?: string | null) {
     const data = await res.json();
     if (!res.ok || !data.ok) throw new Error(data.error || 'Failed to read file');
     return data.content;
-  }, []);
+  }, [workspaceId]);
 
   const saveFileContent = useCallback(async (path: string, content: string): Promise<void> => {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -66,7 +54,7 @@ export function useFiles(workspaceId?: string | null) {
     });
     const data = await res.json();
     if (!res.ok || !data.ok) throw new Error(data.error || 'Failed to write file');
-  }, []);
+  }, [workspaceId]);
 
   const createFileOrFolder = useCallback(async (path: string, type: 'file' | 'folder'): Promise<void> => {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -80,7 +68,7 @@ export function useFiles(workspaceId?: string | null) {
     const data = await res.json();
     if (!res.ok || !data.ok) throw new Error(data.error || 'Failed to create file/folder');
     await fetchTree(); // Refresh tree
-  }, [fetchTree]);
+  }, [fetchTree, workspaceId]);
 
   const deleteFileOrFolder = useCallback(async (path: string): Promise<void> => {
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -92,6 +80,18 @@ export function useFiles(workspaceId?: string | null) {
     });
     const data = await res.json();
     if (!res.ok || !data.ok) throw new Error(data.error || 'Failed to delete file/folder');
+
+    // Immediately update local state
+    const filterOutPath = (items: FileItem[], target: string): FileItem[] => {
+      return items
+        .filter((item) => item.id !== target && !item.id.startsWith(target + '/'))
+        .map((item) => ({
+          ...item,
+          children: item.children ? filterOutPath(item.children, target) : undefined,
+        }));
+    };
+    setFileTree((prev) => filterOutPath(prev, path));
+
     await fetchTree(); // Refresh tree
   }, [fetchTree, workspaceId]);
 

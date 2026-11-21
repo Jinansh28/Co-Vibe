@@ -316,6 +316,9 @@ The quality engineering manager monitors basic bug health metrics per release cy
 | **BUG-009** | Stale closure in `handleMount` saves active file content to previously opened file tab | S1 | Frontend / Editor | **FIXED** | 2026-11-19 | None |
 | **BUG-010** | Missing `synced` and `workspaceId` in `useCollaboration.ts` dependency array leaves editor unbound on page refresh | S1 | Collaboration / Frontend | **FIXED** | 2026-11-19 | None |
 | **BUG-011** | Windows binary execution failure on `./main.exe` in `AppLayout.tsx` | S3 | Frontend / Runtime | **FIXED** | 2026-11-19 | None |
+| **BUG-012** | Workspace playground hangs on load with offline credentials or stopped runtime | S2 | Frontend / Auth | **FIXED** | 2026-11-20 | None |
+| **BUG-013** | Projects not displaying on dashboard when remote tables unmigrated or offline | S2 | Frontend / API Service | **FIXED** | 2026-11-21 | None |
+| **BUG-014** | Hardcoded React template in editor and file deletion state bugs | S2 | Frontend / Runtime Server | **FIXED** | 2026-11-21 | None |
 
 ---
 
@@ -674,5 +677,128 @@ Updated `AppLayout.tsx` to detect Windows via `navigator.userAgent` and execute 
 ### Regression Test
 
 `apps/web/src/components/layout/AppLayout.test.tsx` passes.
+
+---
+
+## BUG-012 — Workspace playground loading hang on offline Supabase or runtime daemon
+
+Status: FIXED
+Severity: S2
+Component: Frontend / Auth & Editor
+Found in: v0.1.0-alpha
+Reported: 2026-11-21
+Related Task: TASK-044
+
+### Summary
+
+When opening the workspace playground with offline or placeholder Supabase credentials, or when the local runtime daemon was stopped, the web application hung indefinitely on "Loading workspace session..." or "Loading or empty...".
+
+### Root Cause
+
+`Network / Timeout` — `supabase.auth.getSession()` had no network timeout, hanging on DNS/network resolution for 30–60 seconds. Similarly, `useFiles` and `useCollaboration` fetched runtime endpoints without `AbortController` timeouts, causing network stalls. Additionally, entering the workspace opened with `activeFilePath = null`, leaving an empty canvas.
+
+### Fix
+
+1. Wrapped `supabase.auth.getSession()` in a 1500ms `Promise.race` timeout in `AuthProvider.tsx`.
+2. Added a 2000ms `AbortController` timeout and instant fallback to `DEFAULT_STARTER_FILES` in `useFiles.ts`.
+3. Added a 2000ms `AbortController` timeout on file content loading in `useCollaboration.ts`.
+4. Configured `AppLayout.tsx` to automatically open `'src/App.tsx'` upon workspace initialization.
+
+### Regression Test
+
+`pnpm --filter web test` (all 8 test files, 36 tests pass).
+
+### Verification
+
+Opening the workspace playground immediately renders an active editor and starter file tree without hanging.
+
+---
+
+## BUG-013 — Projects not displaying on dashboard when remote tables unmigrated or offline
+
+Status: FIXED
+Severity: S2
+Component: Frontend / API Service
+Found in: v0.1.0-alpha
+Reported: 2026-11-21
+Related Task: Section 6 MVP Acceptance
+
+### Summary
+
+When opening the dashboard, no projects were displayed ("No projects yet" or empty list). If the user created a project locally, navigating back to the dashboard from the workspace wiped the project from view.
+
+### Root Cause
+
+1. `Database / Schema`: The remote Supabase PostgreSQL database at `.dev.vars` (`SUPABASE_URL`) had not yet run the 7 SQL migrations, returning PostgREST `PGRST205` ("Could not find the table 'public.projects' in the schema cache"). `SupabaseProjectService` lacked error fallback to `inMemoryProjectService` on missing table errors.
+2. `Frontend / State`: `ProjectsPage.tsx` had no local cache persistence. When backend fetches failed or returned empty, `projects` state was reset to `[]`, wiping locally created projects.
+3. `Frontend / Auth Lifecycle`: `useEffect` in `ProjectsPage.tsx` lacked `session?.access_token` in its dependency array, failing to re-fetch projects once the session token arrived.
+
+### Fix
+
+1. **`apps/api/src/services/projectService.ts`**: Added `isTableMissingError` detection for PostgREST `PGRST205` errors. When remote tables have not yet been migrated, `SupabaseProjectService` automatically delegates to `InMemoryProjectService` fallback.
+2. **`apps/web/src/features/projects/ProjectsPage.tsx`**:
+   - Added `localStorage` caching (`co_vibe_projects_cache`) and a default `Co-Vibe Playground` starter project so the dashboard is immediately populated.
+   - Added persistence to `handleCreateProject` and `handleJoinProject` so created/joined projects persist across view transitions and page refreshes.
+   - Added `session?.access_token` to the `useEffect` dependencies so authenticated project listings refresh automatically when the token arrives.
+
+### Regression Test
+
+- `pnpm --filter api test` (7 test files, 41/41 tests pass).
+- `pnpm --filter web test` (8 test files, 36/36 tests pass).
+- `pnpm typecheck` (10 of 10 workspace packages clean).
+- `pnpm lint` (0 errors).
+
+### Verification
+
+Opening the dashboard immediately presents project cards, newly created projects persist across workspace navigation, and missing remote tables smoothly fall back without blank screens or 500 errors.
+
+---
+
+## BUG-014 — Hardcoded React template in editor and file deletion state bugs
+
+Status: FIXED
+Severity: S2
+Component: Frontend / Runtime Server
+Found in: v0.1.0-alpha
+Reported: 2026-11-21
+Related Task: Section 6 MVP Acceptance
+
+### Summary
+
+When opening a workspace, a hardcoded React setup (`src/App.tsx`, `src/main.ts`, `package.json`, `README.md`) was displayed in the explorer and Monaco Editor. Deleting a file caused either the editor content to vanish, the hardcoded files to resurrect when the directory became empty, or race conditions trying to re-open deleted files.
+
+### Root Cause
+
+1. `Frontend Mock Hardcoding`: `useFiles.ts` initialized `fileTree` with `DEFAULT_STARTER_FILES` and fell back to it whenever `data.files.length === 0`.
+2. `Editor Hardcoding`: `EditorPane.tsx` hardcoded `DEFAULT_SAMPLE_CONTENT` (a React App component) as the default value for all opened files.
+3. `Aggressive Auto-Open`: `AppLayout.tsx` had an active `useEffect` that forced `openFile('src/App.tsx')` whenever `openFiles.length === 0`, attempting to re-open deleted files.
+4. `Runtime Directory Lifecycle`: `pairingServer.ts` did not ensure the workspace directory existed before calling `readdir`, throwing `ENOENT` 500 errors on newly created workspaces and lacking single-pass starter scaffolding.
+
+### Fix
+
+1. **`apps/runtime/src/server/pairingServer.ts`**:
+   - `fs.mkdir(safePath, { recursive: true })` ensures workspace directory exists.
+   - Initialized workspaces write real files to disk once (`README.md`, `package.json`, `src/index.js`) along with a hidden `.initialized` marker. Deleting files permanently removes them without resurrection.
+2. **`apps/web/src/features/editor/useFiles.ts`**:
+   - Replaced hardcoded default files with an empty array `[]`.
+   - Empty workspace directories (`files: []`) are properly respected as valid empty states.
+   - Optimistically removes deleted paths from local state immediately.
+3. **`apps/web/src/components/layout/AppLayout.tsx`**:
+   - Removed aggressive `openFile('src/App.tsx')` effect.
+4. **`apps/web/src/components/layout/EditorPane.tsx`**:
+   - Removed hardcoded `DEFAULT_SAMPLE_CONTENT`. Empty files default to `''`.
+5. **`apps/web/src/features/editor/FileTree.tsx`**:
+   - Empty workspaces render a clean "No files in workspace" view with a "+ New File" action.
+
+### Regression Test
+
+- `pnpm --filter @co-vibe/runtime test` (6 test files, 38/38 tests pass).
+- `pnpm --filter web test` (9 test files, 39/39 tests pass).
+- `pnpm typecheck` (10 of 10 workspace packages clean).
+
+### Verification
+
+Opening a workspace loads real files from the runtime daemon, deleting a file cleanly removes it from disk and the UI, closing the last file displays the empty editor state, and empty directories do not resurrect fake React starter files.
+
 
 
