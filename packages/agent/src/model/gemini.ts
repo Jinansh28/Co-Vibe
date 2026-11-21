@@ -36,26 +36,50 @@ export class GeminiProvider implements AIProvider {
         });
       } else if (msg.role === 'assistant') {
         const parts: any[] = [];
-        if (msg.content) {
-          parts.push({ text: msg.content });
-        }
         if (msg.tool_calls && msg.tool_calls.length > 0) {
           for (const tc of msg.tool_calls) {
             if (tc.id && tc.function?.name) {
               toolCallNameMap.set(tc.id, tc.function.name);
             }
-            let parsedArgs = {};
-            try {
-              parsedArgs = JSON.parse(tc.function.arguments || '{}');
-            } catch {
-              parsedArgs = { raw: tc.function.arguments };
+          }
+        }
+
+        if (msg.rawParts && msg.rawParts.length > 0) {
+          for (const rawPart of msg.rawParts) {
+            if (rawPart.functionCall) {
+              const sig =
+                rawPart.thoughtSignature ||
+                rawPart.thought_signature ||
+                'skip_thought_signature_validator';
+              parts.push({
+                ...rawPart,
+                thoughtSignature: sig,
+              });
+            } else {
+              parts.push(rawPart);
             }
-            parts.push({
-              functionCall: {
-                name: tc.function.name,
-                args: parsedArgs,
-              },
-            });
+          }
+        } else {
+          if (msg.content) {
+            parts.push({ text: msg.content });
+          }
+          if (msg.tool_calls && msg.tool_calls.length > 0) {
+            for (const tc of msg.tool_calls) {
+              let parsedArgs = {};
+              try {
+                parsedArgs = JSON.parse(tc.function.arguments || '{}');
+              } catch {
+                parsedArgs = { raw: tc.function.arguments };
+              }
+              const sig = tc.thoughtSignature || 'skip_thought_signature_validator';
+              parts.push({
+                functionCall: {
+                  name: tc.function.name,
+                  args: parsedArgs,
+                },
+                thoughtSignature: sig,
+              });
+            }
           }
         }
         contents.push({
@@ -64,15 +88,24 @@ export class GeminiProvider implements AIProvider {
         });
       } else if (msg.role === 'tool') {
         const functionName = msg.name || (msg.tool_call_id ? toolCallNameMap.get(msg.tool_call_id) : undefined) || 'tool_response';
+        let parsedResponse: any;
+        try {
+          const parsed = JSON.parse(msg.content);
+          if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+            parsedResponse = parsed;
+          } else {
+            parsedResponse = { output: msg.content };
+          }
+        } catch {
+          parsedResponse = { output: msg.content };
+        }
         contents.push({
           role: 'user',
           parts: [
             {
               functionResponse: {
                 name: functionName,
-                response: {
-                  output: msg.content,
-                },
+                response: parsedResponse,
               },
             },
           ],
@@ -135,10 +168,16 @@ export class GeminiProvider implements AIProvider {
     const toolCalls: ToolCall[] = [];
 
     for (const part of parts) {
-      if (part.text) {
+      if (part.text && !part.thought) {
         textContent += part.text;
       }
       if (part.functionCall) {
+        const thoughtSig =
+          part.thoughtSignature ||
+          part.thought_signature ||
+          part.functionCall?.thoughtSignature ||
+          part.functionCall?.thought_signature;
+
         toolCalls.push({
           id: `call_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
           type: 'function',
@@ -148,6 +187,7 @@ export class GeminiProvider implements AIProvider {
               ? part.functionCall.args
               : JSON.stringify(part.functionCall.args || {}),
           },
+          thoughtSignature: thoughtSig,
         });
       }
     }
@@ -161,6 +201,7 @@ export class GeminiProvider implements AIProvider {
         role: 'assistant',
         content: textContent,
         tool_calls: toolCalls.length > 0 ? toolCalls : undefined,
+        rawParts: parts.length > 0 ? parts : undefined,
       },
       finishReason,
     };

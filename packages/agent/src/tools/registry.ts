@@ -24,7 +24,8 @@ export class ToolRegistry {
   }
 
   async executeTool(name: string, args: unknown): Promise<string> {
-    const tool = this.tools.get(name);
+    const cleanName = name.includes(':') ? name.split(':').pop()! : name;
+    const tool = this.tools.get(name) || this.tools.get(cleanName);
     if (!tool) {
       return `Error: Tool ${name} not found in registry.`;
     }

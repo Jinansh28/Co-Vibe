@@ -79,6 +79,7 @@ export async function runRepairLoop(
             } catch (e) {
               messages.push({
                 role: 'tool',
+                name: call.function.name,
                 content: `Error: Invalid JSON arguments: ${e}`,
                 tool_call_id: call.id
               });
@@ -89,6 +90,7 @@ export async function runRepairLoop(
             
             messages.push({
               role: 'tool',
+              name: call.function.name,
               content: toolResult,
               tool_call_id: call.id
             });

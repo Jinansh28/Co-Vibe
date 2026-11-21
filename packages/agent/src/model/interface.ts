@@ -4,6 +4,7 @@ export interface AIMessage {
   name?: string;
   tool_calls?: ToolCall[];
   tool_call_id?: string;
+  rawParts?: any[];
 }
 
 export interface ToolCall {
@@ -13,6 +14,7 @@ export interface ToolCall {
     name: string;
     arguments: string; // JSON string
   };
+  thoughtSignature?: string;
 }
 
 export interface AITool {

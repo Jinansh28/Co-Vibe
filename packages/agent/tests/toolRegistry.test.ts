@@ -69,4 +69,19 @@ describe('ToolRegistry', () => {
     const result = await registry.executeTool('non_existent', {});
     expect(result).toContain('Error: Tool non_existent not found');
   });
+
+  it('should resolve namespaced tool calls (e.g. default_api:read_file)', async () => {
+    const mockTool = {
+      ...readFileTool,
+      execute: vi.fn().mockResolvedValue('namespaced content'),
+    };
+    registry.register(mockTool);
+
+    const result = await registry.executeTool('default_api:read_file', {
+      path: 'test.txt',
+    });
+
+    expect(result).toBe('namespaced content');
+    expect(mockTool.execute).toHaveBeenCalledWith({ path: 'test.txt' });
+  });
 });

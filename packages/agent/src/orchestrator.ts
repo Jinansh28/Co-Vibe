@@ -107,6 +107,7 @@ export class AgentOrchestrator {
             } catch (e) {
               messages.push({
                 role: 'tool',
+                name: call.function.name,
                 content: `Error: Invalid JSON arguments: ${e}`,
                 tool_call_id: call.id
               });
@@ -119,6 +120,7 @@ export class AgentOrchestrator {
             
             messages.push({
               role: 'tool',
+              name: call.function.name,
               content: toolResult,
               tool_call_id: call.id
             });
