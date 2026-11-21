@@ -68,6 +68,14 @@ export const AgentTaskProgressPayloadSchema = z.object({
   stepName: z.string(),
   message: z.string(),
   percentage: z.number().min(0).max(100).optional(),
+  diffData: z
+    .object({
+      changeSetId: z.string(),
+      filePath: z.string(),
+      originalContent: z.string(),
+      modifiedContent: z.string(),
+    })
+    .optional(),
 });
 
 export type AgentTaskProgressPayload = z.infer<typeof AgentTaskProgressPayloadSchema>;

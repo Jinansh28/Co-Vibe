@@ -22,6 +22,17 @@ import { ContextRetriever } from '@co-vibe/context';
 
 const activeProcesses = new Map<string, ChildProcess>();
 
+export interface PendingChangeSet {
+  id: string;
+  filePath: string;
+  originalContent: string;
+  modifiedContent: string;
+  workspaceRoot: string;
+  createdAt: number;
+}
+
+export const pendingChangeSets = new Map<string, PendingChangeSet>();
+
 function loadEnvConfig() {
   const envPaths = [
     path.resolve(process.cwd(), 'apps/runtime/.env'),
@@ -60,14 +71,21 @@ function loadEnvConfig() {
 }
 
 function getWorkspaceRoot(req?: http.IncomingMessage) {
-  const baseRoot = process.env.WORKSPACE_ROOT || process.cwd();
+  const currentRoot = process.env.BASE_WORKSPACE_ROOT || process.env.WORKSPACE_ROOT || process.cwd();
   if (req) {
     const workspaceId = req.headers['x-workspace-id'];
-    if (workspaceId && typeof workspaceId === 'string') {
-      return path.join(baseRoot, '.workspaces', workspaceId);
+    if (workspaceId && typeof workspaceId === 'string' && workspaceId.trim()) {
+      const cleanWsId = workspaceId.trim();
+      const wsSegment = path.join('.workspaces', cleanWsId);
+      if (currentRoot.includes(wsSegment)) {
+        return currentRoot;
+      }
+      const workspacesIdx = currentRoot.indexOf('.workspaces');
+      const baseDir = workspacesIdx !== -1 ? currentRoot.slice(0, workspacesIdx).replace(/[\\/]+$/, '') : currentRoot;
+      return path.join(baseDir, '.workspaces', cleanWsId);
     }
   }
-  return baseRoot;
+  return currentRoot;
 }
 
 export function setCorsHeaders(res: http.ServerResponse): void {
@@ -393,14 +411,55 @@ export function createPairingRequestHandler(tokenManager: TokenManager) {
         await readFilesRecursively(workspaceRoot, '');
 
         // Initialize tool registry with filesystem & shell execution tools
+        const stagingWriteFileTool = {
+          ...writeFileTool,
+          execute: async ({ path: targetPath, content }: { path: string; content: string }) => {
+            const safePath = assertWorkspacePath(workspaceRoot, targetPath);
+            let originalContent = '';
+            try {
+              originalContent = await fs.readFile(safePath, 'utf8');
+            } catch {
+              originalContent = '';
+            }
+
+            const changeSetId = crypto.randomUUID();
+            pendingChangeSets.set(changeSetId, {
+              id: changeSetId,
+              filePath: targetPath,
+              originalContent,
+              modifiedContent: content,
+              workspaceRoot,
+              createdAt: Date.now(),
+            });
+
+            writeProgress({
+              taskId,
+              runId,
+              state: 'AWAITING_APPROVAL',
+              stepName: 'Diff Review',
+              message: `Proposed modifications to ${targetPath}`,
+              percentage: 70,
+              diffData: {
+                changeSetId,
+                filePath: targetPath,
+                originalContent,
+                modifiedContent: content,
+              },
+            });
+
+            return `File modification staged for ${targetPath}. Side-by-side diff awaiting human review before saving to disk.`;
+          },
+        };
+
         const toolRegistry = new ToolRegistry();
         toolRegistry.register(readFileTool);
-        toolRegistry.register(writeFileTool);
+        toolRegistry.register(stagingWriteFileTool);
         toolRegistry.register(listDirTool);
         toolRegistry.register(runCommandTool);
         toolRegistry.register(runTestsTool);
 
         // Configure workspace root for filesystem tools
+        process.env.BASE_WORKSPACE_ROOT = process.env.BASE_WORKSPACE_ROOT || process.env.WORKSPACE_ROOT || process.cwd();
         process.env.WORKSPACE_ROOT = workspaceRoot;
 
         // Ensure .env is loaded
@@ -443,6 +502,49 @@ export function createPairingRequestHandler(tokenManager: TokenManager) {
         res.end();
       }
       return;
+    }
+
+    // -------------------------------------------------------------------------
+    // ChangeSet Endpoints: Accept & Reject Human Review Gate
+    // -------------------------------------------------------------------------
+    if (pathname.startsWith('/api/v1/changesets/')) {
+      if (pathname.endsWith('/accept') && method === 'POST') {
+        const id = pathname.slice('/api/v1/changesets/'.length, -'/accept'.length);
+        const pending = pendingChangeSets.get(id);
+        if (pending) {
+          const safePath = assertWorkspacePath(pending.workspaceRoot, pending.filePath);
+          await fs.mkdir(path.dirname(safePath), { recursive: true });
+          await fs.writeFile(safePath, pending.modifiedContent, 'utf8');
+          pendingChangeSets.delete(id);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: true, success: true, status: 'accepted', filePath: pending.filePath }));
+          return;
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, success: true, status: 'accepted' }));
+        return;
+      }
+
+      if (pathname.endsWith('/reject') && method === 'POST') {
+        const id = pathname.slice('/api/v1/changesets/'.length, -'/reject'.length);
+        pendingChangeSets.delete(id);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, success: true, status: 'rejected' }));
+        return;
+      }
+
+      if (method === 'GET') {
+        const id = pathname.slice('/api/v1/changesets/'.length);
+        const pending = pendingChangeSets.get(id);
+        if (!pending) {
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ok: false, error: 'ChangeSet not found' }));
+          return;
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true, changeset: pending }));
+        return;
+      }
     }
 
     // File System Endpoints
@@ -562,6 +664,7 @@ export function createPairingRequestHandler(tokenManager: TokenManager) {
             res.end(JSON.stringify({ ok: false, error: 'Invalid content' }));
             return;
           }
+          await fs.mkdir(path.dirname(safePath), { recursive: true });
           await fs.writeFile(safePath, body.content, 'utf8');
           res.writeHead(200);
           res.end(JSON.stringify({ ok: true }));

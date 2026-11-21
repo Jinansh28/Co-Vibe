@@ -5,6 +5,9 @@ import { EditorPane } from './EditorPane.js';
 import { AgentPanel } from '../../features/agent/AgentPanel.js';
 import { TerminalPane, type TerminalLine } from './TerminalPane.js';
 import { useEditorStore } from '../../features/editor/useEditorStore.js';
+import { useFiles } from '../../features/editor/useFiles.js';
+import { DiffReviewModal, type DiffData } from '../../features/changeset/DiffReviewModal.js';
+import { useOptionalNotification } from '../../context/NotificationContext.js';
 
 const RUNTIME_URL = 'http://127.0.0.1:7890';
 
@@ -28,6 +31,9 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   const [isAgentOpen, setIsAgentOpen] = useState(initialAgentOpen);
 
   const { activeFilePath, openFiles, openFile, saveActiveFile } = useEditorStore();
+  const { saveFileContent } = useFiles(workspaceId);
+  const notificationContext = useOptionalNotification();
+  const [activeDiff, setActiveDiff] = useState<DiffData | null>(null);
 
   const [outputLines, setOutputLines] = useState<TerminalLine[]>([]);
   const [isRunning, setIsRunning] = useState(false);
@@ -228,8 +234,41 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
           isOpen={isAgentOpen}
           workspaceId={workspaceId}
           onClose={() => setIsAgentOpen(false)}
+          onReviewDiff={(diff) => setActiveDiff(diff)}
         />
       </div>
+
+      {/* AI Agent Diff Review Modal */}
+      {activeDiff && (
+        <DiffReviewModal
+          diffData={activeDiff}
+          runtimeUrl={RUNTIME_URL}
+          onClose={() => setActiveDiff(null)}
+          onAccept={async () => {
+            try {
+              await saveFileContent(activeDiff.filePath, activeDiff.modifiedContent);
+              openFile(activeDiff.filePath);
+              notificationContext?.showNotification(
+                `Accepted and saved changes to ${activeDiff.filePath}`,
+                'success'
+              );
+            } catch (err: any) {
+              notificationContext?.showNotification(
+                `Failed to save ${activeDiff.filePath}: ${err?.message || String(err)}`,
+                'error'
+              );
+            }
+            setActiveDiff(null);
+          }}
+          onReject={() => {
+            notificationContext?.showNotification(
+              `Rejected changes to ${activeDiff.filePath}`,
+              'info'
+            );
+            setActiveDiff(null);
+          }}
+        />
+      )}
 
       {/* Bottom Terminal Drawer */}
       <TerminalPane

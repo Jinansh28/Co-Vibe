@@ -8,6 +8,7 @@ export interface DiffViewerProps {
   originalContent: string;
   modifiedContent: string;
   filePath: string;
+  runtimeUrl?: string;
   onAccept: (changeSetId: string, acceptedHunks?: string[]) => void;
   onReject: (changeSetId: string) => void;
 }
@@ -17,6 +18,7 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
   originalContent,
   modifiedContent,
   filePath,
+  runtimeUrl,
   onAccept,
   onReject,
 }) => {
@@ -28,7 +30,10 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
 
   const handleAccept = async () => {
     try {
-      const res = await fetch(`/api/v1/changesets/${changeSetId}/accept`, {
+      const url = runtimeUrl
+        ? `${runtimeUrl}/api/v1/changesets/${changeSetId}/accept`
+        : `/api/v1/changesets/${changeSetId}/accept`;
+      const res = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ acceptedHunks: selectedHunks }),
@@ -45,7 +50,10 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
 
   const handleReject = async () => {
     try {
-      const res = await fetch(`/api/v1/changesets/${changeSetId}/reject`, {
+      const url = runtimeUrl
+        ? `${runtimeUrl}/api/v1/changesets/${changeSetId}/reject`
+        : `/api/v1/changesets/${changeSetId}/reject`;
+      const res = await fetch(url, {
         method: 'POST',
       });
       if (res.ok) {

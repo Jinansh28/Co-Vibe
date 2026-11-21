@@ -106,6 +106,19 @@ describe('Protocol Envelope Schemas', () => {
     const parsed = AgentTaskProgressPayloadSchema.parse(payload);
     expect(parsed.state).toBe('EXECUTING');
     expect(parsed.percentage).toBe(50);
+
+    const payloadWithDiff = {
+      ...payload,
+      state: 'AWAITING_APPROVAL' as const,
+      diffData: {
+        changeSetId: 'cs-1',
+        filePath: 'src/index.ts',
+        originalContent: 'const a = 1;',
+        modifiedContent: 'const a = 2;',
+      },
+    };
+    const parsedDiff = AgentTaskProgressPayloadSchema.parse(payloadWithDiff);
+    expect(parsedDiff.diffData?.filePath).toBe('src/index.ts');
   });
 
   it('validates HealthCheckResponseSchema', () => {

@@ -68,3 +68,7 @@ export const useNotification = (): NotificationContextType => {
   }
   return context;
 };
+
+export const useOptionalNotification = (): NotificationContextType | undefined => {
+  return useContext(NotificationContext);
+};

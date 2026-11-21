@@ -29,6 +29,7 @@ Completed Tasks:    TASK-001 through TASK-041 (all tasks complete)
                     TASK-044 — Frontend Bundle Code-Splitting & Monaco Optimization (COMPLETE)
                     TASK-045 — Dual-Mode AI Provider & Gemini API Adapter (COMPLETE)
                     TASK-046 — End-to-End AI Agent Wiring (Web UI to Runtime Orchestrator) (COMPLETE)
+                    TASK-047 — AI Diff Review Modal & Staging Workflow (Side-by-Side Diff Acceptance Gate) (COMPLETE)
 Next Task:          None — Ready for staging deployment and cloud credentials provisioning.
 Blocked Tasks:      None
 Known Risks:        - Browser memory overhead during long-lived Yjs sessions.
@@ -2008,7 +2009,61 @@ Full end-to-end integration between browser AgentPanel and runtime daemon orches
 - **Files Changed**: `apps/runtime/package.json`, `apps/runtime/src/server/pairingServer.ts`, `apps/runtime/tests/pairing.test.ts`, `apps/web/src/features/agent/AgentPanel.tsx`, `apps/web/src/components/layout/AppLayout.tsx`, `docs/task.md`.
 - **Tests & Validation**: `pnpm test` (41/41 suites, 209/209 tests pass), `pnpm run typecheck` (10/10 clean), `pnpm run lint` (0 errors), `pnpm run build` (all 10 workspaces build cleanly).
 - **Known Issues**: None.
-- **Next Task**: None — Ready for staging deployment and cloud credentials provisioning.
+- **Next Task**: TASK-047 — AI Diff Review Modal & Staging Workflow (Side-by-Side Diff Acceptance Gate)
+
+---
+
+## TASK-047 — AI Diff Review Modal & Staging Workflow (Side-by-Side Diff Acceptance Gate)
+
+Status: DONE  
+Priority: P0  
+Component: AI Agent / Diff Review  
+Depends on: TASK-045, TASK-046  
+Estimated effort: M
+
+### Objective
+
+Connect the AI Agent's file modifications directly to `DiffViewer.tsx` via a dedicated Diff Review Modal (`DiffReviewModal.tsx`), allowing developers to review side-by-side diffs (original vs proposed changes) and click "Accept Changes" or "Reject" before saving to disk.
+
+### Implementation
+
+- Updated `@co-vibe/protocol` `AgentTaskProgressPayloadSchema` with optional `diffData` payload (`changeSetId`, `filePath`, `originalContent`, `modifiedContent`).
+- Created `apps/web/src/features/changeset/DiffReviewModal.tsx` embedding `DiffViewer.tsx` with modal backdrop, header, keyboard ESC dismissal, and accept/reject callbacks.
+- Enhanced `apps/web/src/features/changeset/DiffViewer.tsx` to support optional `runtimeUrl` parameter.
+- Updated `AgentPanel.tsx` and `ToolTimeline.tsx` to detect `diffData`, display a "Review Diff" timeline button, and trigger the review modal.
+- Integrated `DiffReviewModal` into `AppLayout.tsx`, saving accepted changes via `useFiles(workspaceId).saveFileContent` and opening the modified file in the active editor.
+- Updated `apps/runtime/src/server/pairingServer.ts` with `stagingWriteFileTool` and REST endpoints `POST /api/v1/changesets/:id/accept`, `POST /api/v1/changesets/:id/reject`, and `GET /api/v1/changesets/:id`.
+
+### Files
+
+- `packages/protocol/src/envelope.ts`
+- `packages/protocol/tests/envelope.test.ts`
+- `apps/web/src/features/changeset/DiffViewer.tsx`
+- `apps/web/src/features/changeset/DiffReviewModal.tsx`
+- `apps/web/src/features/changeset/DiffReviewModal.test.tsx`
+- `apps/web/src/features/agent/AgentPanel.tsx`
+- `apps/web/src/features/agent/ToolTimeline.tsx`
+- `apps/web/src/components/layout/AppLayout.tsx`
+- `apps/web/src/context/NotificationContext.tsx`
+- `apps/runtime/src/server/pairingServer.ts`
+- `apps/runtime/tests/pairing.test.ts`
+- `docs/task.md`
+
+### Acceptance Criteria
+
+- [x] Agent modifications emit an `AWAITING_APPROVAL` progress event containing `diffData`.
+- [x] `DiffReviewModal` displays side-by-side diff using Monaco DiffEditor via `DiffViewer.tsx`.
+- [x] Clicking "Accept Changes" saves the modified content to disk and opens the file in editor tabs.
+- [x] Clicking "Reject" discards the proposed change without writing to disk.
+- [x] Modal can be dismissed or reopened via the "Review Diff" button in `AgentPanel`.
+
+### Tests
+
+- [x] `apps/web/src/features/changeset/DiffReviewModal.test.tsx` (5 unit tests).
+- [x] `apps/runtime/tests/pairing.test.ts` (13 tests including changeset accept/reject).
+- [x] `packages/protocol/tests/envelope.test.ts` (diffData schema validation).
+- [x] `pnpm test` (41 suites passing).
+- [x] `pnpm typecheck` (10/10 workspaces clean).
 
 ---
 

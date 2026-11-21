@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import type { Server } from 'node:http';
+import path from 'node:path';
+import fs from 'node:fs/promises';
 import { TokenManager } from '../src/auth/tokenManager.js';
 import { createPairingServer } from '../src/server/pairingServer.js';
 
@@ -192,5 +194,97 @@ describe('Pairing Server HTTP Endpoints', () => {
     expect(states).toContain('PLANNING');
     expect(states).toContain('EXECUTING');
     expect(states).toContain('SUCCESS');
+  });
+
+  it('handles changeset endpoints: accept saves staged file and reject discards it', async () => {
+    const { pendingChangeSets } = await import('../src/server/pairingServer.js');
+    const testWsId = `test-ws-cs-${Date.now()}`;
+    const wsRoot = path.join(process.cwd(), '.workspaces', testWsId);
+    await fs.mkdir(wsRoot, { recursive: true });
+
+    // Seed a staged changeset
+    const changeSetId = `cs-test-${Date.now()}`;
+    pendingChangeSets.set(changeSetId, {
+      id: changeSetId,
+      filePath: 'src/staged.ts',
+      originalContent: '// empty',
+      modifiedContent: 'export const staged = true;',
+      workspaceRoot: wsRoot,
+      createdAt: Date.now(),
+    });
+
+    // 1. GET changeset info
+    const getRes = await fetch(`${baseUrl}/api/v1/changesets/${changeSetId}`);
+    expect(getRes.status).toBe(200);
+    const getData = await getRes.json();
+    expect(getData.ok).toBe(true);
+    expect(getData.changeset.filePath).toBe('src/staged.ts');
+
+    // 2. Accept changeset -> file should be written to disk
+    const acceptRes = await fetch(`${baseUrl}/api/v1/changesets/${changeSetId}/accept`, {
+      method: 'POST',
+    });
+    expect(acceptRes.status).toBe(200);
+    const acceptData = await acceptRes.json();
+    expect(acceptData.status).toBe('accepted');
+
+    const writtenContent = await fs.readFile(path.join(wsRoot, 'src/staged.ts'), 'utf8');
+    expect(writtenContent).toBe('export const staged = true;');
+    expect(pendingChangeSets.has(changeSetId)).toBe(false);
+
+    // 3. Reject changeset
+    const rejectId = `cs-reject-${Date.now()}`;
+    pendingChangeSets.set(rejectId, {
+      id: rejectId,
+      filePath: 'src/rejected.ts',
+      originalContent: '',
+      modifiedContent: 'do not save',
+      workspaceRoot: wsRoot,
+      createdAt: Date.now(),
+    });
+
+    const rejectRes = await fetch(`${baseUrl}/api/v1/changesets/${rejectId}/reject`, {
+      method: 'POST',
+    });
+    expect(rejectRes.status).toBe(200);
+    expect(pendingChangeSets.has(rejectId)).toBe(false);
+
+    // Verify rejected file was NOT saved to disk
+    const exists = await fs
+      .access(path.join(wsRoot, 'src/rejected.ts'))
+      .then(() => true)
+      .catch(() => false);
+    expect(exists).toBe(false);
+  });
+
+  it('PUT /api/v1/files/content saves files in subdirectories without path doubling when X-Workspace-Id is set', async () => {
+    const testWsId = `ws-${Date.now()}`;
+    const wsRoot = path.join(process.cwd(), '.workspaces', testWsId);
+    await fs.mkdir(wsRoot, { recursive: true });
+
+    // Simulate an agent run setting process.env.WORKSPACE_ROOT to wsRoot
+    process.env.WORKSPACE_ROOT = wsRoot;
+
+    // Save a file in a nested subdirectory
+    const putRes = await fetch(`${baseUrl}/api/v1/files/content?path=src/index.html`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Workspace-Id': testWsId,
+      },
+      body: JSON.stringify({ content: '<h1>Hello World</h1>' }),
+    });
+
+    expect(putRes.status).toBe(200);
+    const putData = await putRes.json();
+    expect(putData.ok).toBe(true);
+
+    // Verify it was saved to the exact workspace root and NOT double nested
+    const filePath = path.join(wsRoot, 'src', 'index.html');
+    const content = await fs.readFile(filePath, 'utf8');
+    expect(content).toBe('<h1>Hello World</h1>');
+
+    // Clean up
+    await fs.rm(wsRoot, { recursive: true, force: true }).catch(() => {});
   });
 });

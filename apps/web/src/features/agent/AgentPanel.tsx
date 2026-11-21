@@ -8,9 +8,10 @@ interface AgentPanelProps {
   isOpen: boolean;
   workspaceId?: string | null;
   onClose?: () => void;
+  onReviewDiff?: (diffData: NonNullable<AgentTaskProgressPayload['diffData']>) => void;
 }
 
-export const AgentPanel: React.FC<AgentPanelProps> = ({ isOpen, workspaceId, onClose }) => {
+export const AgentPanel: React.FC<AgentPanelProps> = ({ isOpen, workspaceId, onClose, onReviewDiff }) => {
   const [prompt, setPrompt] = useState('');
   const [isExecuting, setIsExecuting] = useState(false);
   const [activeGoal, setActiveGoal] = useState<string | null>(null);
@@ -102,6 +103,9 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ isOpen, workspaceId, onC
           try {
             const event = JSON.parse(trimmed) as AgentTaskProgressPayload;
             setTimelineEvents((prev) => [...prev, event]);
+            if (event.diffData && onReviewDiff) {
+              onReviewDiff(event.diffData);
+            }
           } catch {
             // Ignore non-json chunk
           }
@@ -249,7 +253,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ isOpen, workspaceId, onC
         </div>
 
         {/* Agent Activity Stream */}
-        <ToolTimeline events={timelineEvents} />
+        <ToolTimeline events={timelineEvents} onReviewDiff={onReviewDiff} />
       </div>
 
       {/* Prompt Input Footer */}
