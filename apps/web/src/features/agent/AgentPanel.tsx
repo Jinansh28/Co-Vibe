@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { ToolTimeline } from './ToolTimeline.js';
 import { AgentTaskProgressPayload } from '@co-vibe/protocol';
 
@@ -10,6 +10,13 @@ export interface VisualAttachment {
   mimeType?: string;
 }
 
+export interface CodeSnippetAttachment {
+  filePath: string;
+  startLine: number;
+  endLine: number;
+  code: string;
+}
+
 export interface AgentPanelProps {
   isOpen: boolean;
   workspaceId?: string | null;
@@ -17,6 +24,10 @@ export interface AgentPanelProps {
   onReviewDiff?: (diffData: NonNullable<AgentTaskProgressPayload['diffData']>) => void;
   attachedImage?: VisualAttachment | null;
   onClearAttachment?: () => void;
+  attachedSnippet?: CodeSnippetAttachment | null;
+  onClearSnippet?: () => void;
+  initialPrompt?: string;
+  autoExecute?: boolean;
 }
 
 export const AgentPanel: React.FC<AgentPanelProps> = ({
@@ -26,6 +37,10 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
   onReviewDiff,
   attachedImage,
   onClearAttachment,
+  attachedSnippet,
+  onClearSnippet,
+  initialPrompt,
+  autoExecute = false,
 }) => {
   const [prompt, setPrompt] = useState('');
   const [isExecuting, setIsExecuting] = useState(false);
@@ -36,6 +51,9 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
     model: 'gemini-3.5-flash-lite',
   });
   const [localAttachment, setLocalAttachment] = useState<VisualAttachment | null>(null);
+  const [localSnippet, setLocalSnippet] = useState<CodeSnippetAttachment | null>(null);
+
+  const executedPromptRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (attachedImage !== undefined) {
@@ -43,9 +61,26 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
     }
   }, [attachedImage]);
 
+  useEffect(() => {
+    if (attachedSnippet !== undefined) {
+      setLocalSnippet(attachedSnippet);
+    }
+  }, [attachedSnippet]);
+
+  useEffect(() => {
+    if (initialPrompt !== undefined) {
+      setPrompt(initialPrompt);
+    }
+  }, [initialPrompt]);
+
   const handleRemoveAttachment = () => {
     setLocalAttachment(null);
     onClearAttachment?.();
+  };
+
+  const handleRemoveSnippet = () => {
+    setLocalSnippet(null);
+    onClearSnippet?.();
   };
 
   useEffect(() => {
@@ -62,123 +97,153 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
       });
   }, [isOpen]);
 
-  const handleSend = async () => {
-    const text = prompt.trim();
-    if (!text || isExecuting) return;
+  const executeTask = useCallback(
+    async (textToSend: string, snippetToSend?: CodeSnippetAttachment | null) => {
+      const text = textToSend.trim();
+      if (!text || isExecuting) return;
 
-    const attachmentToSend = localAttachment;
-    setIsExecuting(true);
-    setActiveGoal(text);
-    setPrompt('');
-    setLocalAttachment(null);
-    onClearAttachment?.();
+      const attachmentToSend = localAttachment;
+      const snippet = snippetToSend !== undefined ? snippetToSend : localSnippet;
 
-    // Add optimistic start event
-    const startEvent: AgentTaskProgressPayload = {
-      taskId: 'client-task',
-      runId: 'client-run',
-      state: 'PENDING',
-      stepName: 'User Request',
-      message: text,
-      percentage: 5,
-      image: attachmentToSend
-        ? {
+      setIsExecuting(true);
+      setActiveGoal(text);
+      setPrompt('');
+      setLocalAttachment(null);
+      setLocalSnippet(null);
+      onClearAttachment?.();
+      onClearSnippet?.();
+
+      // Prepend the snippet to the request payload
+      const fullPrompt = snippet
+        ? `[Code Snippet: ${snippet.filePath}:L${snippet.startLine}-L${snippet.endLine}]\n\`\`\`\n${snippet.code}\n\`\`\`\n\n${text}`
+        : text;
+
+      // Add optimistic start event
+      const startEvent: AgentTaskProgressPayload = {
+        taskId: 'client-task',
+        runId: 'client-run',
+        state: 'PENDING',
+        stepName: 'User Request',
+        message: text,
+        percentage: 5,
+        image: attachmentToSend
+          ? {
+              mimeType: attachmentToSend.mimeType || 'image/png',
+              base64: attachmentToSend.base64,
+            }
+          : undefined,
+      };
+      setTimelineEvents((prev) => [...prev, startEvent]);
+
+      try {
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+        };
+        if (workspaceId) {
+          headers['X-Workspace-Id'] = workspaceId;
+        }
+
+        const requestBody: any = { prompt: fullPrompt };
+        if (snippet) {
+          requestBody.snippet = snippet;
+        }
+        if (attachmentToSend) {
+          requestBody.image = {
             mimeType: attachmentToSend.mimeType || 'image/png',
             base64: attachmentToSend.base64,
+          };
+        }
+
+        const res = await fetch(`${RUNTIME_URL}/api/v1/agent/run`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(requestBody),
+        });
+
+        if (!res.ok || !res.body) {
+          const errorText = await res.text().catch(() => res.statusText);
+          setTimelineEvents((prev) => [
+            ...prev,
+            {
+              taskId: 'err',
+              runId: 'err',
+              state: 'FAILED',
+              stepName: 'Connection Error',
+              message: `Runtime error (${res.status}): ${errorText || 'Failed to start agent task'}`,
+              percentage: 100,
+            },
+          ]);
+          setIsExecuting(false);
+          return;
+        }
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() ?? '';
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed) continue;
+            try {
+              const event = JSON.parse(trimmed) as AgentTaskProgressPayload;
+              setTimelineEvents((prev) => [...prev, event]);
+              if (event.diffData && onReviewDiff) {
+                onReviewDiff(event.diffData);
+              }
+            } catch {
+              // Ignore non-json chunk
+            }
           }
-        : undefined,
-    };
-    setTimelineEvents((prev) => [...prev, startEvent]);
-
-    try {
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-      };
-      if (workspaceId) {
-        headers['X-Workspace-Id'] = workspaceId;
-      }
-
-      const requestBody: any = { prompt: text };
-      if (attachmentToSend) {
-        requestBody.image = {
-          mimeType: attachmentToSend.mimeType || 'image/png',
-          base64: attachmentToSend.base64,
-        };
-      }
-
-      const res = await fetch(`${RUNTIME_URL}/api/v1/agent/run`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(requestBody),
-      });
-
-      if (!res.ok || !res.body) {
-        const errorText = await res.text().catch(() => res.statusText);
+        }
+      } catch (err: any) {
         setTimelineEvents((prev) => [
           ...prev,
           {
             taskId: 'err',
             runId: 'err',
             state: 'FAILED',
-            stepName: 'Connection Error',
-            message: `Runtime error (${res.status}): ${errorText || 'Failed to start agent task'}`,
+            stepName: 'Network Error',
+            message:
+              err?.message?.includes('Failed to fetch') || err?.name === 'TypeError'
+                ? 'Could not connect to the local runtime daemon on http://127.0.0.1:7890. Ensure "pnpm dev:all" or the runtime daemon is running.'
+                : `Agent execution failed: ${err?.message || String(err)}`,
             percentage: 100,
           },
         ]);
+      } finally {
         setIsExecuting(false);
-        return;
       }
+    },
+    [isExecuting, localAttachment, localSnippet, onClearAttachment, onClearSnippet, onReviewDiff, workspaceId]
+  );
 
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() ?? '';
-
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (!trimmed) continue;
-          try {
-            const event = JSON.parse(trimmed) as AgentTaskProgressPayload;
-            setTimelineEvents((prev) => [...prev, event]);
-            if (event.diffData && onReviewDiff) {
-              onReviewDiff(event.diffData);
-            }
-          } catch {
-            // Ignore non-json chunk
-          }
-        }
-      }
-    } catch (err: any) {
-      setTimelineEvents((prev) => [
-        ...prev,
-        {
-          taskId: 'err',
-          runId: 'err',
-          state: 'FAILED',
-          stepName: 'Network Error',
-          message:
-            err?.message?.includes('Failed to fetch') || err?.name === 'TypeError'
-              ? 'Could not connect to the local runtime daemon on http://127.0.0.1:7890. Ensure "pnpm dev:all" or the runtime daemon is running.'
-              : `Agent execution failed: ${err?.message || String(err)}`,
-          percentage: 100,
-        },
-      ]);
-    } finally {
-      setIsExecuting(false);
+  // Trigger auto execution when initialPrompt and autoExecute are provided
+  useEffect(() => {
+    if (autoExecute && initialPrompt && executedPromptRef.current !== initialPrompt) {
+      executedPromptRef.current = initialPrompt;
+      executeTask(initialPrompt, attachedSnippet || localSnippet);
     }
+  }, [autoExecute, initialPrompt, attachedSnippet, localSnippet, executeTask]);
+
+  const handleSend = async () => {
+    const text = prompt.trim();
+    if (!text || isExecuting) return;
+    await executeTask(text, localSnippet);
   };
 
   if (!isOpen) return null;
 
   return (
     <aside
+      data-testid="agent-panel"
       style={{
         width: '320px',
         minWidth: '260px',
@@ -358,6 +423,71 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
               title="Remove snapshot attachment"
               aria-label="Remove attachment"
               data-testid="remove-attachment-btn"
+              style={{
+                background: 'none',
+                border: 'none',
+                color: 'var(--text-muted)',
+                cursor: 'pointer',
+                padding: '2px 4px',
+                fontSize: '14px',
+                lineHeight: 1,
+                borderRadius: 'var(--radius-xs)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              ×
+            </button>
+          </div>
+        )}
+
+        {/* Code Snippet attachment chip above prompt input */}
+        {localSnippet && (
+          <div
+            data-testid="agent-snippet-badge"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '4px 8px',
+              marginBottom: '8px',
+              backgroundColor: 'var(--bg-panel-raised)',
+              border: '1px solid var(--border-subtle)',
+              borderRadius: 'var(--radius-sm)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', overflow: 'hidden' }}>
+              <span
+                style={{
+                  fontFamily: 'var(--font-code)',
+                  fontSize: '11px',
+                  color: 'var(--accent)',
+                  fontWeight: 600,
+                }}
+              >
+                &lt;/&gt;
+              </span>
+              <span
+                data-testid="agent-snippet-text"
+                style={{
+                  fontFamily: 'var(--font-code)',
+                  fontSize: '11px',
+                  color: 'var(--text-secondary)',
+                  whiteSpace: 'nowrap',
+                  textOverflow: 'ellipsis',
+                  overflow: 'hidden',
+                }}
+              >
+                [Code Snippet: {localSnippet.filePath}:L{localSnippet.startLine}-L{localSnippet.endLine}]
+              </span>
+            </div>
+
+            <button
+              onClick={handleRemoveSnippet}
+              title="Remove code snippet"
+              aria-label="Remove code snippet"
+              data-testid="remove-snippet-btn"
               style={{
                 background: 'none',
                 border: 'none',

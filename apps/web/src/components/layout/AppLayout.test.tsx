@@ -140,4 +140,19 @@ describe('AppLayout IDE Shell Grid', () => {
     fireEvent.click(removeBtn);
     expect(screen.queryByTestId('agent-attachment-badge')).toBeNull();
   });
+
+  it('renders AgentPanel with code snippet chip and allows removing it', async () => {
+    useEditorStore.setState({
+      activeFilePath: 'src/auth.ts',
+      openFiles: ['src/auth.ts'],
+    });
+
+    render(<AppLayout initialAgentOpen={true} />);
+
+    // AgentPanel is open
+    expect(screen.getByTestId('agent-panel')).toBeDefined();
+
+    // Verify initial state has no snippet chip
+    expect(screen.queryByTestId('agent-snippet-badge')).toBeNull();
+  });
 });

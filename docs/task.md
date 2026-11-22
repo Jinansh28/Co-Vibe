@@ -32,6 +32,7 @@ Completed Tasks:    TASK-001 through TASK-041 (all tasks complete)
                     TASK-047 — AI Diff Review Modal & Staging Workflow (Side-by-Side Diff Acceptance Gate) (COMPLETE)
                     TASK-048 — Client-Side Sandboxed HTML Live Preview (COMPLETE)
                     TASK-049 — Multimodal Visual Snapshot to AI Agent Context (COMPLETE)
+                    TASK-050 — Monaco Inline Code Action (Ctrl+K & Context Menu) (COMPLETE)
 Next Task:          None — Ready for staging deployment and cloud credentials provisioning.
 Blocked Tasks:      None
 Known Risks:        - Browser memory overhead during long-lived Yjs sessions.
@@ -2169,6 +2170,54 @@ Enable developers to capture a visual snapshot of their live HTML preview and at
 - [x] `apps/runtime/tests/pairing.test.ts` (NDJSON visual snapshot execution test).
 - [x] `apps/web/src/features/preview/HtmlPreview.test.tsx` (Snapshot to AI button test).
 - [x] `apps/web/src/components/layout/AppLayout.test.tsx` (AppLayout visual snapshot wiring test).
+
+---
+
+## TASK-050 — Monaco Inline Code Action (Ctrl+K & Context Menu)
+
+Status: DONE  
+Priority: P0  
+Component: Editor / Agent / Web UI  
+Depends on: TASK-016, TASK-046  
+Estimated effort: M  
+
+### Objective
+
+Implement an inline AI code action trigger in Monaco Editor. When a user selects a snippet of code and presses `Ctrl+K` (or `Cmd+K` on macOS) or right-clicks and chooses "AI Code Action", display a floating glassmorphic prompt bubble anchored to the editor selection offering instant quick-actions ("Explain", "Refactor to TypeScript", "Generate Unit Tests") or custom instruction input, wiring the selected context directly into `AgentPanel` and dispatching tasks to the local runtime agent.
+
+### Deliverables
+
+- `apps/web/src/features/editor/InlineActionBubble.tsx`: Floating glassmorphic panel anchored to Monaco selection coordinates featuring target file/line badge `[File: <filename> (Lines <start>-<end>)]`, custom prompt input with autofocus, 3 quick-action pill buttons ("⚡ Explain", "🛠️ Refactor", "🧪 Unit Tests"), close button, Esc/Enter key listeners, and outside-click dismissal.
+- `apps/web/src/components/layout/EditorPane.tsx`: Registered Monaco action `inline-code-action` with `Ctrl+K` keybinding and `contextMenuGroupId: 'navigation'` ("AI: Code Action / Explain / Refactor"). Added projection coordinates calculation (`ed.getScrolledVisiblePosition`), graceful current line auto-selection on empty cursor highlight with toast notification fallback, and mounted `InlineActionBubble` within editor container.
+- `apps/web/src/features/agent/AgentPanel.tsx`: Added `CodeSnippetAttachment` interface and props (`attachedSnippet`, `initialPrompt`, `autoExecute`). Rendered removable code snippet chip `[Code Snippet: <filePath>:L<start>-L<end>] [x]` above prompt textarea. Prepended code snippet context to runtime `POST /api/v1/agent/run` requests. Added auto-execution support for preset and inline actions.
+- `apps/web/src/components/layout/AppLayout.tsx`: Connected `EditorPane.onTriggerCodeAction` to open `AgentPanel`, inject attached snippet, set prompt, and trigger orchestrator execution with automatic diff staging in `DiffReviewModal`.
+- `apps/web/src/features/editor/InlineActionBubble.test.tsx`: Comprehensive unit tests for bubble rendering, badge formatting, quick-action pills, custom submission, Esc/outside dismissal.
+- `apps/web/src/components/layout/EditorPane.test.tsx`: Integration tests for Monaco action registration, selection line expansion, bubble mounting, and action dispatching.
+- `apps/web/src/features/agent/AgentPanel.test.tsx`: Unit tests for snippet chip rendering, removal, payload prepending, and auto-execution.
+- `apps/web/src/components/layout/AppLayout.test.tsx`: Integration test for snippet chip in IDE shell.
+
+### Acceptance Criteria
+
+- [x] Highlighting text in Monaco and pressing `Ctrl+K` (or `Cmd+K` on Mac) opens `InlineActionBubble` anchored below the selection.
+- [x] Right-clicking selected text displays "AI: Code Action / Explain / Refactor" in the context menu and triggers the bubble.
+- [x] Clicking "Explain" sends the selected code + explanation prompt to `AgentPanel` and begins streaming the explanation.
+- [x] Clicking "Refactor" or "Unit Tests" sends the selected code + refactoring prompt to the Agent Orchestrator and stages the resulting diff in the `DiffReviewModal`.
+- [x] Typing a custom instruction and pressing `Enter` submits the custom prompt with the snippet attached.
+- [x] Pressing `Escape` or clicking outside dismisses the bubble cleanly without deselecting code.
+- [x] If no text is selected when pressing `Ctrl+K`, it gracefully selects the current cursor line or displays a small toast instructing the user to highlight code.
+- [x] Unit & integration tests pass with 0 failures (`InlineActionBubble.test.tsx`, `EditorPane.test.tsx`, `AgentPanel.test.tsx`, `AppLayout.test.tsx`, `MonacoEditor.test.tsx`).
+- [x] `pnpm typecheck` and `pnpm lint` succeed with 0 errors.
+
+### Tests
+
+- [x] `apps/web/src/features/editor/InlineActionBubble.test.tsx` (13 tests).
+- [x] `apps/web/src/components/layout/EditorPane.test.tsx` (6 tests).
+- [x] `apps/web/src/features/agent/AgentPanel.test.tsx` (4 tests).
+- [x] `apps/web/src/features/editor/MonacoEditor.test.tsx` (8 tests).
+- [x] `apps/web/src/components/layout/AppLayout.test.tsx` (7 tests).
+- [x] Monorepo suite: 45 test files, 245 tests all passing.
+- [x] `pnpm typecheck`: 10/10 workspaces clean (0 errors).
+- [x] `pnpm lint`: clean (0 errors).
 
 ---
 

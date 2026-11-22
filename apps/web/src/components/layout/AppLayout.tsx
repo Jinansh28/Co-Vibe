@@ -1,8 +1,8 @@
 import React, { useState, useCallback } from 'react';
 import { TopBar } from './TopBar.js';
 import { Sidebar } from './Sidebar.js';
-import { EditorPane } from './EditorPane.js';
-import { AgentPanel, type VisualAttachment } from '../../features/agent/AgentPanel.js';
+import { EditorPane, type CodeActionTriggerPayload } from './EditorPane.js';
+import { AgentPanel, type VisualAttachment, type CodeSnippetAttachment } from '../../features/agent/AgentPanel.js';
 import { TerminalPane, type TerminalLine } from './TerminalPane.js';
 import { HtmlPreview } from '../../features/preview/HtmlPreview.js';
 import { useEditorStore } from '../../features/editor/useEditorStore.js';
@@ -39,6 +39,9 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [previewContent, setPreviewContent] = useState('');
   const [attachedSnapshot, setAttachedSnapshot] = useState<VisualAttachment | null>(null);
+  const [attachedSnippet, setAttachedSnippet] = useState<CodeSnippetAttachment | null>(null);
+  const [agentInitialPrompt, setAgentInitialPrompt] = useState<string | undefined>(undefined);
+  const [agentAutoExecute, setAgentAutoExecute] = useState(false);
 
   const [outputLines, setOutputLines] = useState<TerminalLine[]>([]);
   const [isRunning, setIsRunning] = useState(false);
@@ -128,9 +131,9 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
       setIsRunning(false);
       setExecutionId(null);
       return 0;
-  },
-  [isRunning, workspaceId]
-);
+    },
+    [isRunning, workspaceId]
+  );
 
   const handleSendInput = useCallback(async (input: string) => {
     if (!executionId) return;
@@ -248,6 +251,17 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
     runCommand('npm', ['test'], 'Run Tests', 'tests');
   }, [runCommand]);
 
+  // Wire Monaco Inline Action trigger to Agent Panel
+  const handleTriggerCodeAction = useCallback(
+    ({ snippet, prompt, actionType }: CodeActionTriggerPayload) => {
+      setIsAgentOpen(true);
+      setAttachedSnippet(snippet);
+      setAgentInitialPrompt(prompt);
+      setAgentAutoExecute(true);
+    },
+    []
+  );
+
   return (
     <div
       style={{
@@ -290,7 +304,10 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
         <Sidebar isOpen={isSidebarOpen} workspaceId={workspaceId} />
 
         {/* Central Editor Surface */}
-        <EditorPane workspaceId={workspaceId} />
+        <EditorPane
+          workspaceId={workspaceId}
+          onTriggerCodeAction={handleTriggerCodeAction}
+        />
 
         {/* HTML Live Preview Pane */}
         {isPreviewOpen && (
@@ -324,6 +341,10 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
           onReviewDiff={(diff) => setActiveDiff(diff)}
           attachedImage={attachedSnapshot}
           onClearAttachment={() => setAttachedSnapshot(null)}
+          attachedSnippet={attachedSnippet}
+          onClearSnippet={() => setAttachedSnippet(null)}
+          initialPrompt={agentInitialPrompt}
+          autoExecute={agentAutoExecute}
         />
       </div>
 
