@@ -4,6 +4,7 @@ import { Sidebar } from './Sidebar.js';
 import { EditorPane } from './EditorPane.js';
 import { AgentPanel } from '../../features/agent/AgentPanel.js';
 import { TerminalPane, type TerminalLine } from './TerminalPane.js';
+import { HtmlPreview } from '../../features/preview/HtmlPreview.js';
 import { useEditorStore } from '../../features/editor/useEditorStore.js';
 import { useFiles } from '../../features/editor/useFiles.js';
 import { DiffReviewModal, type DiffData } from '../../features/changeset/DiffReviewModal.js';
@@ -31,9 +32,12 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   const [isAgentOpen, setIsAgentOpen] = useState(initialAgentOpen);
 
   const { activeFilePath, openFiles, openFile, saveActiveFile } = useEditorStore();
-  const { saveFileContent } = useFiles(workspaceId);
+  const { saveFileContent, getFileContent } = useFiles(workspaceId);
   const notificationContext = useOptionalNotification();
   const [activeDiff, setActiveDiff] = useState<DiffData | null>(null);
+
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [previewContent, setPreviewContent] = useState('');
 
   const [outputLines, setOutputLines] = useState<TerminalLine[]>([]);
   const [isRunning, setIsRunning] = useState(false);
@@ -145,6 +149,38 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
     }
   }, [executionId, workspaceId]);
 
+  const handleRefreshPreview = useCallback(async () => {
+    if (!activeFilePath) return;
+    const { getActiveContent } = useEditorStore.getState();
+    const current = getActiveContent?.();
+    if (current !== undefined && current !== '') {
+      setPreviewContent(current);
+      return;
+    }
+    try {
+      const content = await getFileContent(activeFilePath);
+      setPreviewContent(content);
+    } catch (err) {
+      console.error('Failed to reload preview content:', err);
+    }
+  }, [activeFilePath, getFileContent]);
+
+  const handleTogglePreview = useCallback(async () => {
+    if (!isPreviewOpen && activeFilePath) {
+      const { getActiveContent } = useEditorStore.getState();
+      let content = getActiveContent?.() ?? '';
+      if (!content) {
+        try {
+          content = await getFileContent(activeFilePath);
+        } catch {
+          content = '';
+        }
+      }
+      setPreviewContent(content);
+    }
+    setIsPreviewOpen((prev) => !prev);
+  }, [isPreviewOpen, activeFilePath, getFileContent]);
+
   const handleRunProject = useCallback(async () => {
     // Auto-save the active file before running so we execute the latest code
     if (saveActiveFile) {
@@ -152,6 +188,20 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
     }
 
     if (activeFilePath) {
+      if (activeFilePath.endsWith('.html') || activeFilePath.endsWith('.htm')) {
+        const { getActiveContent } = useEditorStore.getState();
+        let content = getActiveContent?.() ?? '';
+        if (!content) {
+          try {
+            content = await getFileContent(activeFilePath);
+          } catch {
+            content = '';
+          }
+        }
+        setPreviewContent(content);
+        setIsPreviewOpen((prev) => !prev);
+        return;
+      }
       if (activeFilePath.endsWith('.ts') || activeFilePath.endsWith('.tsx')) {
         runCommand('npx', ['tsx', activeFilePath], `Run ${activeFilePath}`);
       } else if (activeFilePath.endsWith('.js') || activeFilePath.endsWith('.jsx')) {
@@ -182,7 +232,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
     } else {
       runCommand('npm', ['run', 'dev'], 'Run Project');
     }
-  }, [runCommand, activeFilePath, saveActiveFile]);
+  }, [runCommand, activeFilePath, saveActiveFile, getFileContent]);
 
   const handleRunTests = useCallback(() => {
     runCommand('npm', ['test'], 'Run Tests', 'tests');
@@ -208,12 +258,15 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
         onToggleTerminal={() => setIsTerminalOpen((prev) => !prev)}
         isAgentOpen={isAgentOpen}
         onToggleAgent={() => setIsAgentOpen((prev) => !prev)}
+        isPreviewOpen={isPreviewOpen}
+        onTogglePreview={handleTogglePreview}
+        activeFilePath={activeFilePath}
         onBackToDashboard={onBackToDashboard}
         onRunProject={handleRunProject}
         onRunTests={handleRunTests}
       />
 
-      {/* Main Content Area (Sidebar + Editor + Agent Panel) */}
+      {/* Main Content Area (Sidebar + Editor + Preview + Agent Panel) */}
       <div
         style={{
           flex: 1,
@@ -228,6 +281,29 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
 
         {/* Central Editor Surface */}
         <EditorPane workspaceId={workspaceId} />
+
+        {/* HTML Live Preview Pane */}
+        {isPreviewOpen && (
+          <HtmlPreview
+            filePath={activeFilePath}
+            content={previewContent}
+            getContent={async () => {
+              const { getActiveContent } = useEditorStore.getState();
+              const current = getActiveContent?.();
+              if (current !== undefined && current !== '') return current;
+              if (activeFilePath) {
+                try {
+                  return await getFileContent(activeFilePath);
+                } catch {
+                  return '';
+                }
+              }
+              return '';
+            }}
+            onRefresh={handleRefreshPreview}
+            onClose={() => setIsPreviewOpen(false)}
+          />
+        )}
 
         {/* Right AI Agent Drawer */}
         <AgentPanel

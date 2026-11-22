@@ -30,6 +30,7 @@ Completed Tasks:    TASK-001 through TASK-041 (all tasks complete)
                     TASK-045 — Dual-Mode AI Provider & Gemini API Adapter (COMPLETE)
                     TASK-046 — End-to-End AI Agent Wiring (Web UI to Runtime Orchestrator) (COMPLETE)
                     TASK-047 — AI Diff Review Modal & Staging Workflow (Side-by-Side Diff Acceptance Gate) (COMPLETE)
+                    TASK-048 — Client-Side Sandboxed HTML Live Preview (COMPLETE)
 Next Task:          None — Ready for staging deployment and cloud credentials provisioning.
 Blocked Tasks:      None
 Known Risks:        - Browser memory overhead during long-lived Yjs sessions.
@@ -2064,6 +2065,61 @@ Connect the AI Agent's file modifications directly to `DiffViewer.tsx` via a ded
 - [x] `packages/protocol/tests/envelope.test.ts` (diffData schema validation).
 - [x] `pnpm test` (41 suites passing).
 - [x] `pnpm typecheck` (10/10 workspaces clean).
+
+---
+
+## TASK-048 — Client-Side Sandboxed HTML Live Preview
+
+Status: DONE  
+Priority: P0  
+Component: Web Frontend (`apps/web`)  
+Depends on: TASK-004, TASK-018  
+Estimated effort: S
+
+### Objective
+
+Implement a zero-server-overhead HTML preview feature in `apps/web` so that developers can run or preview `.html` and `.htm` files directly inside the workspace without needing an external dev server process.
+
+### Implementation
+
+1. Created `apps/web/src/features/preview/HtmlPreview.tsx`:
+   - Sandboxed iframe with `sandbox="allow-scripts allow-modals"`, `srcDoc={content}`.
+   - Top toolbar with file path badge, Refresh button, Open in New Tab button, and Close button.
+   - 100% client-side execution via `srcDoc` and `Blob` object URL generation for new tab preview.
+2. Updated `apps/web/src/features/editor/useEditorStore.ts` & `apps/web/src/components/layout/EditorPane.tsx`:
+   - Added `getActiveContent` and `registerGetActiveContent` store hooks for retrieving active live editor content without server round-trips.
+3. Updated `apps/web/src/components/layout/TopBar.tsx`:
+   - Added "Preview" button in execution toolbar visible when an `.html` or `.htm` file is active.
+4. Updated `apps/web/src/components/layout/AppLayout.tsx`:
+   - In `handleRunProject`: if `activeFilePath` ends with `.html` or `.htm`, auto-save the file and open/toggle the HTML preview pane rather than falling back to `npm run dev`.
+   - Mounted `HtmlPreview` pane as a split surface next to `EditorPane`.
+
+### Files Changed
+
+- `apps/web/src/features/preview/HtmlPreview.tsx`
+- `apps/web/src/features/preview/HtmlPreview.test.tsx`
+- `apps/web/src/features/editor/useEditorStore.ts`
+- `apps/web/src/components/layout/EditorPane.tsx`
+- `apps/web/src/components/layout/TopBar.tsx`
+- `apps/web/src/components/layout/AppLayout.tsx`
+- `apps/web/src/components/layout/AppLayout.test.tsx`
+- `docs/task.md`
+
+### Acceptance Criteria
+
+- [x] Clicking "Run" while an `.html` or `.htm` file is active auto-saves and opens/toggles the sandboxed HTML preview pane.
+- [x] `HtmlPreview` embeds sandboxed iframe (`sandbox="allow-scripts allow-modals"`).
+- [x] Top toolbar includes path badge, "Refresh" button (reloads active editor content), "Open in New Tab" button (opens Blob URL), and "Close" button.
+- [x] Zero server overhead: 100% client-side in-browser preview without spawning daemon processes.
+- [x] "Preview" icon button in `TopBar` displays when an `.html` or `.htm` file is active.
+
+### Tests
+
+- [x] `apps/web/src/features/preview/HtmlPreview.test.tsx` (4 unit tests).
+- [x] `apps/web/src/components/layout/AppLayout.test.tsx` (HTML preview integration test).
+- [x] `pnpm test` (all test suites passing).
+- [x] `pnpm typecheck` (10/10 workspaces clean).
+- [x] `pnpm lint` (0 errors).
 
 ---
 

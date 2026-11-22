@@ -39,7 +39,7 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
   onMount,
   readOnly = false,
 }) => {
-  const { activeFilePath, registerSaveHandler } = useEditorStore();
+  const { activeFilePath, registerSaveHandler, registerGetActiveContent } = useEditorStore();
   const fileName = activeFilePath ? activeFilePath.split('/').pop() || activeFilePath : '';
   const language = activeFilePath ? getLanguageFromPath(activeFilePath) : 'plaintext';
 
@@ -80,14 +80,21 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
     }
   }, [editorInstance, saveFileContent]);
 
-  // Keep save handler reference in sync with latest state
+  // Keep save and content getter handlers in sync with latest state
   useEffect(() => {
     saveHandlerRef.current = performSave;
-    registerSaveHandler(performSave);
+    registerSaveHandler?.(performSave);
+    if (editorInstance) {
+      registerGetActiveContent?.(() => editorInstance.getValue());
+      return () => {
+        registerSaveHandler?.(null);
+        registerGetActiveContent?.(null);
+      };
+    }
     return () => {
-      registerSaveHandler(null);
+      registerSaveHandler?.(null);
     };
-  }, [performSave, registerSaveHandler]);
+  }, [performSave, registerSaveHandler, registerGetActiveContent, editorInstance]);
 
   const handleMount = useCallback((editor: editor.IStandaloneCodeEditor, monaco: Monaco) => {
     setEditorInstance(editor);

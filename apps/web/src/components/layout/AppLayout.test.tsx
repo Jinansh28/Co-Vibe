@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import React from 'react';
 import { AppLayout } from './AppLayout.js';
+import { useEditorStore } from '../../features/editor/useEditorStore.js';
 
 vi.mock('../../features/auth/useAuth.js', () => ({
   useAuth: () => ({ user: { email: 'test@example.com' } })
@@ -62,5 +63,43 @@ describe('AppLayout IDE Shell Grid', () => {
     // Expand Terminal
     fireEvent.click(terminalToggle);
     expect(screen.queryByText('VITE v5.4.10 ready in 240 ms')).not.toBeNull();
+  });
+
+  it('renders Preview button in TopBar and opens HTML preview pane when an HTML file is active', async () => {
+    useEditorStore.setState({
+      activeFilePath: 'index.html',
+      openFiles: ['index.html'],
+      getActiveContent: () => '<h1>Hello From Active Content</h1>',
+    });
+
+    render(<AppLayout />);
+
+    const previewBtn = screen.getByRole('button', { name: /Preview/i });
+    expect(previewBtn).toBeDefined();
+
+    // Initially preview pane is not open
+    expect(screen.queryByTestId('html-preview-pane')).toBeNull();
+
+    // Click Run Project -> opens preview pane instead of falling back to npm run dev
+    const runBtn = screen.getByRole('button', { name: /Run Project/i });
+    fireEvent.click(runBtn);
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('html-preview-pane')).not.toBeNull();
+    });
+    const iframe = screen.getByTestId('html-preview-iframe') as HTMLIFrameElement;
+    expect(iframe.getAttribute('srcdoc')).toBe('<h1>Hello From Active Content</h1>');
+
+    // Click Close on the preview pane
+    const previewPane = screen.getByTestId('html-preview-pane');
+    const closeBtn = within(previewPane).getByRole('button', { name: /^Close$/i });
+    fireEvent.click(closeBtn);
+    expect(screen.queryByTestId('html-preview-pane')).toBeNull();
+
+    // Click Preview button in TopBar -> opens preview pane
+    fireEvent.click(previewBtn);
+    await waitFor(() => {
+      expect(screen.queryByTestId('html-preview-pane')).not.toBeNull();
+    });
   });
 });

@@ -7,6 +7,9 @@ interface TopBarProps {
   onToggleTerminal: () => void;
   isAgentOpen: boolean;
   onToggleAgent: () => void;
+  isPreviewOpen?: boolean;
+  onTogglePreview?: () => void;
+  activeFilePath?: string | null;
   onRunProject?: () => void;
   onRunTests?: () => void;
   onBackToDashboard?: () => void;
@@ -19,10 +22,16 @@ export const TopBar: React.FC<TopBarProps> = ({
   onToggleTerminal,
   isAgentOpen,
   onToggleAgent,
+  isPreviewOpen = false,
+  onTogglePreview,
+  activeFilePath,
   onRunProject,
   onRunTests,
   onBackToDashboard,
 }) => {
+  const isHtmlActive = Boolean(
+    activeFilePath && (activeFilePath.endsWith('.html') || activeFilePath.endsWith('.htm'))
+  );
   return (
     <header
       style={{
@@ -161,6 +170,34 @@ export const TopBar: React.FC<TopBarProps> = ({
           </svg>
           Run
         </button>
+
+        {isHtmlActive && onTogglePreview && (
+          <button
+            onClick={onTogglePreview}
+            title={isPreviewOpen ? 'Hide HTML Preview' : 'Show Live HTML Preview'}
+            aria-label="Preview"
+            data-testid="preview-button"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '4px 10px',
+              backgroundColor: isPreviewOpen ? 'var(--bg-selected)' : 'var(--bg-panel-raised)',
+              color: isPreviewOpen ? 'var(--accent)' : 'var(--text-secondary)',
+              border: isPreviewOpen ? '1px solid var(--accent)' : '1px solid var(--border-subtle)',
+              borderRadius: 'var(--radius-sm)',
+              fontSize: '12px',
+              cursor: 'pointer',
+              fontWeight: 500,
+            }}
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+              <circle cx="12" cy="12" r="3" />
+            </svg>
+            <span>Preview</span>
+          </button>
+        )}
 
         <button
           onClick={onRunTests}
