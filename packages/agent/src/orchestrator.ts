@@ -54,7 +54,10 @@ export class AgentOrchestrator {
     }
   }
 
-  async executeTask(prompt: string): Promise<string> {
+  async executeTask(
+    prompt: string,
+    image?: { mimeType: string; data: string } | Array<{ mimeType: string; data: string }>
+  ): Promise<string> {
     try {
       if (this.stateMachine.state === 'created') {
         await this.stateMachine.transition('planning');
@@ -65,9 +68,18 @@ export class AgentOrchestrator {
       const contextChunks = this.contextRetriever.query(prompt, this.workspaceFiles);
       const contextString = contextChunks.map(c => `File: ${c.file}\n${c.content}`).join('\n\n');
 
+      let userImages: Array<{ mimeType: string; data: string }> | undefined;
+      if (image) {
+        userImages = Array.isArray(image) ? image : [image];
+      }
+
       const messages: AIMessage[] = [
         { role: 'system', content: `You are an AI assistant. Here is some context:\n${contextString}` },
-        { role: 'user', content: prompt }
+        {
+          role: 'user',
+          content: prompt,
+          images: userImages,
+        }
       ];
 
       await this.stateMachine.transition('executing');
@@ -161,5 +173,12 @@ export class AgentOrchestrator {
       this.sendProgress('FAILED', 'Error', error instanceof Error ? error.message : String(error), 100);
       throw error;
     }
+  }
+
+  async runTask(
+    prompt: string,
+    image?: { mimeType: string; data: string } | Array<{ mimeType: string; data: string }>
+  ): Promise<string> {
+    return this.executeTask(prompt, image);
   }
 }

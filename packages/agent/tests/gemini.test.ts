@@ -99,6 +99,53 @@ describe('GeminiProvider', () => {
     expect(response.message.tool_calls![0].function.name).toBe('write_file');
   });
 
+  it('formats payload with multimodal visual snapshot image attachments', async () => {
+    let capturedBody: any;
+    global.fetch = vi.fn().mockImplementation(async (_url: string, init: any) => {
+      capturedBody = JSON.parse(init.body);
+      return {
+        ok: true,
+        json: async () => ({
+          candidates: [
+            {
+              content: { parts: [{ text: 'Visual inspection complete' }] },
+              finishReason: 'STOP',
+            },
+          ],
+        }),
+      };
+    });
+
+    const provider = new GeminiProvider('test-api-key', 'gemini-2.0-flash', 'https://mock.api');
+    await provider.generate({
+      model: 'default',
+      messages: [
+        {
+          role: 'user',
+          content: 'Fix the card alignment',
+          images: [
+            {
+              mimeType: 'image/png',
+              data: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(capturedBody).toBeDefined();
+    const userContent = capturedBody.contents.find((c: any) => c.role === 'user');
+    expect(userContent).toBeDefined();
+    expect(userContent.parts).toHaveLength(2);
+    expect(userContent.parts[0]).toEqual({ text: 'Fix the card alignment' });
+    expect(userContent.parts[1]).toEqual({
+      inline_data: {
+        mime_type: 'image/png',
+        data: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+      },
+    });
+  });
+
   it('captures and preserves thoughtSignature during multi-turn tool calling', async () => {
     const mockResponseWithSignature = {
       candidates: [

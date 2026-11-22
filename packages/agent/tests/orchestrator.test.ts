@@ -55,4 +55,49 @@ describe('AgentOrchestrator', () => {
       stepName: 'Task Completed'
     }));
   });
+
+  it('should inject attached visual snapshot image into initial user message', async () => {
+    let capturedMessages: any[] = [];
+    const mockProvider: AIProvider = {
+      supportsToolCalling: true,
+      generate: vi.fn().mockImplementation(async (options) => {
+        capturedMessages = options.messages;
+        return {
+          message: { role: 'assistant', content: 'Inspected visual layout' },
+          finishReason: 'stop',
+        };
+      }),
+      stream: vi.fn(),
+    };
+
+    const toolRegistry = new ToolRegistry();
+    const stateMachine = new AgentStateMachine();
+    const contextRetriever = new ContextRetriever();
+    const workspaceFiles = new Map([['index.html', '<h1>Navbar</h1>']]);
+
+    const orchestrator = new AgentOrchestrator({
+      provider: mockProvider,
+      toolRegistry,
+      stateMachine,
+      contextRetriever,
+      taskId: 'task-vision-1',
+      runId: 'run-vision-1',
+      workspaceFiles,
+    });
+
+    const result = await orchestrator.runTask('Align navbar button', {
+      mimeType: 'image/png',
+      data: 'base64EncodedSnapshot==',
+    });
+
+    expect(result).toBe('Inspected visual layout');
+    const userMsg = capturedMessages.find((m) => m.role === 'user');
+    expect(userMsg).toBeDefined();
+    expect(userMsg.images).toEqual([
+      {
+        mimeType: 'image/png',
+        data: 'base64EncodedSnapshot==',
+      },
+    ]);
+  });
 });

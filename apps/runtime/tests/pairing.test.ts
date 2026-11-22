@@ -196,6 +196,36 @@ describe('Pairing Server HTTP Endpoints', () => {
     expect(states).toContain('SUCCESS');
   });
 
+  it('POST /api/v1/agent/run accepts optional visual snapshot image and passes to agent', async () => {
+    process.env.AI_PROVIDER = 'mock';
+    const testWsId = `test-ws-agent-vision-${Date.now()}`;
+
+    const res = await fetch(`${baseUrl}/api/v1/agent/run`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Workspace-Id': testWsId,
+      },
+      body: JSON.stringify({
+        prompt: 'Fix button alignment in this screenshot',
+        image: {
+          mimeType: 'image/png',
+          base64: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+        },
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    const text = await res.text();
+    const lines = text.trim().split('\n').map((l) => JSON.parse(l));
+
+    expect(lines.length).toBeGreaterThan(0);
+    const visualEvent = lines.find((l: any) => l.stepName === 'Visual Context');
+    expect(visualEvent).toBeDefined();
+    expect(visualEvent.image?.mimeType).toBe('image/png');
+    expect(visualEvent.image?.base64).toBeDefined();
+  });
+
   it('handles changeset endpoints: accept saves staged file and reject discards it', async () => {
     const { pendingChangeSets } = await import('../src/server/pairingServer.js');
     const testWsId = `test-ws-cs-${Date.now()}`;

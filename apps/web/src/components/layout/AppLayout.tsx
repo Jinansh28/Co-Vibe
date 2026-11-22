@@ -2,7 +2,7 @@ import React, { useState, useCallback } from 'react';
 import { TopBar } from './TopBar.js';
 import { Sidebar } from './Sidebar.js';
 import { EditorPane } from './EditorPane.js';
-import { AgentPanel } from '../../features/agent/AgentPanel.js';
+import { AgentPanel, type VisualAttachment } from '../../features/agent/AgentPanel.js';
 import { TerminalPane, type TerminalLine } from './TerminalPane.js';
 import { HtmlPreview } from '../../features/preview/HtmlPreview.js';
 import { useEditorStore } from '../../features/editor/useEditorStore.js';
@@ -38,6 +38,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
 
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [previewContent, setPreviewContent] = useState('');
+  const [attachedSnapshot, setAttachedSnapshot] = useState<VisualAttachment | null>(null);
 
   const [outputLines, setOutputLines] = useState<TerminalLine[]>([]);
   const [isRunning, setIsRunning] = useState(false);
@@ -164,6 +165,15 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
       console.error('Failed to reload preview content:', err);
     }
   }, [activeFilePath, getFileContent]);
+
+  const handleCaptureSnapshot = useCallback((snapshot: { base64: string; filePath: string }) => {
+    setAttachedSnapshot({
+      base64: snapshot.base64,
+      filePath: snapshot.filePath,
+      mimeType: 'image/png',
+    });
+    setIsAgentOpen(true);
+  }, []);
 
   const handleTogglePreview = useCallback(async () => {
     if (!isPreviewOpen && activeFilePath) {
@@ -301,6 +311,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
               return '';
             }}
             onRefresh={handleRefreshPreview}
+            onCaptureSnapshot={handleCaptureSnapshot}
             onClose={() => setIsPreviewOpen(false)}
           />
         )}
@@ -311,6 +322,8 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
           workspaceId={workspaceId}
           onClose={() => setIsAgentOpen(false)}
           onReviewDiff={(diff) => setActiveDiff(diff)}
+          attachedImage={attachedSnapshot}
+          onClearAttachment={() => setAttachedSnapshot(null)}
         />
       </div>
 

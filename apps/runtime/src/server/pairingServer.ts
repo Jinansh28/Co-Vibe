@@ -356,11 +356,27 @@ export function createPairingRequestHandler(tokenManager: TokenManager) {
     // POST /api/v1/agent/run — Autonomous AI Agent Task Execution (NDJSON Stream)
     // -------------------------------------------------------------------------
     if ((pathname === '/api/v1/agent/run' || pathname === '/api/v1/agent/task') && method === 'POST') {
-      const body = await parseJsonBody<{ prompt?: string }>(req);
+      const body = await parseJsonBody<{
+        prompt?: string;
+        image?: { mimeType?: string; base64?: string; data?: string };
+        images?: Array<{ mimeType?: string; base64?: string; data?: string }>;
+      }>(req);
       if (!body || typeof body.prompt !== 'string' || !body.prompt.trim()) {
         res.writeHead(400);
         res.end(JSON.stringify({ ok: false, error: 'Missing required field: prompt' }));
         return;
+      }
+
+      const rawImage = body.image || (body.images && body.images[0]);
+      let attachedImage: { mimeType: string; data: string } | undefined;
+      if (rawImage) {
+        const rawData = rawImage.data || rawImage.base64 || '';
+        if (rawData) {
+          attachedImage = {
+            mimeType: rawImage.mimeType || 'image/png',
+            data: rawData.replace(/^data:[^;]+;base64,/, ''),
+          };
+        }
       }
 
       const workspaceRoot = getWorkspaceRoot(req);
@@ -381,6 +397,21 @@ export function createPairingRequestHandler(tokenManager: TokenManager) {
           // Client stream connection closed or write error
         }
       };
+
+      if (attachedImage) {
+        writeProgress({
+          taskId,
+          runId,
+          state: 'PLANNING',
+          stepName: 'Visual Context',
+          message: 'Visual snapshot attached to AI context',
+          percentage: 15,
+          image: {
+            mimeType: attachedImage.mimeType,
+            base64: attachedImage.data,
+          },
+        });
+      }
 
       try {
         // Collect existing workspace files for context retrieval
@@ -479,7 +510,7 @@ export function createPairingRequestHandler(tokenManager: TokenManager) {
           onProgress: writeProgress,
         });
 
-        const result = await orchestrator.executeTask(body.prompt);
+        const result = await orchestrator.runTask(body.prompt, attachedImage);
 
         writeProgress({
           taskId,

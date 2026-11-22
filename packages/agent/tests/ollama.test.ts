@@ -26,6 +26,42 @@ describe('OllamaProvider', () => {
     expect(response.finishReason).toBe('stop');
   });
 
+  it('formats messages with images for multimodal model', async () => {
+    let capturedBody: any;
+    global.fetch = vi.fn().mockImplementation(async (_url: string, init: any) => {
+      capturedBody = JSON.parse(init.body);
+      return {
+        ok: true,
+        json: async () => ({
+          message: { role: 'assistant', content: 'Image analyzed.' },
+          done_reason: 'stop',
+        }),
+      };
+    });
+
+    const provider = new OllamaProvider('http://localhost:11434');
+    await provider.generate({
+      model: 'llava:7b',
+      messages: [
+        {
+          role: 'user',
+          content: 'Analyze this UI',
+          images: [
+            {
+              mimeType: 'image/png',
+              data: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(capturedBody).toBeDefined();
+    expect(capturedBody.messages[0].images).toEqual([
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+    ]);
+  });
+
   it('streams a response', async () => {
     const encoder = new TextEncoder();
     const chunks = [

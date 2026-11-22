@@ -52,6 +52,21 @@ export const TerminalOutputPayloadSchema = z.object({
 
 export type TerminalOutputPayload = z.infer<typeof TerminalOutputPayloadSchema>;
 
+export const ImageAttachmentSchema = z.object({
+  mimeType: z.string().default('image/png'),
+  base64: z.string(), // Raw base64 data without data:image/png;base64 prefix
+});
+
+export type ImageAttachment = z.infer<typeof ImageAttachmentSchema>;
+
+export const AgentTaskRequestSchema = z.object({
+  prompt: z.string().min(1),
+  image: ImageAttachmentSchema.optional(),
+  images: z.array(ImageAttachmentSchema).optional(),
+});
+
+export type AgentTaskRequest = z.infer<typeof AgentTaskRequestSchema>;
+
 export const AgentTaskProgressPayloadSchema = z.object({
   taskId: z.string().uuid(),
   runId: z.string().uuid(),
@@ -68,6 +83,7 @@ export const AgentTaskProgressPayloadSchema = z.object({
   stepName: z.string(),
   message: z.string(),
   percentage: z.number().min(0).max(100).optional(),
+  image: ImageAttachmentSchema.optional(),
   diffData: z
     .object({
       changeSetId: z.string(),

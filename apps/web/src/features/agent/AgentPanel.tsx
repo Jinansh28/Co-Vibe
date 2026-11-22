@@ -4,14 +4,29 @@ import { AgentTaskProgressPayload } from '@co-vibe/protocol';
 
 const RUNTIME_URL = 'http://127.0.0.1:7890';
 
-interface AgentPanelProps {
+export interface VisualAttachment {
+  base64: string;
+  filePath: string;
+  mimeType?: string;
+}
+
+export interface AgentPanelProps {
   isOpen: boolean;
   workspaceId?: string | null;
   onClose?: () => void;
   onReviewDiff?: (diffData: NonNullable<AgentTaskProgressPayload['diffData']>) => void;
+  attachedImage?: VisualAttachment | null;
+  onClearAttachment?: () => void;
 }
 
-export const AgentPanel: React.FC<AgentPanelProps> = ({ isOpen, workspaceId, onClose, onReviewDiff }) => {
+export const AgentPanel: React.FC<AgentPanelProps> = ({
+  isOpen,
+  workspaceId,
+  onClose,
+  onReviewDiff,
+  attachedImage,
+  onClearAttachment,
+}) => {
   const [prompt, setPrompt] = useState('');
   const [isExecuting, setIsExecuting] = useState(false);
   const [activeGoal, setActiveGoal] = useState<string | null>(null);
@@ -20,6 +35,18 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ isOpen, workspaceId, onC
     provider: 'Gemini',
     model: 'gemini-3.5-flash-lite',
   });
+  const [localAttachment, setLocalAttachment] = useState<VisualAttachment | null>(null);
+
+  useEffect(() => {
+    if (attachedImage !== undefined) {
+      setLocalAttachment(attachedImage);
+    }
+  }, [attachedImage]);
+
+  const handleRemoveAttachment = () => {
+    setLocalAttachment(null);
+    onClearAttachment?.();
+  };
 
   useEffect(() => {
     if (!isOpen) return;
@@ -39,9 +66,12 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ isOpen, workspaceId, onC
     const text = prompt.trim();
     if (!text || isExecuting) return;
 
+    const attachmentToSend = localAttachment;
     setIsExecuting(true);
     setActiveGoal(text);
     setPrompt('');
+    setLocalAttachment(null);
+    onClearAttachment?.();
 
     // Add optimistic start event
     const startEvent: AgentTaskProgressPayload = {
@@ -51,6 +81,12 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ isOpen, workspaceId, onC
       stepName: 'User Request',
       message: text,
       percentage: 5,
+      image: attachmentToSend
+        ? {
+            mimeType: attachmentToSend.mimeType || 'image/png',
+            base64: attachmentToSend.base64,
+          }
+        : undefined,
     };
     setTimelineEvents((prev) => [...prev, startEvent]);
 
@@ -62,10 +98,18 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ isOpen, workspaceId, onC
         headers['X-Workspace-Id'] = workspaceId;
       }
 
+      const requestBody: any = { prompt: text };
+      if (attachmentToSend) {
+        requestBody.image = {
+          mimeType: attachmentToSend.mimeType || 'image/png',
+          base64: attachmentToSend.base64,
+        };
+      }
+
       const res = await fetch(`${RUNTIME_URL}/api/v1/agent/run`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ prompt: text }),
+        body: JSON.stringify(requestBody),
       });
 
       if (!res.ok || !res.body) {
@@ -264,6 +308,75 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({ isOpen, workspaceId, onC
           backgroundColor: 'var(--bg-panel-solid)',
         }}
       >
+        {/* Attachment preview badge above prompt input */}
+        {localAttachment && (
+          <div
+            data-testid="agent-attachment-badge"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '4px 8px',
+              marginBottom: '8px',
+              backgroundColor: 'var(--bg-panel-raised)',
+              border: '1px solid var(--border-subtle)',
+              borderRadius: 'var(--radius-sm)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', overflow: 'hidden' }}>
+              <img
+                data-testid="agent-attachment-thumbnail"
+                src={`data:${localAttachment.mimeType || 'image/png'};base64,${localAttachment.base64}`}
+                alt="Visual snapshot"
+                style={{
+                  width: '28px',
+                  height: '28px',
+                  objectFit: 'cover',
+                  borderRadius: 'var(--radius-xs)',
+                  border: '1px solid var(--border-subtle)',
+                  backgroundColor: '#ffffff',
+                  flexShrink: 0,
+                }}
+              />
+              <span
+                data-testid="agent-attachment-text"
+                style={{
+                  fontFamily: 'var(--font-code)',
+                  fontSize: '11px',
+                  color: 'var(--text-secondary)',
+                  whiteSpace: 'nowrap',
+                  textOverflow: 'ellipsis',
+                  overflow: 'hidden',
+                }}
+              >
+                [Snapshot: {localAttachment.filePath}]
+              </span>
+            </div>
+
+            <button
+              onClick={handleRemoveAttachment}
+              title="Remove snapshot attachment"
+              aria-label="Remove attachment"
+              data-testid="remove-attachment-btn"
+              style={{
+                background: 'none',
+                border: 'none',
+                color: 'var(--text-muted)',
+                cursor: 'pointer',
+                padding: '2px 4px',
+                fontSize: '14px',
+                lineHeight: 1,
+                borderRadius: 'var(--radius-xs)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              ×
+            </button>
+          </div>
+        )}
+
         <div style={{ position: 'relative' }}>
           <textarea
             value={prompt}

@@ -5,6 +5,7 @@ export interface AIMessage {
   tool_calls?: ToolCall[];
   tool_call_id?: string;
   rawParts?: any[];
+  images?: Array<{ mimeType: string; data: string }>;
 }
 
 export interface ToolCall {

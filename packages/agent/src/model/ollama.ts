@@ -10,6 +10,36 @@ export class OllamaProvider implements AIProvider {
     this.defaultModel = defaultModel;
   }
 
+  private formatMessages(messages: any[], model: string): any[] {
+    const isMultimodal = /llava|vision|vl|moondream|minicpm-v|bakllava/i.test(model);
+    let hasImages = false;
+
+    const formatted = messages.map((msg) => {
+      const formattedMsg: any = {
+        role: msg.role,
+        content: msg.content,
+      };
+      if (msg.images && msg.images.length > 0) {
+        hasImages = true;
+        formattedMsg.images = msg.images.map((img: { mimeType?: string; data: string }) =>
+          img.data.replace(/^data:[^;]+;base64,/, '')
+        );
+      }
+      if (msg.tool_calls) {
+        formattedMsg.tool_calls = msg.tool_calls;
+      }
+      return formattedMsg;
+    });
+
+    if (hasImages && !isMultimodal) {
+      console.warn(
+        `[OllamaProvider] Model "${model}" might not support vision multimodal inputs. If requests fail, switch to a vision model (e.g. llava, qwen2-vl).`
+      );
+    }
+
+    return formatted;
+  }
+
   async generate(options: GenerateOptions): Promise<GenerateResponse> {
     const model = options.model === 'default' || !options.model ? this.defaultModel : options.model;
     const response = await fetch(`${this.baseUrl}/api/chat`, {
@@ -19,7 +49,7 @@ export class OllamaProvider implements AIProvider {
       },
       body: JSON.stringify({
         model,
-        messages: options.messages,
+        messages: this.formatMessages(options.messages, model),
         tools: options.tools,
         stream: false,
         options: {
@@ -49,7 +79,7 @@ export class OllamaProvider implements AIProvider {
       },
       body: JSON.stringify({
         model,
-        messages: options.messages,
+        messages: this.formatMessages(options.messages, model),
         tools: options.tools,
         stream: true,
         options: {

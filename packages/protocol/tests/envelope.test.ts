@@ -5,6 +5,8 @@ import {
   FileUpdatedPayloadSchema,
   TerminalOutputPayloadSchema,
   AgentTaskProgressPayloadSchema,
+  ImageAttachmentSchema,
+  AgentTaskRequestSchema,
   PreviewUpdatedPayloadSchema,
   HealthCheckResponseSchema,
 } from '../src/index.js';
@@ -119,6 +121,37 @@ describe('Protocol Envelope Schemas', () => {
     };
     const parsedDiff = AgentTaskProgressPayloadSchema.parse(payloadWithDiff);
     expect(parsedDiff.diffData?.filePath).toBe('src/index.ts');
+
+    const payloadWithImage = {
+      ...payload,
+      image: {
+        mimeType: 'image/png',
+        base64: 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+      },
+    };
+    const parsedImage = AgentTaskProgressPayloadSchema.parse(payloadWithImage);
+    expect(parsedImage.image?.mimeType).toBe('image/png');
+    expect(parsedImage.image?.base64).toBeDefined();
+  });
+
+  it('validates ImageAttachmentSchema and AgentTaskRequestSchema', () => {
+    const rawImage = {
+      base64: 'rawBase64ImageData==',
+    };
+    const parsedImage = ImageAttachmentSchema.parse(rawImage);
+    expect(parsedImage.mimeType).toBe('image/png');
+    expect(parsedImage.base64).toBe('rawBase64ImageData==');
+
+    const request = {
+      prompt: 'Fix the navbar layout',
+      image: {
+        mimeType: 'image/jpeg',
+        base64: 'jpegData==',
+      },
+    };
+    const parsedRequest = AgentTaskRequestSchema.parse(request);
+    expect(parsedRequest.prompt).toBe('Fix the navbar layout');
+    expect(parsedRequest.image?.mimeType).toBe('image/jpeg');
   });
 
   it('validates HealthCheckResponseSchema', () => {

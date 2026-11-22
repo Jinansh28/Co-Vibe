@@ -101,4 +101,30 @@ describe('HtmlPreview Component', () => {
       window.open = originalOpen;
     }
   });
+
+  it('triggers onCaptureSnapshot when Snapshot to AI button is clicked', async () => {
+    const onCaptureSnapshot = vi.fn();
+    render(
+      <HtmlPreview
+        filePath="src/component.html"
+        content="<button class='btn'>Click Me</button>"
+        onClose={vi.fn()}
+        onCaptureSnapshot={onCaptureSnapshot}
+      />
+    );
+
+    const snapshotButton = screen.getByRole('button', { name: /Snapshot to AI/i });
+    expect(snapshotButton).toBeDefined();
+
+    fireEvent.click(snapshotButton);
+
+    await waitFor(() => {
+      expect(onCaptureSnapshot).toHaveBeenCalledTimes(1);
+    });
+
+    const snapshotArg = onCaptureSnapshot.mock.calls[0][0];
+    expect(snapshotArg.filePath).toBe('src/component.html');
+    expect(typeof snapshotArg.base64).toBe('string');
+    expect(snapshotArg.base64.length).toBeGreaterThan(0);
+  });
 });

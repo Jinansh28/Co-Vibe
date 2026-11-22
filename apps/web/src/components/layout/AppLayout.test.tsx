@@ -102,4 +102,42 @@ describe('AppLayout IDE Shell Grid', () => {
       expect(screen.queryByTestId('html-preview-pane')).not.toBeNull();
     });
   });
+
+  it('opens AgentPanel and displays attachment preview badge when Snapshot to AI is clicked in HtmlPreview', async () => {
+    useEditorStore.setState({
+      activeFilePath: 'navbar.html',
+      openFiles: ['navbar.html'],
+      getActiveContent: () => '<nav><button>Log In</button></nav>',
+    });
+
+    render(<AppLayout initialAgentOpen={false} />);
+
+    // Agent panel is initially closed
+    expect(screen.queryByTestId('agent-attachment-badge')).toBeNull();
+
+    // Open Preview pane
+    const previewBtn = screen.getByRole('button', { name: /Preview/i });
+    fireEvent.click(previewBtn);
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('html-preview-pane')).not.toBeNull();
+    });
+
+    // Click Snapshot to AI
+    const snapshotBtn = screen.getByRole('button', { name: /Snapshot to AI/i });
+    fireEvent.click(snapshotBtn);
+
+    // Agent panel should open and display the attachment badge
+    await waitFor(() => {
+      expect(screen.getByTestId('agent-attachment-badge')).toBeDefined();
+    });
+
+    expect(screen.getByTestId('agent-attachment-text').textContent).toContain('navbar.html');
+    expect(screen.getByTestId('agent-attachment-thumbnail')).toBeDefined();
+
+    // Remove attachment button
+    const removeBtn = screen.getByRole('button', { name: /Remove attachment/i });
+    fireEvent.click(removeBtn);
+    expect(screen.queryByTestId('agent-attachment-badge')).toBeNull();
+  });
 });

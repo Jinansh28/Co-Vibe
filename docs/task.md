@@ -31,6 +31,7 @@ Completed Tasks:    TASK-001 through TASK-041 (all tasks complete)
                     TASK-046 — End-to-End AI Agent Wiring (Web UI to Runtime Orchestrator) (COMPLETE)
                     TASK-047 — AI Diff Review Modal & Staging Workflow (Side-by-Side Diff Acceptance Gate) (COMPLETE)
                     TASK-048 — Client-Side Sandboxed HTML Live Preview (COMPLETE)
+                    TASK-049 — Multimodal Visual Snapshot to AI Agent Context (COMPLETE)
 Next Task:          None — Ready for staging deployment and cloud credentials provisioning.
 Blocked Tasks:      None
 Known Risks:        - Browser memory overhead during long-lived Yjs sessions.
@@ -2120,6 +2121,54 @@ Implement a zero-server-overhead HTML preview feature in `apps/web` so that deve
 - [x] `pnpm test` (all test suites passing).
 - [x] `pnpm typecheck` (10/10 workspaces clean).
 - [x] `pnpm lint` (0 errors).
+
+---
+
+## TASK-049 — Multimodal Visual Snapshot to AI Agent Context
+
+Status: DONE  
+Priority: P0  
+Component: Agent / Preview / Web UI  
+Depends on: TASK-046, TASK-048  
+Estimated effort: M  
+
+### Objective
+
+Enable developers to capture a visual snapshot of their live HTML preview and attach it directly as visual context for the AI Agent (Gemini multimodal vision), allowing prompts like "Fix the button alignment in this navbar" or "Match this card to our glassmorphic dark theme".
+
+### Deliverables
+
+- `packages/protocol/src/envelope.ts`: Added `ImageAttachmentSchema` and `AgentTaskRequestSchema`. Extended `AgentTaskProgressPayloadSchema` with optional `image` attachment.
+- `packages/agent/src/model/interface.ts`: Extended `AIMessage` with optional `images?: Array<{ mimeType: string; data: string }>`.
+- `packages/agent/src/model/gemini.ts`: Formatted user messages with `msg.images` to include `{ inline_data: { mime_type, data } }` in the Gemini REST API `parts` array.
+- `packages/agent/src/model/ollama.ts`: Formatted multimodal messages with base64 `images` array for Ollama vision models (e.g. `llava`, `qwen2-vl`).
+- `packages/agent/src/orchestrator.ts`: Injected attached visual context snapshot into user message during task planning. Added `runTask` method.
+- `apps/runtime/src/server/pairingServer.ts`: Updated `POST /api/v1/agent/run` and `POST /api/v1/agent/task` to accept optional `image` and emit visual context progress events.
+- `apps/web/src/features/preview/HtmlPreview.tsx`: Added "Snapshot to AI" toolbar button with camera icon, SVG foreignObject/canvas rasterization, and `onCaptureSnapshot` callback.
+- `apps/web/src/features/agent/AgentPanel.tsx`: Added snapshot attachment preview badge (thumbnail, file badge, remove button) above prompt input. Included base64 image in NDJSON request payload.
+- `apps/web/src/components/layout/AppLayout.tsx`: Connected `HtmlPreview.onCaptureSnapshot` to open `AgentPanel` and set active visual context attachment.
+
+### Acceptance Criteria
+
+- [x] `ImageAttachmentSchema` and `AgentTaskRequestSchema` validated in `@co-vibe/protocol`.
+- [x] `AIMessage` supports `images` array with `mimeType` and `data`.
+- [x] `GeminiProvider` appends `{ inline_data: { mime_type, data } }` to user message parts.
+- [x] `OllamaProvider` formats images for multimodal models and warns when model is text-only.
+- [x] `AgentOrchestrator` injects attached image into initial user message and supports `runTask(...)`.
+- [x] Local runtime daemon parses optional `image` payload and forwards to orchestrator.
+- [x] `HtmlPreview` toolbar includes "Snapshot to AI" button with camera icon.
+- [x] `AgentPanel` renders thumbnail, `[Snapshot: <filename>]` badge, and discard (`×`) button above prompt input.
+- [x] Submitting prompt with snapshot attaches image to runtime NDJSON stream payload and clears attachment.
+
+### Tests
+
+- [x] `packages/protocol/tests/envelope.test.ts` (`ImageAttachmentSchema` & `AgentTaskRequestSchema` tests).
+- [x] `packages/agent/tests/gemini.test.ts` (multimodal inline_data formatting test).
+- [x] `packages/agent/tests/ollama.test.ts` (multimodal images formatting test).
+- [x] `packages/agent/tests/orchestrator.test.ts` (visual snapshot injection test).
+- [x] `apps/runtime/tests/pairing.test.ts` (NDJSON visual snapshot execution test).
+- [x] `apps/web/src/features/preview/HtmlPreview.test.tsx` (Snapshot to AI button test).
+- [x] `apps/web/src/components/layout/AppLayout.test.tsx` (AppLayout visual snapshot wiring test).
 
 ---
 
