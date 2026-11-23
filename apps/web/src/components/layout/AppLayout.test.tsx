@@ -155,4 +155,43 @@ describe('AppLayout IDE Shell Grid', () => {
     // Verify initial state has no snippet chip
     expect(screen.queryByTestId('agent-snippet-badge')).toBeNull();
   });
+
+  it('opens QuickOpenModal when clicking search files button in TopBar', () => {
+    render(<AppLayout />);
+
+    expect(screen.queryByTestId('quick-open-modal')).toBeNull();
+
+    const searchBtn = screen.getByRole('button', { name: /Search files/i });
+    fireEvent.click(searchBtn);
+
+    expect(screen.getByTestId('quick-open-modal')).toBeDefined();
+    expect(screen.getByTestId('quick-open-input')).toBeDefined();
+  });
+
+  it('opens QuickOpenModal and calls preventDefault when pressing Ctrl+P globally', () => {
+    render(<AppLayout />);
+
+    expect(screen.queryByTestId('quick-open-modal')).toBeNull();
+
+    const notPrevented = fireEvent.keyDown(window, {
+      key: 'p',
+      ctrlKey: true,
+    });
+
+    expect(notPrevented).toBe(false);
+    expect(screen.getByTestId('quick-open-modal')).toBeDefined();
+  });
+
+  it('opens QuickOpenModal when pressing Cmd+K globally', () => {
+    render(<AppLayout />);
+
+    expect(screen.queryByTestId('quick-open-modal')).toBeNull();
+
+    fireEvent.keyDown(window, {
+      key: 'k',
+      metaKey: true,
+    });
+
+    expect(screen.getByTestId('quick-open-modal')).toBeDefined();
+  });
 });

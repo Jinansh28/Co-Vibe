@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import { useFiles } from './useFiles.js';
+import { useFiles, flattenFileTree } from './useFiles.js';
+import type { FileItem } from './FileTree.js';
 
 describe('useFiles Hook', () => {
   beforeEach(() => {
@@ -70,5 +71,39 @@ describe('useFiles Hook', () => {
     expect(result.current.fileTree).toEqual([
       { id: 'index.js', name: 'index.js', type: 'file' },
     ]);
+  });
+
+  describe('flattenFileTree helper', () => {
+    it('returns empty array when given an empty item list', () => {
+      expect(flattenFileTree([])).toEqual([]);
+    });
+
+    it('recursively extracts file paths and ignores folder nodes', () => {
+      const tree: FileItem[] = [
+        {
+          id: 'src',
+          name: 'src',
+          type: 'folder',
+          children: [
+            {
+              id: 'src/components',
+              name: 'components',
+              type: 'folder',
+              children: [
+                { id: 'src/components/Button.tsx', name: 'Button.tsx', type: 'file' },
+              ],
+            },
+            { id: 'src/index.ts', name: 'index.ts', type: 'file' },
+          ],
+        },
+        { id: 'README.md', name: 'README.md', type: 'file' },
+      ];
+
+      expect(flattenFileTree(tree)).toEqual([
+        'src/components/Button.tsx',
+        'src/index.ts',
+        'README.md',
+      ]);
+    });
   });
 });

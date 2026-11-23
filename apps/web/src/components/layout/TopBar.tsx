@@ -13,6 +13,7 @@ interface TopBarProps {
   onRunProject?: () => void;
   onRunTests?: () => void;
   onBackToDashboard?: () => void;
+  onOpenQuickOpen?: () => void;
 }
 
 export const TopBar: React.FC<TopBarProps> = ({
@@ -28,6 +29,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   onRunProject,
   onRunTests,
   onBackToDashboard,
+  onOpenQuickOpen,
 }) => {
   const isHtmlActive = Boolean(
     activeFilePath && (activeFilePath.endsWith('.html') || activeFilePath.endsWith('.htm'))
@@ -146,8 +148,51 @@ export const TopBar: React.FC<TopBarProps> = ({
         </div>
       </div>
 
-      {/* Center section: Execution controls */}
+      {/* Center section: Execution controls & Quick Open */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <button
+          onClick={onOpenQuickOpen}
+          className="topbar-quick-open-btn"
+          title="Search files across workspace (Ctrl+P / Cmd+P)"
+          aria-label="Search files (Ctrl+P)"
+          data-testid="topbar-quick-open-btn"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '4px 10px',
+            backgroundColor: 'var(--bg-panel-raised)',
+            border: '1px solid var(--border-subtle)',
+            borderRadius: 'var(--radius-sm)',
+            color: 'var(--text-muted)',
+            fontSize: '12px',
+            cursor: 'pointer',
+            minWidth: '170px',
+            justifyContent: 'space-between',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="11" cy="11" r="8" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+            <span>Search files...</span>
+          </div>
+          <kbd
+            style={{
+              fontSize: '10px',
+              fontFamily: 'var(--font-code)',
+              padding: '1px 5px',
+              backgroundColor: 'var(--bg-input)',
+              border: '1px solid var(--border-subtle)',
+              borderRadius: 'var(--radius-xs)',
+              color: 'var(--text-secondary)',
+            }}
+          >
+            Ctrl+P
+          </kbd>
+        </button>
+
         <button
           onClick={onRunProject}
           title="Run project application"

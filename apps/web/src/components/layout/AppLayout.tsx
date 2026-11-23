@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { TopBar } from './TopBar.js';
 import { Sidebar } from './Sidebar.js';
 import { EditorPane, type CodeActionTriggerPayload } from './EditorPane.js';
@@ -6,8 +6,9 @@ import { AgentPanel, type VisualAttachment, type CodeSnippetAttachment } from '.
 import { TerminalPane, type TerminalLine } from './TerminalPane.js';
 import { HtmlPreview } from '../../features/preview/HtmlPreview.js';
 import { useEditorStore } from '../../features/editor/useEditorStore.js';
-import { useFiles } from '../../features/editor/useFiles.js';
+import { useFiles, flattenFileTree } from '../../features/editor/useFiles.js';
 import { DiffReviewModal, type DiffData } from '../../features/changeset/DiffReviewModal.js';
+import { QuickOpenModal } from '../../features/editor/QuickOpenModal.js';
 import { useOptionalNotification } from '../../context/NotificationContext.js';
 
 const RUNTIME_URL = 'http://127.0.0.1:7890';
@@ -32,9 +33,11 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   const [isAgentOpen, setIsAgentOpen] = useState(initialAgentOpen);
 
   const { activeFilePath, openFiles, openFile, saveActiveFile } = useEditorStore();
-  const { saveFileContent, getFileContent } = useFiles(workspaceId);
+  const { fileTree, saveFileContent, getFileContent } = useFiles(workspaceId);
+  const flattenedFiles = useMemo(() => flattenFileTree(fileTree), [fileTree]);
   const notificationContext = useOptionalNotification();
   const [activeDiff, setActiveDiff] = useState<DiffData | null>(null);
+  const [isQuickOpen, setIsQuickOpen] = useState(false);
 
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [previewContent, setPreviewContent] = useState('');
@@ -262,6 +265,24 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
     []
   );
 
+  // Global shortcut: Ctrl+P / Cmd+P or Cmd+K opens Quick Open and prevents browser print
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      const isP = (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'p';
+      const isCmdK = e.metaKey && e.key.toLowerCase() === 'k';
+      if (isP || isCmdK) {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsQuickOpen((prev) => !prev);
+      }
+    };
+
+    window.addEventListener('keydown', handleGlobalKeyDown, true);
+    return () => {
+      window.removeEventListener('keydown', handleGlobalKeyDown, true);
+    };
+  }, []);
+
   return (
     <div
       style={{
@@ -288,6 +309,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
         onBackToDashboard={onBackToDashboard}
         onRunProject={handleRunProject}
         onRunTests={handleRunTests}
+        onOpenQuickOpen={() => setIsQuickOpen(true)}
       />
 
       {/* Main Content Area (Sidebar + Editor + Preview + Agent Panel) */}
@@ -379,6 +401,14 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
           }}
         />
       )}
+
+      {/* Quick Open File Fuzzy Finder Modal */}
+      <QuickOpenModal
+        isOpen={isQuickOpen}
+        onClose={() => setIsQuickOpen(false)}
+        files={flattenedFiles}
+        workspaceId={workspaceId}
+      />
 
       {/* Bottom Terminal Drawer */}
       <TerminalPane

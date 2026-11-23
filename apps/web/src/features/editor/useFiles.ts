@@ -106,3 +106,25 @@ export function useFiles(workspaceId?: string | null) {
     deleteFileOrFolder
   };
 }
+
+/**
+ * Recursively flattens a hierarchical FileItem tree into an array of relative file paths.
+ * Directories (type === 'folder') are omitted from the returned paths.
+ */
+export function flattenFileTree(items: FileItem[]): string[] {
+  const result: string[] = [];
+
+  function traverse(list: FileItem[]) {
+    for (const item of list) {
+      if (item.type === 'file') {
+        result.push(item.id);
+      }
+      if (item.children && Array.isArray(item.children)) {
+        traverse(item.children);
+      }
+    }
+  }
+
+  traverse(items);
+  return result;
+}

@@ -6,3 +6,9 @@ export {
   getLanguageFromPath,
 } from './editorConfig.js';
 export type { EditorSettings } from './editorConfig.js';
+export { QuickOpenModal } from './QuickOpenModal.js';
+export type { QuickOpenModalProps } from './QuickOpenModal.js';
+export { fuzzyFilterFiles, splitPath, isWordBoundary } from './fuzzySearch.js';
+export type { FuzzyMatchResult } from './fuzzySearch.js';
+export { flattenFileTree } from './useFiles.js';
+

@@ -33,6 +33,7 @@ Completed Tasks:    TASK-001 through TASK-041 (all tasks complete)
                     TASK-048 — Client-Side Sandboxed HTML Live Preview (COMPLETE)
                     TASK-049 — Multimodal Visual Snapshot to AI Agent Context (COMPLETE)
                     TASK-050 — Monaco Inline Code Action (Ctrl+K & Context Menu) (COMPLETE)
+                    TASK-051 — Quick Open / File Fuzzy Finder (Ctrl+P / Cmd+P) (COMPLETE)
 Next Task:          None — Ready for staging deployment and cloud credentials provisioning.
 Blocked Tasks:      None
 Known Risks:        - Browser memory overhead during long-lived Yjs sessions.
@@ -2218,6 +2219,88 @@ Implement an inline AI code action trigger in Monaco Editor. When a user selects
 - [x] Monorepo suite: 45 test files, 245 tests all passing.
 - [x] `pnpm typecheck`: 10/10 workspaces clean (0 errors).
 - [x] `pnpm lint`: clean (0 errors).
+
+---
+
+## TASK-051 — Quick Open / File Fuzzy Finder (Ctrl+P / Cmd+P)
+
+Status: DONE  
+Priority: P0  
+Component: Frontend / Editor  
+Depends on: TASK-018, TASK-050  
+Estimated effort: M
+
+### Objective
+
+Implement a fast, keyboard-first Quick Open modal (like VS Code's `Ctrl+P` / Spotlight) allowing developers to fuzzy-search file paths across the active workspace and instantly jump to any file in Monaco Editor without manually browsing the file tree.
+
+### Implementation
+
+- `apps/web/src/features/editor/fuzzySearch.ts`:
+  - Zero-dependency fuzzy scoring algorithm (`fuzzyFilterFiles`, `splitPath`, `isWordBoundary`).
+  - Empty search prioritization: open tabs (`openFiles` from `useEditorStore`) rank first, followed by remaining files in alphabetical order.
+  - Non-empty search: sequential character matching with bonuses for exact matches, filename prefix matches, word boundaries (after `/`, `\`, `.`, `_`, `-`, space or camelCase transitions), basename vs directory location, consecutive character streaks, and currently open files.
+  - Precise `matchedIndices` array mapping character indices in path for highlighting.
+- `apps/web/src/features/editor/useFiles.ts`:
+  - Added recursive `flattenFileTree(items: FileItem[]): string[]` utility to extract flat file paths while omitting folder nodes.
+- `apps/web/src/features/editor/QuickOpenModal.tsx`:
+  - Glassmorphic floating modal card anchored top-center with backdrop blur.
+  - Auto-focused search input, search icon, and `Esc` badge.
+  - File extension badges (`TSX`, `TS`, `JS`, `JSX`, `HTML`, `CSS`, `JSON`, `MD`, `PY`).
+  - Highlighting/underlining of matched character sequences in filename and directory.
+  - Keyboard navigation: `ArrowDown` / `ArrowUp` with active element scroll-into-view, `Enter` to open file and close modal, `Escape` to dismiss.
+  - Click outside (backdrop) or click on result item to open file.
+  - Empty state message: *"No matching files found"*.
+- `apps/web/src/components/layout/TopBar.tsx`:
+  - Added center search pill button with search icon, "Search files..." text, and `<kbd>Ctrl+P</kbd>` badge opening the modal.
+- `apps/web/src/components/layout/AppLayout.tsx`:
+  - Added capture-phase global `keydown` event listener intercepting `Ctrl+P`, `Cmd+P`, and `Cmd+K` anywhere (including while focused in Monaco) with `preventDefault()` to preempt the browser's native print dialog.
+  - Integrated `QuickOpenModal` wired to `flattenFileTree(fileTree)` and `useEditorStore`.
+- Exported components and utilities from `apps/web/src/features/editor/index.ts`.
+
+### Files
+
+- `apps/web/src/features/editor/fuzzySearch.ts`
+- `apps/web/src/features/editor/fuzzySearch.test.ts`
+- `apps/web/src/features/editor/QuickOpenModal.tsx`
+- `apps/web/src/features/editor/QuickOpenModal.test.tsx`
+- `apps/web/src/features/editor/useFiles.ts`
+- `apps/web/src/features/editor/useFiles.test.ts`
+- `apps/web/src/features/editor/index.ts`
+- `apps/web/src/components/layout/TopBar.tsx`
+- `apps/web/src/components/layout/AppLayout.tsx`
+- `apps/web/src/components/layout/AppLayout.test.tsx`
+
+### Acceptance Criteria
+
+- [x] Pressing `Ctrl+P` or `Cmd+K` anywhere opens the modal and prevents the browser's print dialog.
+- [x] Clicking the search button in `TopBar` opens the modal.
+- [x] Typing a fuzzy search query (e.g., `applay`) matches `apps/web/src/components/layout/AppLayout.tsx`.
+- [x] Currently open files appear at the top when the search query is empty.
+- [x] Pressing `ArrowDown` / `ArrowUp` cycles through search results.
+- [x] Pressing `Enter` opens the highlighted file in Monaco and closes the modal.
+- [x] Pressing `Escape` or clicking the backdrop dismisses the modal.
+- [x] Unit & Integration Tests:
+  - `apps/web/src/features/editor/fuzzySearch.test.ts`: Verifies exact, partial, fuzzy matching, and ranking logic.
+  - `apps/web/src/features/editor/QuickOpenModal.test.tsx`: Verifies keyboard navigation, filtering, selection, and dismissal.
+  - `apps/web/src/features/editor/useFiles.test.ts`: Verifies flattening hierarchical file trees.
+  - `apps/web/src/components/layout/AppLayout.test.tsx`: Verifies global shortcut trigger and modal opening.
+- [x] Quality Standards:
+  - `pnpm test`: Monorepo suite with 47 test files and 276 tests passing (100%).
+  - `pnpm typecheck`: 10/10 workspaces clean (0 errors).
+  - `pnpm lint`: clean (0 errors).
+  - `pnpm build`: all packages and web production bundles built cleanly.
+
+### Tests
+
+- [x] `apps/web/src/features/editor/fuzzySearch.test.ts` (16 tests).
+- [x] `apps/web/src/features/editor/QuickOpenModal.test.tsx` (10 tests).
+- [x] `apps/web/src/features/editor/useFiles.test.ts` (5 tests).
+- [x] `apps/web/src/components/layout/AppLayout.test.tsx` (10 tests).
+- [x] Monorepo suite: 47 test files, 276 tests all passing.
+- [x] `pnpm typecheck`: 10/10 workspaces clean (0 errors).
+- [x] `pnpm lint`: clean (0 errors).
+- [x] `pnpm build`: clean (0 errors).
 
 ---
 
