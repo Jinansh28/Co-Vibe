@@ -34,6 +34,7 @@ Completed Tasks:    TASK-001 through TASK-041 (all tasks complete)
                     TASK-049 — Multimodal Visual Snapshot to AI Agent Context (COMPLETE)
                     TASK-050 — Monaco Inline Code Action (Ctrl+K & Context Menu) (COMPLETE)
                     TASK-051 — Quick Open / File Fuzzy Finder (Ctrl+P / Cmd+P) (COMPLETE)
+                    TASK-052 — Problems & Diagnostics Drawer with 1-Click AI Fix (COMPLETE)
 Next Task:          None — Ready for staging deployment and cloud credentials provisioning.
 Blocked Tasks:      None
 Known Risks:        - Browser memory overhead during long-lived Yjs sessions.
@@ -2298,6 +2299,93 @@ Implement a fast, keyboard-first Quick Open modal (like VS Code's `Ctrl+P` / Spo
 - [x] `apps/web/src/features/editor/useFiles.test.ts` (5 tests).
 - [x] `apps/web/src/components/layout/AppLayout.test.tsx` (10 tests).
 - [x] Monorepo suite: 47 test files, 276 tests all passing.
+- [x] `pnpm typecheck`: 10/10 workspaces clean (0 errors).
+- [x] `pnpm lint`: clean (0 errors).
+- [x] `pnpm build`: clean (0 errors).
+
+---
+
+## TASK-052 — Problems & Diagnostics Drawer with 1-Click AI Fix
+
+Status: DONE  
+Priority: P0  
+Component: Frontend / Editor / Diagnostics  
+Depends on: TASK-016, TASK-018, TASK-046  
+Estimated effort: M
+
+### Objective
+
+Replace the static placeholder in the bottom drawer's "Problems" tab (`TerminalPane.tsx`) with a live diagnostics viewer that aggregates Monaco TypeScript and language compiler errors/warnings across the workspace, lets developers jump directly to error lines, and provides a 1-click **"⚡ Fix with AI"** action that dispatches the fix to the autonomous agent.
+
+### Implementation
+
+- `apps/web/src/features/editor/useDiagnosticsStore.ts`:
+  - Zustand store managing active `DiagnosticItem[]` (`id`, `filePath`, `message`, `severity`, `startLineNumber`, `startColumn`, `endLineNumber`, `endColumn`, `code`, `source`).
+  - Helper functions `extractDiagnosticsFromMarkers` and `syncMonacoMarkers` to normalize raw Monaco markers, map severities (`MarkerSeverity.Error` (8) -> `'error'`, `MarkerSeverity.Warning` (4) -> `'warning'`, `MarkerSeverity.Info` (2) -> `'info'`), filter out hints (severity 1), format rule codes (e.g. `ts(2304)`), and sync to store.
+- `apps/web/src/features/editor/useEditorStore.ts`:
+  - Added `pendingCursor: CursorNavigationTarget | null` state, `navigateToPosition(filePath, line, column)` action (opening file and queuing cursor position), and `clearPendingCursor()`.
+- `apps/web/src/features/editor/MonacoEditor.tsx`:
+  - Registered `monacoInstance.editor.onDidChangeMarkers` listener in `onMount` to automatically sync markers on model change and user keystrokes into `useDiagnosticsStore`.
+  - Added disposal on unmount to prevent leaks.
+- `apps/web/src/components/layout/EditorPane.tsx`:
+  - Added effect listening to `pendingCursor` from `useEditorStore` to center, position, and focus Monaco editor on the target line and column when navigating from problems.
+- `apps/web/src/features/editor/ProblemsView.tsx`:
+  - Interactive diagnostics viewer rendered when `activeTab === 'problems'`.
+  - Empty state displaying clean `✓ No diagnostics or errors detected.` when 0 errors/warnings exist.
+  - Severity filter toolbar (All, Errors, Warnings, Info) with live count pills and text search input.
+  - Collapsible file groups with count badges (e.g. `apps/web/src/App.tsx (2 errors, 1 warning)`).
+  - Diagnostic rows displaying severity icons (`✕`, `⚠`, `ℹ`), error message, line/column coordinates `[L14, C5]`, error code `ts(2304)`, and **"⚡ Fix with AI"** button.
+  - "⚡ Fix All with AI" button in toolbar when multiple errors exist.
+  - Jump-to-source on row click calling `onNavigateToFile` / `useEditorStore.navigateToPosition`.
+- `apps/web/src/components/layout/TerminalPane.tsx`:
+  - Live count badge on the "Problems" tab header (`totalCount` with `.error-badge` styling if errors exist).
+  - Integrated `<ProblemsView onNavigateToFile={...} onFixWithAI={...} />` into drawer output.
+- `apps/web/src/components/layout/AppLayout.tsx`:
+  - Implemented `handleFixWithAI` callback:
+    - Opens `AgentPanel` if collapsed.
+    - Pre-populates prompt with exact error message, file path, line coordinates, and code:
+      `Fix the following TypeScript compiler error in \`${filePath}\` at line ${line}:\nError: ${message} (ts:${code})`
+    - Attaches snippet context and sets `autoExecute: true` to trigger autonomous repair loop.
+- Exported components and types from `apps/web/src/features/editor/index.ts`.
+
+### Files
+
+- `apps/web/src/features/editor/useDiagnosticsStore.ts`
+- `apps/web/src/features/editor/ProblemsView.tsx`
+- `apps/web/src/features/editor/ProblemsView.test.tsx`
+- `apps/web/src/features/editor/useEditorStore.ts`
+- `apps/web/src/features/editor/MonacoEditor.tsx`
+- `apps/web/src/features/editor/index.ts`
+- `apps/web/src/components/layout/EditorPane.tsx`
+- `apps/web/src/components/layout/TerminalPane.tsx`
+- `apps/web/src/components/layout/TerminalPane.test.tsx`
+- `apps/web/src/components/layout/AppLayout.tsx`
+- `apps/web/src/components/layout/AppLayout.test.tsx`
+- `docs/task.md`
+
+### Acceptance Criteria
+
+- [x] Monaco TypeScript compilation errors dynamically populate `useDiagnosticsStore` on keystroke / model change.
+- [x] Bottom drawer "Problems" tab header displays an updated count badge (e.g. `Problems (2)`).
+- [x] Clicking a diagnostic item navigates to the target file in Monaco and centers the cursor on the error line.
+- [x] Clicking "⚡ Fix with AI" opens `AgentPanel` with the error context pre-populated and triggers the AI repair loop.
+- [x] Resolving the error in the editor automatically removes the problem item from the list in real time.
+- [x] Empty state renders a clean message when 0 errors/warnings exist.
+- [x] Unit & Integration Tests:
+  - `apps/web/src/features/editor/ProblemsView.test.tsx`: Tests rendering of error list, filtering, and click handlers (10 tests).
+  - `apps/web/src/components/layout/TerminalPane.test.tsx`: Verifies "Problems" tab badge and selection (6 tests).
+  - `apps/web/src/components/layout/AppLayout.test.tsx`: Verifies end-to-end "⚡ Fix with AI" dispatch (11 tests).
+- [x] Quality Standards:
+  - `pnpm test` passes cleanly across suites (123 web tests, 0 failures).
+  - `pnpm typecheck` (10/10 workspaces) and `pnpm lint` succeed with 0 errors.
+  - `pnpm build` completes cleanly.
+
+### Tests
+
+- [x] `apps/web/src/features/editor/ProblemsView.test.tsx` (10 tests).
+- [x] `apps/web/src/components/layout/TerminalPane.test.tsx` (6 tests).
+- [x] `apps/web/src/components/layout/AppLayout.test.tsx` (11 tests).
+- [x] `pnpm --filter web test`: 18 test files, 123 tests passing (100%).
 - [x] `pnpm typecheck`: 10/10 workspaces clean (0 errors).
 - [x] `pnpm lint`: clean (0 errors).
 - [x] `pnpm build`: clean (0 errors).

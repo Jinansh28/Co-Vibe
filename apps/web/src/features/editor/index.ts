@@ -11,4 +11,9 @@ export type { QuickOpenModalProps } from './QuickOpenModal.js';
 export { fuzzyFilterFiles, splitPath, isWordBoundary } from './fuzzySearch.js';
 export type { FuzzyMatchResult } from './fuzzySearch.js';
 export { flattenFileTree } from './useFiles.js';
+export { useDiagnosticsStore, extractDiagnosticsFromMarkers, syncMonacoMarkers } from './useDiagnosticsStore.js';
+export type { DiagnosticItem, DiagnosticsState } from './useDiagnosticsStore.js';
+export { ProblemsView } from './ProblemsView.js';
+export type { ProblemsViewProps } from './ProblemsView.js';
+
 

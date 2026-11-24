@@ -56,6 +56,7 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
     typeof rawStore?.activeFilePath === 'string' ? rawStore.activeFilePath : null;
   const registerSaveHandler = rawStore?.registerSaveHandler;
   const registerGetActiveContent = rawStore?.registerGetActiveContent;
+  const registerUpdateActiveContent = rawStore?.registerUpdateActiveContent;
   const fileName = activeFilePath ? activeFilePath.split('/').pop() || activeFilePath : '';
   const language = activeFilePath ? getLanguageFromPath(activeFilePath) : 'plaintext';
 
@@ -74,6 +75,25 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
   const notificationContext = useOptionalNotification();
   const [editorInstance, setEditorInstance] = useState<editor.IStandaloneCodeEditor | null>(null);
   const editorContainerRef = useRef<HTMLDivElement>(null);
+
+  const pendingCursor = rawStore?.pendingCursor;
+  const clearPendingCursor = rawStore?.clearPendingCursor;
+
+  // React to pending cursor navigation (e.g. from ProblemsView jump to source)
+  useEffect(() => {
+    if (pendingCursor && editorInstance && activeFilePath === pendingCursor.filePath) {
+      editorInstance.revealPositionInCenter({
+        lineNumber: pendingCursor.line,
+        column: pendingCursor.column,
+      });
+      editorInstance.setPosition({
+        lineNumber: pendingCursor.line,
+        column: pendingCursor.column,
+      });
+      editorInstance.focus();
+      clearPendingCursor?.();
+    }
+  }, [pendingCursor, editorInstance, activeFilePath, clearPendingCursor]);
 
   const [inlineActionState, setInlineActionState] = useState<{
     visible: boolean;
@@ -124,15 +144,20 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
     registerSaveHandler?.(performSave);
     if (editorInstance) {
       registerGetActiveContent?.(() => editorInstance.getValue());
+      registerUpdateActiveContent?.((content: string) => {
+        editorInstance.setValue(content);
+      });
       return () => {
         registerSaveHandler?.(null);
         registerGetActiveContent?.(null);
+        registerUpdateActiveContent?.(null);
       };
     }
     return () => {
       registerSaveHandler?.(null);
+      registerUpdateActiveContent?.(null);
     };
-  }, [performSave, registerSaveHandler, registerGetActiveContent, editorInstance]);
+  }, [performSave, registerSaveHandler, registerGetActiveContent, registerUpdateActiveContent, editorInstance]);
 
   // Trigger inline action bubble from Monaco selection or current line
   const triggerInlineAction = useCallback(

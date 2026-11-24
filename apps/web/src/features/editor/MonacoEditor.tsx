@@ -1,8 +1,9 @@
-import React, { useRef, useCallback } from 'react';
+import React, { useRef, useCallback, useEffect } from 'react';
 import Editor, { OnMount, BeforeMount, Monaco, loader } from '@monaco-editor/react';
 import * as monaco from 'monaco-editor';
 import type { editor } from 'monaco-editor';
 import { DEFAULT_EDITOR_OPTIONS, getLanguageFromPath } from './editorConfig.js';
+import { syncMonacoMarkers } from './useDiagnosticsStore.js';
 
 // Configure @monaco-editor/react to use local bundled Monaco Editor instead of remote CDN in browser
 if (typeof window !== 'undefined' && process.env.NODE_ENV !== 'test') {
@@ -46,6 +47,7 @@ export const MonacoEditor: React.FC<MonacoEditorProps> = ({
 }) => {
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
   const monacoRef = useRef<Monaco | null>(null);
+  const markerDisposableRef = useRef<monaco.IDisposable | null>(null);
 
   const resolvedLanguage = language || getLanguageFromPath(filePath);
 
@@ -57,12 +59,27 @@ export const MonacoEditor: React.FC<MonacoEditorProps> = ({
       // Ensure vs-dark theme is active
       monacoInstance.editor.setTheme(theme);
 
+      // Register Monaco marker listener for diagnostics aggregation
+      if (monacoInstance.editor?.onDidChangeMarkers) {
+        markerDisposableRef.current?.dispose();
+        markerDisposableRef.current = monacoInstance.editor.onDidChangeMarkers(() => {
+          syncMonacoMarkers(monacoInstance);
+        });
+        syncMonacoMarkers(monacoInstance);
+      }
+
       if (onMount) {
         onMount(editorInstance, monacoInstance);
       }
     },
     [onMount, theme]
   );
+
+  useEffect(() => {
+    return () => {
+      markerDisposableRef.current?.dispose();
+    };
+  }, []);
 
   const mergedOptions: editor.IStandaloneEditorConstructionOptions = {
     ...DEFAULT_EDITOR_OPTIONS,

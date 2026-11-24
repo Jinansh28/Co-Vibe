@@ -10,6 +10,8 @@ import { useFiles, flattenFileTree } from '../../features/editor/useFiles.js';
 import { DiffReviewModal, type DiffData } from '../../features/changeset/DiffReviewModal.js';
 import { QuickOpenModal } from '../../features/editor/QuickOpenModal.js';
 import { useOptionalNotification } from '../../context/NotificationContext.js';
+import type { DiagnosticItem } from '../../features/editor/useDiagnosticsStore.js';
+import * as monaco from 'monaco-editor';
 
 const RUNTIME_URL = 'http://127.0.0.1:7890';
 
@@ -265,6 +267,87 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
     []
   );
 
+  // Navigate to file and focus Monaco on error line/column
+  const handleNavigateToFile = useCallback(
+    (filePath: string, line: number, column: number) => {
+      useEditorStore.getState().navigateToPosition(filePath, line, column);
+    },
+    []
+  );
+
+  // 1-Click Fix with AI: formats prompt, attaches snippet context, and dispatches to autonomous agent
+  const handleFixWithAI = useCallback(
+    async (diagnostic: DiagnosticItem) => {
+      setIsAgentOpen(true);
+
+      let codeStr = '';
+      if (diagnostic.code) {
+        const cleanCode = diagnostic.code.replace(/^ts[:(]?/, '').replace(/\)$/, '');
+        codeStr = ` (ts:${cleanCode})`;
+      }
+
+      const promptText = `Fix the following TypeScript compiler error in \`${diagnostic.filePath}\` at line ${diagnostic.startLineNumber}:\nError: ${diagnostic.message}${codeStr}`;
+
+      // Extract code snippet around the error
+      let snippetCode = '';
+      try {
+        const { activeFilePath, getActiveContent } = useEditorStore.getState();
+        let content = '';
+        if (activeFilePath === diagnostic.filePath && getActiveContent) {
+          content = getActiveContent() || '';
+        }
+        if (!content && getFileContent) {
+          content = await getFileContent(diagnostic.filePath);
+        }
+        if (content) {
+          const lines = content.split('\n');
+          const start = Math.max(0, diagnostic.startLineNumber - 1);
+          const end = Math.min(lines.length, Math.max(start + 1, diagnostic.endLineNumber));
+          snippetCode = lines.slice(start, end).join('\n');
+        }
+      } catch {
+        // Fallback gracefully without snippet
+      }
+
+      const snippet: CodeSnippetAttachment = {
+        filePath: diagnostic.filePath,
+        startLine: diagnostic.startLineNumber,
+        endLine: diagnostic.endLineNumber,
+        code: snippetCode,
+      };
+
+      setAttachedSnippet(snippet);
+      setAgentInitialPrompt(promptText);
+      setAgentAutoExecute(true);
+    },
+    [getFileContent]
+  );
+
+  // 1-Click Fix for runtime errors streamed in the TerminalPane
+  const handleFixTerminalError = useCallback(
+    (errorOutput: string) => {
+      setIsAgentOpen(true);
+      const promptText = `Fix the following runtime error from the terminal execution:\n\`\`\`\n${errorOutput.trim()}\n\`\`\``;
+
+      const { activeFilePath, getActiveContent } = useEditorStore.getState();
+      let snippet: CodeSnippetAttachment | null = null;
+      if (activeFilePath && getActiveContent) {
+        const content = getActiveContent() || '';
+        snippet = {
+          filePath: activeFilePath,
+          startLine: 1,
+          endLine: Math.max(1, content.split('\n').length),
+          code: content,
+        };
+      }
+
+      setAttachedSnippet(snippet);
+      setAgentInitialPrompt(promptText);
+      setAgentAutoExecute(true);
+    },
+    []
+  );
+
   // Global shortcut: Ctrl+P / Cmd+P or Cmd+K opens Quick Open and prevents browser print
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
@@ -378,8 +461,38 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
           onClose={() => setActiveDiff(null)}
           onAccept={async () => {
             try {
+              // 1. Save modified content to disk on local runtime daemon
               await saveFileContent(activeDiff.filePath, activeDiff.modifiedContent);
+
+              // 2. Synchronize Monaco text models in memory so editor displays updated code immediately
+              try {
+                const target = activeDiff.filePath.replace(/^\//, '');
+                const models = monaco.editor.getModels();
+                for (const m of models) {
+                  // Ignore temporary in-memory diff editor models
+                  if (m.uri.scheme === 'inmemory') continue;
+                  const p = m.uri.path.replace(/^\//, '');
+                  if (p === target || p.endsWith('/' + target) || target.endsWith('/' + p)) {
+                    m.setValue(activeDiff.modifiedContent);
+                  }
+                }
+              } catch (e) {
+                console.error('Failed to update in-memory Monaco model:', e);
+              }
+
+              // 3. Update currently active editor instance if open
+              const { updateActiveContent, activeFilePath: currentActive } = useEditorStore.getState();
+              if (updateActiveContent) {
+                const target = activeDiff.filePath.replace(/^\//, '');
+                const active = (currentActive || '').replace(/^\//, '');
+                if (active === target || active.endsWith('/' + target) || target.endsWith('/' + active)) {
+                  updateActiveContent(activeDiff.modifiedContent);
+                }
+              }
+
+              // 4. Ensure file tab is open & active
               openFile(activeDiff.filePath);
+
               notificationContext?.showNotification(
                 `Accepted and saved changes to ${activeDiff.filePath}`,
                 'success'
@@ -419,6 +532,9 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
         isRunning={isRunning}
         onSendInput={handleSendInput}
         runType={runType}
+        onNavigateToFile={handleNavigateToFile}
+        onFixWithAI={handleFixWithAI}
+        onFixTerminalError={handleFixTerminalError}
       />
     </div>
   );

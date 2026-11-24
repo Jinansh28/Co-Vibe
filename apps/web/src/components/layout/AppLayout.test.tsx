@@ -4,6 +4,7 @@ import { render, screen, fireEvent, waitFor, within } from '@testing-library/rea
 import React from 'react';
 import { AppLayout } from './AppLayout.js';
 import { useEditorStore } from '../../features/editor/useEditorStore.js';
+import { useDiagnosticsStore } from '../../features/editor/useDiagnosticsStore.js';
 
 vi.mock('../../features/auth/useAuth.js', () => ({
   useAuth: () => ({ user: { email: 'test@example.com' } })
@@ -193,5 +194,72 @@ describe('AppLayout IDE Shell Grid', () => {
     });
 
     expect(screen.getByTestId('quick-open-modal')).toBeDefined();
+  });
+
+  it('opens AgentPanel and dispatches repair task when Fix with AI is clicked in ProblemsView', async () => {
+    const fetchSpy = vi.spyOn(global, 'fetch').mockImplementation((url: any) => {
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            ok: true,
+            provider: 'Gemini',
+            model: 'gemini-3.5-flash-lite',
+          })
+        )
+      );
+    });
+
+    useDiagnosticsStore.getState().setDiagnostics([
+      {
+        id: 'src/App.tsx:14:5:2304:Cannot find name foo',
+        filePath: 'src/App.tsx',
+        message: "Cannot find name 'foo'. Did you mean 'for'?",
+        severity: 'error',
+        startLineNumber: 14,
+        startColumn: 5,
+        endLineNumber: 14,
+        endColumn: 8,
+        code: 'ts(2304)',
+      },
+    ]);
+
+    render(<AppLayout initialAgentOpen={false} initialTerminalOpen={true} />);
+
+    // AgentPanel is initially closed
+    expect(screen.queryByTestId('agent-panel')).toBeNull();
+
+    // Switch to problems tab
+    fireEvent.click(screen.getByTestId('terminal-tab-problems'));
+    expect(screen.getByTestId('problems-view')).toBeDefined();
+
+    // Click Fix with AI
+    const fixBtn = screen.getByTestId('fix-ai-btn-src/App.tsx:14:5:2304:Cannot find name foo');
+    fireEvent.click(fixBtn);
+
+    // AgentPanel should now be open
+    await waitFor(() => {
+      expect(screen.getByTestId('agent-panel')).toBeDefined();
+    });
+
+    // Agent execution should be dispatched via POST /api/v1/agent/run with formatted prompt & snippet
+    await waitFor(() => {
+      const runCall = fetchSpy.mock.calls.find((call) =>
+        String(call[0]).includes('/api/v1/agent/run')
+      );
+      expect(runCall).toBeDefined();
+      if (runCall) {
+        const body = JSON.parse(runCall[1]?.body as string);
+        expect(body.prompt).toContain("Fix the following TypeScript compiler error in `src/App.tsx` at line 14:");
+        expect(body.prompt).toContain("Cannot find name 'foo'. Did you mean 'for'? (ts:2304)");
+        expect(body.snippet).toEqual({
+          filePath: 'src/App.tsx',
+          startLine: 14,
+          endLine: 14,
+          code: '',
+        });
+      }
+    });
+
+    fetchSpy.mockRestore();
   });
 });

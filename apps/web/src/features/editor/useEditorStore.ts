@@ -1,5 +1,12 @@
 import { create } from 'zustand';
 
+export interface CursorNavigationTarget {
+  filePath: string;
+  line: number;
+  column: number;
+  timestamp: number;
+}
+
 interface EditorState {
   openFiles: string[];
   activeFilePath: string | null;
@@ -10,6 +17,11 @@ interface EditorState {
   registerSaveHandler: (handler: (() => Promise<void>) | null) => void;
   getActiveContent: (() => string) | null;
   registerGetActiveContent: (getter: (() => string) | null) => void;
+  updateActiveContent: ((content: string) => void) | null;
+  registerUpdateActiveContent: (updater: ((content: string) => void) | null) => void;
+  pendingCursor: CursorNavigationTarget | null;
+  navigateToPosition: (filePath: string, line: number, column?: number) => void;
+  clearPendingCursor: () => void;
 }
 
 export const useEditorStore = create<EditorState>((set) => ({
@@ -39,4 +51,16 @@ export const useEditorStore = create<EditorState>((set) => ({
   registerSaveHandler: (handler) => set({ saveActiveFile: handler }),
   getActiveContent: null,
   registerGetActiveContent: (getter) => set({ getActiveContent: getter }),
+  updateActiveContent: null,
+  registerUpdateActiveContent: (updater) => set({ updateActiveContent: updater }),
+  pendingCursor: null,
+  navigateToPosition: (filePath, line, column = 1) => set((state) => {
+    const isAlreadyOpen = state.openFiles.includes(filePath);
+    return {
+      openFiles: isAlreadyOpen ? state.openFiles : [...state.openFiles, filePath],
+      activeFilePath: filePath,
+      pendingCursor: { filePath, line, column, timestamp: Date.now() },
+    };
+  }),
+  clearPendingCursor: () => set({ pendingCursor: null }),
 }));

@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { DiffEditor } from '@monaco-editor/react';
+import type { editor } from 'monaco-editor';
 import { DEFAULT_EDITOR_OPTIONS, getLanguageFromPath } from '../editor/editorConfig.js';
 import { HunkSelector } from './HunkSelector.js';
 
@@ -27,6 +28,27 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
   const [selectedHunks, setSelectedHunks] = useState<string[]>(hunks);
 
   const language = getLanguageFromPath(filePath);
+  const diffEditorRef = useRef<editor.IStandaloneDiffEditor | null>(null);
+
+  // Cleanly detach DiffEditor models before unmount to prevent TextModel disposed error
+  useEffect(() => {
+    return () => {
+      if (diffEditorRef.current) {
+        try {
+          const model = diffEditorRef.current.getModel();
+          diffEditorRef.current.setModel(null as any);
+          if (model?.original && !model.original.isDisposed()) {
+            model.original.dispose();
+          }
+          if (model?.modified && !model.modified.isDisposed()) {
+            model.modified.dispose();
+          }
+        } catch {
+          // ignore
+        }
+      }
+    };
+  }, []);
 
   const handleAccept = async () => {
     try {
@@ -148,6 +170,11 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
             modified={modifiedContent}
             language={language}
             theme="vs-dark"
+            keepCurrentOriginalModel={true}
+            keepCurrentModifiedModel={true}
+            onMount={(ed) => {
+              diffEditorRef.current = ed;
+            }}
             options={{
               ...DEFAULT_EDITOR_OPTIONS,
               readOnly: true,

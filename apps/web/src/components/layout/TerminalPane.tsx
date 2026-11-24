@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useDiagnosticsStore, DiagnosticItem } from '../../features/editor/useDiagnosticsStore.js';
+import { ProblemsView } from '../../features/editor/ProblemsView.js';
 
 export interface TerminalLine {
   stream: 'stdout' | 'stderr' | 'system' | 'exit';
@@ -21,6 +23,9 @@ interface TerminalPaneProps {
   isRunning?: boolean;
   onSendInput?: (input: string) => void;
   runType?: 'terminal' | 'tests';
+  onNavigateToFile?: (filePath: string, line: number, column: number) => void;
+  onFixWithAI?: (item: DiagnosticItem) => void;
+  onFixTerminalError?: (errorText: string) => void;
 }
 
 export const TerminalPane: React.FC<TerminalPaneProps> = ({
@@ -31,10 +36,25 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({
   isRunning = false,
   onSendInput,
   runType = 'terminal',
+  onNavigateToFile,
+  onFixWithAI,
+  onFixTerminalError,
 }) => {
   const [activeTab, setActiveTab] = useState<'terminal' | 'output' | 'problems' | 'tests'>('terminal');
   const [inputValue, setInputValue] = useState('');
   const outputEndRef = useRef<HTMLDivElement>(null);
+
+  const diagnostics = useDiagnosticsStore((s) => s.diagnostics);
+  const errorCount = diagnostics.filter((d) => d.severity === 'error').length;
+  const totalCount = diagnostics.length;
+
+  const hasTerminalError = outputLines.some(
+    (l) =>
+      l.stream === 'stderr' ||
+      (l.stream === 'exit' && (l.exitCode ?? 0) !== 0) ||
+      (typeof l.chunk === 'string' &&
+        /(?:TypeError|ReferenceError|SyntaxError|Error|Exception|ERR!):/i.test(l.chunk))
+  );
 
   // Auto-scroll to bottom when new output arrives
   useEffect(() => {
@@ -92,6 +112,7 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({
           {(['terminal', 'output', 'problems', 'tests'] as const).map((tab) => (
             <button
               key={tab}
+              data-testid={`terminal-tab-${tab}`}
               onClick={() => setActiveTab(tab)}
               style={{
                 padding: '4px 10px',
@@ -102,9 +123,31 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({
                 borderRadius: 'var(--radius-xs)',
                 textTransform: 'uppercase',
                 letterSpacing: '0.3px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '5px',
               }}
             >
-              {tab}
+              <span>{tab}</span>
+              {tab === 'problems' && totalCount > 0 && (
+                <span
+                  data-testid="problems-badge"
+                  className={errorCount > 0 ? 'error-badge' : 'warning-badge'}
+                  style={{
+                    backgroundColor: errorCount > 0 ? 'var(--error, #f85149)' : 'var(--warning, #d29922)',
+                    color: '#ffffff',
+                    borderRadius: '10px',
+                    padding: '0 5px',
+                    fontSize: '9px',
+                    fontWeight: 700,
+                    lineHeight: '14px',
+                    minWidth: '14px',
+                    textAlign: 'center',
+                  }}
+                >
+                  {totalCount}
+                </span>
+              )}
             </button>
           ))}
           {isRunning && (
@@ -135,6 +178,40 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({
 
         {/* Action Controls */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+          {hasTerminalError && activeTab === 'terminal' && onFixTerminalError && (
+            <button
+              data-testid="fix-terminal-error-btn"
+              onClick={() => {
+                const errorText = outputLines
+                  .filter(
+                    (l) =>
+                      l.stream === 'stderr' ||
+                      (l.stream === 'exit' && (l.exitCode ?? 0) !== 0) ||
+                      /(?:TypeError|ReferenceError|SyntaxError|Error|Exception|ERR!):/i.test(l.chunk || '')
+                  )
+                  .map((l) => stripAnsi(l.chunk || (l.stream === 'exit' ? `[Process exited with code ${l.exitCode}]` : '')))
+                  .join('\n');
+                onFixTerminalError(errorText || outputLines.map((l) => stripAnsi(l.chunk || '')).slice(-15).join('\n'));
+              }}
+              title="Fix this runtime error with AI Agent"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+                padding: '3px 10px',
+                fontSize: '11px',
+                fontWeight: 600,
+                color: '#ffffff',
+                backgroundColor: 'var(--accent, #6366f1)',
+                border: 'none',
+                borderRadius: 'var(--radius-xs, 3px)',
+                cursor: 'pointer',
+                marginRight: '6px',
+              }}
+            >
+              <span>⚡ Fix with AI</span>
+            </button>
+          )}
           <button
             onClick={onClear}
             title="Clear Log"
@@ -164,14 +241,16 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({
       <div
         style={{
           flex: 1,
-          padding: '8px 12px',
+          padding: activeTab === 'problems' ? 0 : '8px 12px',
           fontFamily: 'var(--font-code)',
           fontSize: '12px',
           color: 'var(--text-primary)',
           backgroundColor: '#0a0f14',
-          overflowY: 'auto',
+          overflowY: activeTab === 'problems' ? 'hidden' : 'auto',
           lineHeight: '1.5',
           userSelect: 'text',
+          display: 'flex',
+          flexDirection: 'column',
         }}
       >
         {(() => {
@@ -242,7 +321,14 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({
             return runType === 'tests' ? renderOutput() : <div style={{ color: 'var(--success)' }}>✓ 6 test suites passed (21 tests)</div>;
           }
           if (activeTab === 'output') return <div style={{ color: 'var(--text-muted)' }}>[System Log] Container sandbox ready.</div>;
-          if (activeTab === 'problems') return <div style={{ color: 'var(--success)' }}>No diagnostics or errors detected.</div>;
+          if (activeTab === 'problems') {
+            return (
+              <ProblemsView
+                onNavigateToFile={onNavigateToFile}
+                onFixWithAI={onFixWithAI}
+              />
+            );
+          }
           return null;
         })()}
       </div>
