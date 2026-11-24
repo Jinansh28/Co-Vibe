@@ -358,6 +358,8 @@ export function createPairingRequestHandler(tokenManager: TokenManager) {
     if ((pathname === '/api/v1/agent/run' || pathname === '/api/v1/agent/task') && method === 'POST') {
       const body = await parseJsonBody<{
         prompt?: string;
+        taskId?: string;
+        runId?: string;
         image?: { mimeType?: string; base64?: string; data?: string };
         images?: Array<{ mimeType?: string; base64?: string; data?: string }>;
       }>(req);
@@ -387,8 +389,8 @@ export function createPairingRequestHandler(tokenManager: TokenManager) {
       res.setHeader('Transfer-Encoding', 'chunked');
       res.writeHead(200);
 
-      const taskId = crypto.randomUUID();
-      const runId = crypto.randomUUID();
+      const taskId = body.taskId || crypto.randomUUID();
+      const runId = body.runId || crypto.randomUUID();
 
       const writeProgress = (payload: AgentTaskProgressPayload) => {
         try {

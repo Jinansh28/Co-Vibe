@@ -35,6 +35,7 @@ Completed Tasks:    TASK-001 through TASK-041 (all tasks complete)
                     TASK-050 — Monaco Inline Code Action (Ctrl+K & Context Menu) (COMPLETE)
                     TASK-051 — Quick Open / File Fuzzy Finder (Ctrl+P / Cmd+P) (COMPLETE)
                     TASK-052 — Problems & Diagnostics Drawer with 1-Click AI Fix (COMPLETE)
+                    TASK-053 — Saved Agent Task & Run History (Supabase, API, Runtime & AgentPanel UI) (COMPLETE)
 Next Task:          None — Ready for staging deployment and cloud credentials provisioning.
 Blocked Tasks:      None
 Known Risks:        - Browser memory overhead during long-lived Yjs sessions.
@@ -2389,6 +2390,63 @@ Replace the static placeholder in the bottom drawer's "Problems" tab (`TerminalP
 - [x] `pnpm typecheck`: 10/10 workspaces clean (0 errors).
 - [x] `pnpm lint`: clean (0 errors).
 - [x] `pnpm build`: clean (0 errors).
+
+---
+
+## TASK-053 — Saved Agent Task & Run History (Supabase Wiring, API, Runtime & AgentPanel UI)
+
+Status: DONE  
+Priority: P0  
+Component: Agent / API / Web / Runtime  
+Depends on: TASK-046, TASK-047  
+Estimated effort: M
+
+### Objective
+
+Wire the existing Supabase PostgreSQL schema (`agent_tasks`, `agent_runs`, `tool_calls`, `change_sets`, `ai_conversations`) to the API service layer, runtime daemon, and `AgentPanel` UI. Enable developers to inspect previous agent runs for an active workspace, switch between prompts, view recorded timeline messages, re-inspect previous diff sets in `DiffReviewModal`, and resume past conversations with follow-up prompts.
+
+### Implementation
+
+- Created `apps/api/src/services/agentHistoryService.ts` implementing `IAgentHistoryService` with dual-mode repository pattern (`SupabaseAgentHistoryService` with PostgREST queries + `InMemoryAgentHistoryService` for offline development/CI).
+- Created `apps/api/src/routes/agentHistory.ts` providing task listing, task detail retrieval, task initialization, progress recording, and changeset persistence endpoints. Mounted under `/api/v1` in `apps/api/src/index.ts`.
+- Updated `apps/runtime/src/server/pairingServer.ts` to accept optional `taskId` and `runId` in `POST /api/v1/agent/run` requests.
+- Updated `apps/web/src/features/agent/AgentPanel.tsx`:
+  - Added "Task Stream" and "History" navigation tabs.
+  - Added workspace task fetching, task detail loading, and past run switching.
+  - Added "Review Staged Diff" button to re-inspect previous diff sets directly in `DiffReviewModal`.
+  - Added multi-turn follow-up prompt execution and real-time progress syncing.
+- Added comprehensive unit & integration tests across API, runtime, and web UI.
+
+### Files
+
+- `apps/api/src/services/agentHistoryService.ts`
+- `apps/api/src/routes/agentHistory.ts`
+- `apps/api/src/index.ts`
+- `apps/api/package.json`
+- `apps/api/tests/agentHistory.test.ts`
+- `apps/runtime/src/server/pairingServer.ts`
+- `apps/web/src/features/agent/AgentPanel.tsx`
+- `apps/web/src/features/agent/AgentPanel.test.tsx`
+- `docs/task.md`
+
+### Acceptance Criteria
+
+- [x] Dual-mode API service layer supports both Supabase PostgreSQL queries and in-memory fallback.
+- [x] Endpoints for listing workspace tasks, getting task details, creating tasks, recording progress, and saving changesets return correct schemas and status codes.
+- [x] Runtime orchestrator / pairing server accepts `taskId` and `runId` to coordinate execution across services.
+- [x] `AgentPanel` renders a "History" tab listing past runs with prompt, status, and diff badges.
+- [x] Clicking a saved task item loads full details, restores timeline conversation events, and displays past goal.
+- [x] Re-inspecting past changesets opens `DiffReviewModal` with the original and modified contents.
+- [x] Developers can submit follow-up prompts from any past conversation.
+- [x] All test suites pass cleanly (`pnpm --filter api test`, `pnpm --filter web test`, `pnpm --filter runtime test`).
+- [x] `pnpm typecheck` succeeds across all workspace packages with 0 errors.
+
+### Tests
+
+- [x] `apps/api/tests/agentHistory.test.ts` (13 tests)
+- [x] `apps/web/src/features/agent/AgentPanel.test.tsx` (6 tests)
+- [x] `apps/runtime/tests/pairing.test.ts` (15 tests)
+- [x] Full monorepo typecheck: 10/10 workspaces clean (0 errors)
 
 ---
 

@@ -1,4 +1,4 @@
-﻿import { Hono } from 'hono';
+import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import type { HealthCheckResponse } from '@co-vibe/protocol';
 import { authMiddleware, type Env } from './middleware/auth.js';
@@ -10,6 +10,7 @@ import { runtimeWsRoutes } from './routes/runtimeWs.js';
 import { workspaceWsRoutes } from './routes/workspaceWs.js';
 import { gitRoutes } from './routes/git.js';
 import { changesetRoutes } from './routes/changesets.js';
+import { agentHistoryRoutes } from './routes/agentHistory.js';
 
 export { WorkspaceRoom } from './durable-objects/WorkspaceRoom.js';
 
@@ -50,6 +51,7 @@ apiV1.route('/projects', projectRoutes);
 apiV1.route('/projects', workspaceRoutes);
 apiV1.route('/workspaces', gitRoutes);
 apiV1.route('/changesets', changesetRoutes);
+apiV1.route('/', agentHistoryRoutes);
 
 app.route('/api/v1', apiV1);
 

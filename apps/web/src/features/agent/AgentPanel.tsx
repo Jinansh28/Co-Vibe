@@ -1,8 +1,35 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useContext } from 'react';
 import { ToolTimeline } from './ToolTimeline.js';
 import { AgentTaskProgressPayload } from '@co-vibe/protocol';
+import { AuthContext } from '../auth/AuthProvider.js';
 
 const RUNTIME_URL = 'http://127.0.0.1:7890';
+const AGENT_HISTORY_STORAGE_KEY_PREFIX = 'co_vibe_agent_tasks_';
+
+function getLocalTaskHistory(wsId: string): any[] {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const raw = localStorage.getItem(`${AGENT_HISTORY_STORAGE_KEY_PREFIX}${wsId}`);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    }
+  } catch {
+    // Ignore storage errors
+  }
+  return [];
+}
+
+function saveLocalTaskHistory(wsId: string, tasks: any[]): void {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      localStorage.setItem(`${AGENT_HISTORY_STORAGE_KEY_PREFIX}${wsId}`, JSON.stringify(tasks));
+    }
+  } catch {
+    // Ignore storage errors
+  }
+}
 
 export interface VisualAttachment {
   base64: string;
@@ -42,6 +69,9 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
   initialPrompt,
   autoExecute = false,
 }) => {
+  const auth = useContext(AuthContext);
+  const token = auth?.session?.access_token;
+
   const [prompt, setPrompt] = useState('');
   const [isExecuting, setIsExecuting] = useState(false);
   const [activeGoal, setActiveGoal] = useState<string | null>(null);
@@ -52,6 +82,11 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
   });
   const [localAttachment, setLocalAttachment] = useState<VisualAttachment | null>(null);
   const [localSnippet, setLocalSnippet] = useState<CodeSnippetAttachment | null>(null);
+
+  const [savedTasks, setSavedTasks] = useState<any[]>([]);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [selectedTaskDetails, setSelectedTaskDetails] = useState<any | null>(null);
+  const [activeTab, setActiveTab] = useState<'stream' | 'history'>('stream');
 
   const executedPromptRef = useRef<string | null>(null);
 
@@ -97,6 +132,130 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
       });
   }, [isOpen]);
 
+  const effectiveWsId = workspaceId || 'default-workspace';
+
+  const fetchWorkspaceTasks = useCallback(async () => {
+    const localTasks = getLocalTaskHistory(effectiveWsId);
+    try {
+      if (workspaceId) {
+        const res = await fetch(`/api/v1/workspaces/${workspaceId}/agent/tasks`, {
+          headers: {
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const serverTasks = data.tasks || [];
+          const serverIds = new Set(serverTasks.map((t: any) => t.id));
+          const merged = [...serverTasks, ...localTasks.filter((lt: any) => !serverIds.has(lt.id))];
+          setSavedTasks(merged);
+          saveLocalTaskHistory(effectiveWsId, merged);
+          return;
+        }
+      }
+    } catch {
+      // Ignore if offline / mock
+    }
+    setSavedTasks(localTasks);
+  }, [workspaceId, effectiveWsId, token]);
+
+  useEffect(() => {
+    if (isOpen) {
+      fetchWorkspaceTasks();
+    }
+  }, [isOpen, fetchWorkspaceTasks]);
+
+  const loadTaskDetails = async (taskId: string) => {
+    setSelectedTaskId(taskId);
+    let details: any = null;
+
+    try {
+      const res = await fetch(`/api/v1/agent/tasks/${taskId}`, {
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        details = data.task;
+      }
+    } catch {
+      // Offline fallback
+    }
+
+    if (!details) {
+      const localTasks = getLocalTaskHistory(effectiveWsId);
+      details = localTasks.find((t: any) => t.id === taskId);
+    }
+
+    if (details) {
+      setSelectedTaskDetails(details);
+      setActiveGoal(details.prompt);
+      setActiveTab('stream');
+
+      if (details.timelineEvents && details.timelineEvents.length > 0) {
+        setTimelineEvents(details.timelineEvents);
+        return;
+      }
+
+      const events: AgentTaskProgressPayload[] = [];
+      if (details.conversations && details.conversations.length > 0) {
+        for (const conv of details.conversations) {
+          events.push({
+            taskId: details.id,
+            runId: details.runs?.[0]?.id || 'run-1',
+            state: conv.role === 'user' ? 'PENDING' : 'SUCCESS',
+            stepName: conv.role === 'user' ? 'User Prompt' : 'Agent Response',
+            message: conv.content,
+            percentage: 100,
+          });
+        }
+      }
+      if (details.toolCalls && details.toolCalls.length > 0) {
+        for (const tc of details.toolCalls) {
+          events.push({
+            taskId: details.id,
+            runId: tc.runId,
+            state: 'EXECUTING',
+            stepName: `Tool: ${tc.toolName}`,
+            message: tc.result || `Executed tool ${tc.toolName}`,
+            percentage: 70,
+          });
+        }
+      }
+      if (details.changeSet) {
+        events.push({
+          taskId: details.id,
+          runId: details.changeSet.runId || 'run-1',
+          state: 'AWAITING_APPROVAL',
+          stepName: 'Diff Review',
+          message: `Proposed modifications to ${(details.changeSet.changedFiles || []).join(', ') || 'files'}`,
+          percentage: 100,
+          diffData: details.changeSet.diffData || {
+            changeSetId: details.changeSet.id,
+            filePath: details.changeSet.changedFiles?.[0] || 'src/modified-file',
+            originalContent: '',
+            modifiedContent: details.changeSet.patch,
+          },
+        });
+      }
+      setTimelineEvents(
+        events.length > 0
+          ? events
+          : [
+              {
+                taskId: details.id,
+                runId: 'past-run',
+                state: details.status === 'completed' ? 'SUCCESS' : details.status === 'failed' ? 'FAILED' : 'PENDING',
+                stepName: 'Task Run',
+                message: details.prompt,
+                percentage: 100,
+              },
+            ]
+      );
+    }
+  };
+
   const executeTask = useCallback(
     async (textToSend: string, snippetToSend?: CodeSnippetAttachment | null) => {
       const text = textToSend.trim();
@@ -113,6 +272,47 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
       onClearAttachment?.();
       onClearSnippet?.();
 
+      let currentTaskId = selectedTaskId;
+      let currentRunId = crypto.randomUUID();
+
+      if (workspaceId) {
+        if (selectedTaskId) {
+          // Record follow-up message into existing conversation
+          fetch(`/api/v1/agent/tasks/${selectedTaskId}/conversations`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+            body: JSON.stringify({ role: 'user', content: text }),
+          }).catch(() => {});
+        } else {
+          try {
+            const createRes = await fetch(`/api/v1/workspaces/${workspaceId}/agent/tasks`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                ...(token ? { Authorization: `Bearer ${token}` } : {}),
+              },
+              body: JSON.stringify({ prompt: text }),
+            });
+            if (createRes.ok) {
+              const created = await createRes.json();
+              currentTaskId = created.taskId;
+              currentRunId = created.runId;
+              setSelectedTaskId(currentTaskId);
+            }
+          } catch {
+            // Fallback to local execution without server saved history
+          }
+        }
+      }
+
+      if (!currentTaskId) {
+        currentTaskId = crypto.randomUUID();
+        setSelectedTaskId(currentTaskId);
+      }
+
       // Prepend the snippet to the request payload
       const fullPrompt = snippet
         ? `[Code Snippet: ${snippet.filePath}:L${snippet.startLine}-L${snippet.endLine}]\n\`\`\`\n${snippet.code}\n\`\`\`\n\n${text}`
@@ -120,8 +320,8 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
 
       // Add optimistic start event
       const startEvent: AgentTaskProgressPayload = {
-        taskId: 'client-task',
-        runId: 'client-run',
+        taskId: currentTaskId,
+        runId: currentRunId,
         state: 'PENDING',
         stepName: 'User Request',
         message: text,
@@ -133,6 +333,8 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
             }
           : undefined,
       };
+
+      const streamAccumulator: AgentTaskProgressPayload[] = [...timelineEvents, startEvent];
       setTimelineEvents((prev) => [...prev, startEvent]);
 
       try {
@@ -144,6 +346,12 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
         }
 
         const requestBody: any = { prompt: fullPrompt };
+        if (currentTaskId) {
+          requestBody.taskId = currentTaskId;
+        }
+        if (currentRunId) {
+          requestBody.runId = currentRunId;
+        }
         if (snippet) {
           requestBody.snippet = snippet;
         }
@@ -162,17 +370,16 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
 
         if (!res.ok || !res.body) {
           const errorText = await res.text().catch(() => res.statusText);
-          setTimelineEvents((prev) => [
-            ...prev,
-            {
-              taskId: 'err',
-              runId: 'err',
-              state: 'FAILED',
-              stepName: 'Connection Error',
-              message: `Runtime error (${res.status}): ${errorText || 'Failed to start agent task'}`,
-              percentage: 100,
-            },
-          ]);
+          const errEvent: AgentTaskProgressPayload = {
+            taskId: 'err',
+            runId: 'err',
+            state: 'FAILED',
+            stepName: 'Connection Error',
+            message: `Runtime error (${res.status}): ${errorText || 'Failed to start agent task'}`,
+            percentage: 100,
+          };
+          streamAccumulator.push(errEvent);
+          setTimelineEvents((prev) => [...prev, errEvent]);
           setIsExecuting(false);
           return;
         }
@@ -194,9 +401,20 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
             if (!trimmed) continue;
             try {
               const event = JSON.parse(trimmed) as AgentTaskProgressPayload;
+              streamAccumulator.push(event);
               setTimelineEvents((prev) => [...prev, event]);
               if (event.diffData && onReviewDiff) {
                 onReviewDiff(event.diffData);
+              }
+              if (currentTaskId && currentRunId) {
+                fetch(`/api/v1/agent/tasks/${currentTaskId}/runs/${currentRunId}/progress`, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                  },
+                  body: JSON.stringify(event),
+                }).catch(() => {});
               }
             } catch {
               // Ignore non-json chunk
@@ -204,25 +422,91 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
           }
         }
       } catch (err: any) {
-        setTimelineEvents((prev) => [
-          ...prev,
-          {
-            taskId: 'err',
-            runId: 'err',
-            state: 'FAILED',
-            stepName: 'Network Error',
-            message:
-              err?.message?.includes('Failed to fetch') || err?.name === 'TypeError'
-                ? 'Could not connect to the local runtime daemon on http://127.0.0.1:7890. Ensure "pnpm dev:all" or the runtime daemon is running.'
-                : `Agent execution failed: ${err?.message || String(err)}`,
-            percentage: 100,
-          },
-        ]);
+        const netErrEvent: AgentTaskProgressPayload = {
+          taskId: 'err',
+          runId: 'err',
+          state: 'FAILED',
+          stepName: 'Network Error',
+          message:
+            err?.message?.includes('Failed to fetch') || err?.name === 'TypeError'
+              ? 'Could not connect to the local runtime daemon on http://127.0.0.1:7890. Ensure "pnpm dev:all" or the runtime daemon is running.'
+              : `Agent execution failed: ${err?.message || String(err)}`,
+          percentage: 100,
+        };
+        streamAccumulator.push(netErrEvent);
+        setTimelineEvents((prev) => [...prev, netErrEvent]);
       } finally {
         setIsExecuting(false);
+        if (currentTaskId) {
+          const existingLocal = getLocalTaskHistory(effectiveWsId);
+          const taskIdx = existingLocal.findIndex((t: any) => t.id === currentTaskId);
+          const lastEvent = streamAccumulator[streamAccumulator.length - 1];
+          const hasDiff = streamAccumulator.some((e) => Boolean(e.diffData));
+          const diffEvent = streamAccumulator.find((e) => Boolean(e.diffData));
+          const status =
+            lastEvent?.state === 'SUCCESS' ? 'completed' : lastEvent?.state === 'FAILED' ? 'failed' : 'completed';
+
+          const currentConversations = [
+            ...(selectedTaskDetails?.conversations || [{ role: 'user', content: text }]),
+          ];
+          if (selectedTaskId && !currentConversations.some((c: any) => c.content === text)) {
+            currentConversations.push({ role: 'user', content: text });
+          }
+          if (
+            lastEvent &&
+            lastEvent.message &&
+            !currentConversations.some((c: any) => c.content === lastEvent.message)
+          ) {
+            currentConversations.push({ role: 'assistant', content: lastEvent.message });
+          }
+
+          const taskRecord = {
+            id: currentTaskId,
+            workspaceId: effectiveWsId,
+            prompt: selectedTaskDetails?.prompt || text,
+            status,
+            createdAt: selectedTaskDetails?.createdAt || new Date().toISOString(),
+            runCount: (selectedTaskDetails?.runCount || 0) + 1,
+            hasDiff,
+            timelineEvents: streamAccumulator,
+            conversations: currentConversations,
+            changeSet: diffEvent?.diffData
+              ? {
+                  id: diffEvent.diffData.changeSetId,
+                  patch: diffEvent.diffData.modifiedContent,
+                  changedFiles: [diffEvent.diffData.filePath],
+                  status: 'pending',
+                  diffData: diffEvent.diffData,
+                }
+              : selectedTaskDetails?.changeSet,
+          };
+
+          if (taskIdx >= 0) {
+            existingLocal[taskIdx] = taskRecord;
+          } else {
+            existingLocal.unshift(taskRecord);
+          }
+          saveLocalTaskHistory(effectiveWsId, existingLocal);
+          setSelectedTaskDetails(taskRecord);
+        }
+        fetchWorkspaceTasks();
       }
     },
-    [isExecuting, localAttachment, localSnippet, onClearAttachment, onClearSnippet, onReviewDiff, workspaceId]
+    [
+      isExecuting,
+      localAttachment,
+      localSnippet,
+      onClearAttachment,
+      onClearSnippet,
+      onReviewDiff,
+      workspaceId,
+      effectiveWsId,
+      selectedTaskId,
+      selectedTaskDetails,
+      timelineEvents,
+      token,
+      fetchWorkspaceTasks,
+    ]
   );
 
   // Trigger auto execution when initialPrompt and autoExecute are provided
@@ -339,31 +623,232 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
         </span>
       </div>
 
-      {/* Active Task / Plan Status Card */}
-      <div style={{ padding: '12px', flex: 1, overflowY: 'auto' }}>
-        <div
+      {/* Navigation Tabs: Current Stream vs Saved History */}
+      <div
+        style={{
+          display: 'flex',
+          padding: '4px 12px',
+          gap: '8px',
+          borderBottom: '1px solid var(--border-subtle)',
+          backgroundColor: 'var(--bg-panel-raised)',
+          fontSize: '11px',
+        }}
+      >
+        <button
+          data-testid="agent-stream-tab"
+          onClick={() => setActiveTab('stream')}
           style={{
-            padding: '10px',
-            borderRadius: 'var(--radius-md)',
-            backgroundColor: 'var(--bg-input)',
-            border: '1px solid var(--border-subtle)',
-            marginBottom: '12px',
+            padding: '3px 8px',
+            border: 'none',
+            borderRadius: 'var(--radius-xs)',
+            backgroundColor: activeTab === 'stream' ? 'var(--accent)' : 'transparent',
+            color: activeTab === 'stream' ? '#ffffff' : 'var(--text-secondary)',
+            fontWeight: activeTab === 'stream' ? 600 : 400,
+            cursor: 'pointer',
           }}
         >
-          <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '4px' }}>
-            ACTIVE GOAL
-          </div>
-          <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)' }}>
-            {activeGoal ? 'Current Task' : 'Idle — Ready for prompt'}
-          </div>
-          <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-            {activeGoal || 'Enter instructions below to have the agent analyze files, write code, or execute tests.'}
-          </div>
-        </div>
-
-        {/* Agent Activity Stream */}
-        <ToolTimeline events={timelineEvents} onReviewDiff={onReviewDiff} />
+          Task Stream
+        </button>
+        <button
+          data-testid="agent-history-tab"
+          onClick={() => {
+            setActiveTab('history');
+            fetchWorkspaceTasks();
+          }}
+          style={{
+            padding: '3px 8px',
+            border: 'none',
+            borderRadius: 'var(--radius-xs)',
+            backgroundColor: activeTab === 'history' ? 'var(--accent)' : 'transparent',
+            color: activeTab === 'history' ? '#ffffff' : 'var(--text-secondary)',
+            fontWeight: activeTab === 'history' ? 600 : 400,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '4px',
+          }}
+        >
+          History
+          {savedTasks.length > 0 && (
+            <span
+              data-testid="history-count-badge"
+              style={{
+                fontSize: '9px',
+                padding: '0 4px',
+                borderRadius: '8px',
+                backgroundColor: activeTab === 'history' ? 'rgba(255,255,255,0.3)' : 'var(--bg-input)',
+              }}
+            >
+              {savedTasks.length}
+            </span>
+          )}
+        </button>
       </div>
+
+      {activeTab === 'history' ? (
+        <div data-testid="agent-history-list" style={{ padding: '12px', flex: 1, overflowY: 'auto' }}>
+          <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '8px' }}>
+            SAVED WORKSPACE RUNS
+          </div>
+          {savedTasks.length === 0 ? (
+            <div style={{ fontSize: '12px', color: 'var(--text-secondary)', padding: '8px 0' }}>
+              No past agent tasks recorded for this workspace.
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {savedTasks.map((t) => (
+                <div
+                  key={t.id}
+                  data-testid="history-task-item"
+                  onClick={() => loadTaskDetails(t.id)}
+                  style={{
+                    padding: '8px 10px',
+                    borderRadius: 'var(--radius-md)',
+                    backgroundColor: t.id === selectedTaskId ? 'var(--bg-panel-raised)' : 'var(--bg-input)',
+                    border: `1px solid ${t.id === selectedTaskId ? 'var(--accent)' : 'var(--border-subtle)'}`,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '4px',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span
+                      style={{
+                        fontSize: '9px',
+                        fontWeight: 600,
+                        padding: '1px 5px',
+                        borderRadius: 'var(--radius-xs)',
+                        backgroundColor:
+                          t.status === 'completed'
+                            ? 'var(--success-subtle)'
+                            : t.status === 'failed'
+                            ? 'rgba(239, 68, 68, 0.15)'
+                            : 'rgba(234, 179, 8, 0.15)',
+                        color:
+                          t.status === 'completed'
+                            ? 'var(--success)'
+                            : t.status === 'failed'
+                            ? 'rgb(239, 68, 68)'
+                            : 'rgb(234, 179, 8)',
+                        textTransform: 'uppercase',
+                      }}
+                    >
+                      {t.status}
+                    </span>
+                    {t.hasDiff && (
+                      <span
+                        style={{
+                          fontSize: '9px',
+                          padding: '1px 5px',
+                          borderRadius: 'var(--radius-xs)',
+                          backgroundColor: 'var(--accent-subtle, rgba(99, 102, 241, 0.15))',
+                          color: 'var(--accent)',
+                          fontWeight: 600,
+                        }}
+                      >
+                        DIFF
+                      </span>
+                    )}
+                  </div>
+                  <div
+                    style={{
+                      fontSize: '12px',
+                      color: 'var(--text-primary)',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                    }}
+                  >
+                    {t.prompt}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : (
+        /* Active Task / Plan Status Card */
+        <div style={{ padding: '12px', flex: 1, overflowY: 'auto' }}>
+          <div
+            style={{
+              padding: '10px',
+              borderRadius: 'var(--radius-md)',
+              backgroundColor: 'var(--bg-input)',
+              border: '1px solid var(--border-subtle)',
+              marginBottom: '12px',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)' }}>
+                ACTIVE GOAL
+              </div>
+              {selectedTaskId && (
+                <button
+                  data-testid="clear-selected-task-btn"
+                  onClick={() => {
+                    setSelectedTaskId(null);
+                    setSelectedTaskDetails(null);
+                    setActiveGoal(null);
+                    setTimelineEvents([]);
+                  }}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: 'var(--accent)',
+                    fontSize: '10px',
+                    cursor: 'pointer',
+                    padding: 0,
+                  }}
+                >
+                  + New Prompt
+                </button>
+              )}
+            </div>
+            <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)', marginTop: '4px' }}>
+              {activeGoal ? (selectedTaskId ? `Task: ${activeGoal}` : 'Current Task') : 'Idle — Ready for prompt'}
+            </div>
+            <div style={{ fontSize: '11px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+              {activeGoal || 'Enter instructions below to have the agent analyze files, write code, or execute tests.'}
+            </div>
+            {selectedTaskDetails?.changeSet && (
+              <button
+                data-testid="review-past-diff-btn"
+                onClick={() => {
+                  const cs = selectedTaskDetails.changeSet;
+                  onReviewDiff?.(
+                    cs.diffData || {
+                      changeSetId: cs.id,
+                      filePath: cs.changedFiles?.[0] || 'src/modified-file',
+                      originalContent: '',
+                      modifiedContent: cs.patch,
+                    }
+                  );
+                }}
+                style={{
+                  marginTop: '8px',
+                  padding: '4px 8px',
+                  backgroundColor: 'var(--accent)',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: 'var(--radius-xs)',
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                }}
+              >
+                Review Staged Diff
+              </button>
+            )}
+          </div>
+
+          {/* Agent Activity Stream */}
+          <ToolTimeline events={timelineEvents} onReviewDiff={onReviewDiff} />
+        </div>
+      )}
 
       {/* Prompt Input Footer */}
       <div
