@@ -8,6 +8,18 @@ describe('redactSecrets', () => {
         expect(redactSecrets(input)).toBe(expected);
     });
 
+    it('should redact fine-grained GitHub PATs (github_pat_...)', () => {
+        const input = 'Using PAT github_pat_11ABCDEFG0123456789_xyzABCDEFGHIJKLMNOPQRSTUV for clone.';
+        const expected = 'Using PAT [REDACTED_SECRET] for clone.';
+        expect(redactSecrets(input)).toBe(expected);
+    });
+
+    it('should redact Gemini API keys (AIza...)', () => {
+        const input = 'GEMINI_API_KEY=AIzaSyDummyKeyForUnitTesting1234567890abcd in stderr';
+        const expected = 'GEMINI_API_KEY=[REDACTED_SECRET] in stderr';
+        expect(redactSecrets(input)).toBe(expected);
+    });
+
     it('should redact JWT tokens', () => {
         const input = 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c in a log.';
         const expected = 'Bearer [REDACTED_SECRET] in a log.';

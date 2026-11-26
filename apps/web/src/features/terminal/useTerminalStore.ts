@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { RUNTIME_URL } from '../../lib/runtimeConfig.js';
+import { fetchRuntime } from '../../lib/runtimeConfig.js';
 
 export interface TerminalLine {
   stream: 'stdout' | 'stderr' | 'system' | 'exit';
@@ -101,7 +101,7 @@ export const useTerminalStore = create<TerminalState>((set, get) => ({
     }
 
     if (target.isRunning && target.executionId && typeof fetch === 'function') {
-      fetch(`${RUNTIME_URL}/api/v1/exec/${target.executionId}/kill`, {
+      fetchRuntime(`/api/v1/exec/${target.executionId}/kill`, {
         method: 'POST',
       }).catch(() => {
         // Ignore network errors if runtime already exited or is unreachable

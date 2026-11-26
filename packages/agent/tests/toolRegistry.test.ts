@@ -4,7 +4,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { ToolRegistry, zodSchemaToJsonSchema } from '../src/tools/registry.js';
 import { createFilesystemTools, readFileTool, writeFileTool } from '../src/tools/filesystem.js';
-import { runCommandTool } from '../src/tools/shell.js';
+import { createShellTools, runCommandTool } from '../src/tools/shell.js';
 
 describe('ToolRegistry', () => {
   let registry: ToolRegistry;
@@ -113,18 +113,57 @@ describe('ToolRegistry', () => {
     expect(zodSchemaToJsonSchema(runCommandTool.schema)).toBeDefined();
   });
 
-  it('blocks disallowed binaries and shell metacharacter commands via policy', async () => {
+  it('blocks disallowed binaries, risky flags, and requires sandbox executor', async () => {
     const shResult = await registry.executeTool('run_command', {
       command: 'sh',
       args: ['-c', 'echo pwned'],
     });
     expect(shResult).toContain('POLICY_VIOLATION');
 
-    const nodeResult = await registry.executeTool('run_command', {
+    const nodeEvalResult = await registry.executeTool('run_command', {
       command: 'node',
-      args: ['-e', 'console.log(process.argv[1])', 'safe; echo not-executed'],
+      args: ['-e', 'console.log(1)'],
     });
-    expect(nodeResult.trim()).toBe('safe; echo not-executed');
+    expect(nodeEvalResult).toContain('POLICY_VIOLATION');
+
+    // Without a sandbox executor injected, default tool fails closed
+    const noSandboxResult = await registry.executeTool('run_command', {
+      command: 'node',
+      args: ['--version'],
+    });
+    expect(noSandboxResult).toContain('SANDBOX_REQUIRED');
+
+    // With sandbox executor injected, runs safely and redacts secrets
+    const mockExecutor = vi.fn().mockResolvedValue({
+      stdout: 'ok AIzaSyDummyKeyForUnitTesting1234567890abcd',
+      stderr: '',
+      exitCode: 0,
+    });
+    const scopedShell = createShellTools({
+      workspaceRoot: '/tmp/ws-test',
+      executor: mockExecutor,
+    });
+    const sandboxReg = new ToolRegistry();
+    sandboxReg.register(scopedShell.runCommandTool);
+    sandboxReg.register(scopedShell.runTestsTool);
+
+    const cmdOutput = await sandboxReg.executeTool('run_command', {
+      command: 'node',
+      args: ['script.js', 'safe; echo not-executed'],
+    });
+    expect(mockExecutor).toHaveBeenCalledWith(
+      'node',
+      ['script.js', 'safe; echo not-executed'],
+      { cwd: '/tmp/ws-test', timeoutMs: 60000 }
+    );
+    expect(cmdOutput).toBe('ok [REDACTED_SECRET]');
+
+    const testOutput = await sandboxReg.executeTool('run_tests', {});
+    expect(mockExecutor).toHaveBeenLastCalledWith('npm', ['test'], {
+      cwd: '/tmp/ws-test',
+      timeoutMs: 60000,
+    });
+    expect(testOutput).toBe('ok [REDACTED_SECRET]');
   });
 
   it('scopes createFilesystemTools to explicit workspace root without mutating process.env', async () => {

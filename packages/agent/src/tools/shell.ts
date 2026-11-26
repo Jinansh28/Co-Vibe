@@ -1,43 +1,93 @@
 import { z } from 'zod';
 import { ToolDefinition } from './registry.js';
-import { validateCommandPolicy } from '@co-vibe/security';
+import { redactSecrets, validateCommandPolicy } from '@co-vibe/security';
 
-import { execFile } from 'child_process';
-import { promisify } from 'util';
+export interface ShellExecOptions {
+  cwd?: string;
+  timeoutMs?: number;
+}
 
-const execFileAsync = promisify(execFile);
+export interface ShellExecResult {
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+}
 
-export function createShellTools(workspaceRoot?: string) {
-  const execOpts = workspaceRoot ? { cwd: workspaceRoot } : {};
+export type ShellCommandExecutor = (
+  command: string,
+  args: string[],
+  opts?: ShellExecOptions
+) => Promise<ShellExecResult>;
+
+export interface CreateShellToolsOptions {
+  workspaceRoot?: string;
+  executor?: ShellCommandExecutor;
+}
+
+export function createShellTools(
+  workspaceRootOrOptions?: string | CreateShellToolsOptions
+) {
+  const options: CreateShellToolsOptions =
+    typeof workspaceRootOrOptions === 'string'
+      ? { workspaceRoot: workspaceRootOrOptions }
+      : workspaceRootOrOptions ?? {};
+
+  const { workspaceRoot, executor } = options;
+
+  const executeSandboxed = async (
+    label: string,
+    command: string,
+    args: string[]
+  ): Promise<string> => {
+    const cmdArray = [command, ...args];
+    try {
+      validateCommandPolicy(cmdArray);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      return `${label} failed: ${msg}`;
+    }
+
+    if (!executor) {
+      return `${label} failed: SANDBOX_REQUIRED: No sandboxed command executor configured`;
+    }
+
+    try {
+      const result = await executor(command, args, {
+        cwd: workspaceRoot,
+        timeoutMs: 60000,
+      });
+      const combined = redactSecrets(
+        [result.stdout, result.stderr].filter(Boolean).join('\n')
+      );
+      if (result.exitCode !== 0) {
+        return combined
+          ? `${label} failed with exit code ${result.exitCode}\n${combined}`
+          : `${label} failed with exit code ${result.exitCode}`;
+      }
+      return combined;
+    } catch (error: unknown) {
+      const msg = redactSecrets(error instanceof Error ? error.message : String(error));
+      return `${label} failed: ${msg}`;
+    }
+  };
 
   const runCommand: ToolDefinition = {
     name: 'run_command',
-    description: 'Runs a command without a shell. command must be an allowed binary; args are passed as an array (no shell expansion).',
+    description:
+      'Runs an allowlisted command inside the workspace sandbox without a shell. args are passed as an array.',
     schema: z.object({
       command: z.string().describe('The binary to execute (must be in the allowlist)'),
       args: z.array(z.string()).optional().describe('Arguments for the command'),
     }),
     timeoutMs: 60000,
     execute: async ({ command, args }) => {
-      const cmdArray = [command, ...(args || [])];
-      try {
-        validateCommandPolicy(cmdArray);
-      } catch (e: any) {
-        return `Command failed: ${e.message}`;
-      }
-      try {
-        // execFile does NOT spawn a shell, preventing shell injection via args
-        const { stdout, stderr } = await execFileAsync(command, args || [], execOpts);
-        return [stdout, stderr].filter(Boolean).join('\n');
-      } catch (error: any) {
-        return `Command failed: ${error.message}\n${error.stdout || ''}\n${error.stderr || ''}`;
-      }
+      return executeSandboxed('Command', command, args || []);
     },
   };
 
   const runTests: ToolDefinition = {
     name: 'run_tests',
-    description: 'Runs the test suite using an allowed test runner binary.',
+    description: 'Runs the test suite inside the workspace sandbox using an allowed test runner binary.',
     schema: z.object({
       testBinary: z.string().optional().describe('Test runner binary (default: "npm"). Must be in allowlist.'),
       testArgs: z.array(z.string()).optional().describe('Arguments for the test runner (default: ["test"]).'),
@@ -46,19 +96,7 @@ export function createShellTools(workspaceRoot?: string) {
     execute: async ({ testBinary, testArgs }) => {
       const binary = testBinary || 'npm';
       const binaryArgs = testArgs || ['test'];
-      const cmdArray = [binary, ...binaryArgs];
-      try {
-        validateCommandPolicy(cmdArray);
-      } catch (e: any) {
-        return `Tests failed: ${e.message}`;
-      }
-      try {
-        // execFile does NOT spawn a shell, preventing shell injection via args
-        const { stdout, stderr } = await execFileAsync(binary, binaryArgs, execOpts);
-        return [stdout, stderr].filter(Boolean).join('\n');
-      } catch (error: any) {
-        return `Tests failed: ${error.message}\n${error.stdout || ''}\n${error.stderr || ''}`;
-      }
+      return executeSandboxed('Tests', binary, binaryArgs);
     },
   };
 

@@ -23,6 +23,7 @@ export interface ExecResult {
 
 export class DockerManager {
   private docker: Docker;
+  private workspaceContainers: Map<string, string> = new Map();
 
   constructor(dockerOptions?: Docker.DockerOptions) {
     this.docker = new Docker(dockerOptions);
@@ -56,8 +57,10 @@ export class DockerManager {
       Cmd: ['sleep', 'infinity'],
       User: '10001',
       WorkingDir: '/workspace',
+      NetworkDisabled: true,
       Env: envArray,
       HostConfig: {
+        NetworkMode: 'none',
         Binds: binds,
         Init: true,
         NanoCpus: 2 * 1e9, // 2 CPUs
@@ -74,6 +77,26 @@ export class DockerManager {
 
     const container = await this.docker.createContainer(containerOptions);
     return container.id;
+  }
+
+  public async ensureWorkspaceContainer(workspaceId: string, hostPath?: string): Promise<string> {
+    const existingId = this.workspaceContainers.get(workspaceId);
+    if (existingId) {
+      try {
+        const info = await this.inspectContainer(existingId);
+        if (!info.State?.Running) {
+          await this.startContainer(existingId);
+        }
+        return existingId;
+      } catch {
+        this.workspaceContainers.delete(workspaceId);
+      }
+    }
+
+    const containerId = await this.createContainer({ workspaceId, hostPath });
+    await this.startContainer(containerId);
+    this.workspaceContainers.set(workspaceId, containerId);
+    return containerId;
   }
 
   public async startContainer(containerId: string): Promise<void> {

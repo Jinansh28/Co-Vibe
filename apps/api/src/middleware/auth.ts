@@ -17,6 +17,9 @@ export type Env = {
     SUPABASE_JWT_SECRET?: string;
     SUPABASE_SERVICE_ROLE_KEY?: string;
     WORKSPACE_ROOM?: DurableObjectNamespace;
+    ALLOWED_ORIGINS?: string;
+    FRONTEND_URL?: string;
+    ENVIRONMENT?: string;
   };
   Variables: {
     authUser: AuthUser;

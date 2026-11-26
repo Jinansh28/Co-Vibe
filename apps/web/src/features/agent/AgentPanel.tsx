@@ -3,7 +3,7 @@ import { ToolTimeline } from './ToolTimeline.js';
 import { AgentTaskProgressPayload } from '@co-vibe/protocol';
 import { AuthContext } from '../auth/AuthProvider.js';
 import { ResizeHandle, clampSize } from '../../components/layout/ResizeHandle.js';
-import { RUNTIME_URL } from '../../lib/runtimeConfig.js';
+import { RUNTIME_URL, fetchRuntime } from '../../lib/runtimeConfig.js';
 
 const DEFAULT_AGENT_WIDTH = 320;
 const DEFAULT_AGENT_MIN_WIDTH = 260;
@@ -412,13 +412,6 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
       setTimelineEvents((prev) => [...prev, startEvent]);
 
       try {
-        const headers: Record<string, string> = {
-          'Content-Type': 'application/json',
-        };
-        if (workspaceId) {
-          headers['X-Workspace-Id'] = workspaceId;
-        }
-
         const requestBody: AgentRunRequestPayload = { prompt: fullPrompt };
         if (currentTaskId) {
           requestBody.taskId = currentTaskId;
@@ -436,11 +429,15 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
           };
         }
 
-        const res = await fetch(`${RUNTIME_URL}/api/v1/agent/run`, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify(requestBody),
-        });
+        const res = await fetchRuntime(
+          '/api/v1/agent/run',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(requestBody),
+          },
+          workspaceId || undefined
+        );
 
         if (!res.ok || !res.body) {
           const errorText = await res.text().catch(() => res.statusText);

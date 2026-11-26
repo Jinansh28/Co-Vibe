@@ -278,6 +278,70 @@ describe('ProcessManager Unit Tests (Mocked Docker)', () => {
     mockStream.emit('end');
     await proc.wait();
   });
+
+  it('supports attachStdin + writeStdin and redacts Gemini/GitHub secrets in streamed output', async () => {
+    const writtenChunks: string[] = [];
+    const mockStream = new EventEmitter() as any;
+    mockStream.write = vi.fn((chunk: string) => {
+      writtenChunks.push(chunk);
+      return true;
+    });
+    mockStream.destroy = vi.fn();
+
+    const mockExec = {
+      start: vi.fn().mockResolvedValue(mockStream),
+      inspect: vi.fn().mockResolvedValue({ ExitCode: 0 }),
+    };
+
+    const containerExecSpy = vi.fn().mockResolvedValue(mockExec);
+    let stdoutPassRef: PassThrough | null = null;
+    const mockDocker = {
+      getContainer: vi.fn().mockReturnValue({
+        exec: containerExecSpy,
+      }),
+      modem: {
+        demuxStream: vi.fn((_stream, stdoutPass) => {
+          stdoutPassRef = stdoutPass;
+        }),
+      },
+    } as any;
+
+    const manager = new ProcessManager(mockDocker);
+    const stdoutChunks: string[] = [];
+    const proc = await manager.spawnProcess('test-container', ['node', 'app.js'], {
+      processId: 'stdin-proc',
+      attachStdin: true,
+      onStdout: (chunk) => stdoutChunks.push(chunk),
+    });
+
+    expect(containerExecSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        AttachStdin: true,
+      })
+    );
+    expect(mockExec.start).toHaveBeenCalledWith(
+      expect.objectContaining({
+        hijack: true,
+        stdin: true,
+      })
+    );
+
+    const wrote = manager.writeStdin('stdin-proc', 'user input');
+    expect(wrote).toBe(true);
+    expect(writtenChunks).toEqual(['user input\n']);
+
+    stdoutPassRef!.write(
+      Buffer.from(
+        'key=AIzaSyDummyKeyForUnitTesting1234567890abcd pat=github_pat_11ABCDEFG0123456789_xyzABCDEFGHIJKLMNOPQRSTUV\n'
+      )
+    );
+    expect(stdoutChunks[0]).toBe('key=[REDACTED_SECRET] pat=[REDACTED_SECRET]\n');
+
+    mockStream.emit('end');
+    const result = await proc.wait();
+    expect(result.stdout).toBe('key=[REDACTED_SECRET] pat=[REDACTED_SECRET]\n');
+    expect(manager.writeStdin('stdin-proc', 'after-exit')).toBe(false);
+  });
 });
 
 describe('ProcessManager Integration Tests (Live Container)', () => {

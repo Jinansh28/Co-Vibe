@@ -3,6 +3,7 @@ import { DiffEditor } from '@monaco-editor/react';
 import type { editor } from 'monaco-editor';
 import { DEFAULT_EDITOR_OPTIONS, getLanguageFromPath } from '../editor/editorConfig.js';
 import { HunkSelector } from './HunkSelector.js';
+import { fetchRuntime } from '../../lib/runtimeConfig.js';
 
 export interface DiffViewerProps {
   changeSetId: string;
@@ -50,12 +51,16 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
     };
   }, []);
 
+  const postChangeSetAction = async (action: 'accept' | 'reject', init: RequestInit) => {
+    const url = runtimeUrl
+      ? `${runtimeUrl}/api/v1/changesets/${changeSetId}/${action}`
+      : `/api/v1/changesets/${changeSetId}/${action}`;
+    return runtimeUrl ? fetchRuntime(url, init) : fetch(url, init);
+  };
+
   const handleAccept = async () => {
     try {
-      const url = runtimeUrl
-        ? `${runtimeUrl}/api/v1/changesets/${changeSetId}/accept`
-        : `/api/v1/changesets/${changeSetId}/accept`;
-      const res = await fetch(url, {
+      const res = await postChangeSetAction('accept', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ acceptedHunks: selectedHunks }),
@@ -72,12 +77,7 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
 
   const handleReject = async () => {
     try {
-      const url = runtimeUrl
-        ? `${runtimeUrl}/api/v1/changesets/${changeSetId}/reject`
-        : `/api/v1/changesets/${changeSetId}/reject`;
-      const res = await fetch(url, {
-        method: 'POST',
-      });
+      const res = await postChangeSetAction('reject', { method: 'POST' });
       if (res.ok) {
         onReject(changeSetId);
       } else {

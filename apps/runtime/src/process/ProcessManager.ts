@@ -16,6 +16,8 @@ export interface ProcessExecOptions {
   timeoutMs?: number;
   /** Wrap with /bin/sh PID tracker for robust tree killing (default: true) */
   wrapCommand?: boolean;
+  /** Attach container exec stdin stream for interactive input (default: false) */
+  attachStdin?: boolean;
   /** Max bytes allowed per minute on stdout/stderr (default: 1 MiB) */
   maxBytesPerMinute?: number;
   onStdout?: (chunk: string) => void;
@@ -41,11 +43,13 @@ export interface ManagedProcess {
   kill: (signal?: string) => Promise<void>;
   wait: () => Promise<ProcessExecResult>;
   onOutput: (listener: (stream: 'stdout' | 'stderr', chunk: string) => void) => () => void;
+  sendInput?: (input: string) => boolean;
 }
 
 export interface IProcessManager {
   spawnProcess(containerId: string, command: string[], opts?: ProcessExecOptions): Promise<ManagedProcess>;
   killProcess(processId: string, signal?: string): Promise<void>;
+  writeStdin?(processId: string, input: string): boolean;
   streamLogs(processId: string, onLine: (stream: 'stdout' | 'stderr', chunk: string) => void): () => void;
 }
 
@@ -208,6 +212,19 @@ export class ProcessManager implements IProcessManager {
         listeners.add(listener);
         return () => listeners.delete(listener);
       },
+      sendInput: (input: string) => {
+        if (isCompleted || !opts?.attachStdin) return false;
+        const writable = internalRecord.stream as unknown as NodeJS.WritableStream & {
+          destroyed?: boolean;
+          writableEnded?: boolean;
+        };
+        if (!writable || typeof writable.write !== 'function' || writable.destroyed || writable.writableEnded) {
+          return false;
+        }
+        const payload = input.endsWith('\n') ? input : `${input}\n`;
+        writable.write(payload);
+        return true;
+      },
     };
 
     this.activeProcesses.set(processId, internalRecord);
@@ -217,6 +234,7 @@ export class ProcessManager implements IProcessManager {
     try {
       exec = await container.exec({
         Cmd: finalCmd,
+        AttachStdin: Boolean(opts?.attachStdin),
         AttachStdout: true,
         AttachStderr: true,
         WorkingDir: opts?.cwd || '/workspace',
@@ -231,7 +249,7 @@ export class ProcessManager implements IProcessManager {
     try {
       stream = (await exec.start({
         hijack: true,
-        stdin: false,
+        stdin: Boolean(opts?.attachStdin),
       })) as unknown as NodeJS.ReadableStream;
       internalRecord.stream = stream;
     } catch (err) {
@@ -340,6 +358,14 @@ export class ProcessManager implements IProcessManager {
       return;
     }
     await proc.kill(signal);
+  }
+
+  public writeStdin(processId: string, input: string): boolean {
+    const proc = this.activeProcesses.get(processId);
+    if (!proc || !proc.sendInput) {
+      return false;
+    }
+    return proc.sendInput(input);
   }
 
   public streamLogs(

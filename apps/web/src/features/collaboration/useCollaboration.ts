@@ -4,7 +4,7 @@ import { WebsocketProvider } from 'y-websocket';
 import { YjsMonacoAdapter, AwarenessManager } from '@co-vibe/collaboration';
 import type { editor } from 'monaco-editor';
 import { useAuth } from '../auth/useAuth.js';
-import { RUNTIME_URL } from '../../lib/runtimeConfig.js';
+import { fetchRuntime } from '../../lib/runtimeConfig.js';
 
 export function useCollaboration(
   workspaceId: string,
@@ -102,17 +102,15 @@ export function useCollaboration(
     // To prevent race conditions with multiple clients fetching and inserting initial content,
     // we only fetch if length === 0, and we check again before inserting.
     if (yText.length === 0) {
-      const headers: Record<string, string> = {};
-      if (workspaceId) headers['X-Workspace-Id'] = workspaceId;
-
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 2000);
 
       // Fetch content from local runtime with 2s timeout
-      fetch(`${RUNTIME_URL}/api/v1/files/content?path=${encodeURIComponent(filePath)}`, {
-        headers,
-        signal: controller.signal,
-      })
+      fetchRuntime(
+        `/api/v1/files/content?path=${encodeURIComponent(filePath)}`,
+        { signal: controller.signal },
+        workspaceId || undefined
+      )
         .then(res => {
           clearTimeout(timeoutId);
           return res.json();

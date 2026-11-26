@@ -13,7 +13,7 @@ import { DiffReviewModal, type DiffData } from '../../features/changeset/DiffRev
 import { QuickOpenModal } from '../../features/editor/QuickOpenModal.js';
 import { useOptionalNotification } from '../../context/NotificationContext.js';
 import type { DiagnosticItem } from '../../features/editor/useDiagnosticsStore.js';
-import { RUNTIME_URL } from '../../lib/runtimeConfig.js';
+import { RUNTIME_URL, fetchRuntime } from '../../lib/runtimeConfig.js';
 import * as monaco from 'monaco-editor';
 
 const DEFAULT_SIDEBAR_WIDTH = 260;
@@ -156,15 +156,16 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
       store.appendLine(targetSessionId, { stream: 'system', chunk: `$ ${[cmd, ...args].join(' ')}\n` });
 
       try {
-        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-        if (workspaceId) headers['X-Workspace-Id'] = workspaceId;
-
-        const res = await fetch(`${RUNTIME_URL}/api/v1/exec`, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({ cmd, args, cwd: '.' }),
-          signal: abortController.signal,
-        });
+        const res = await fetchRuntime(
+          '/api/v1/exec',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ cmd, args, cwd: '.' }),
+            signal: abortController.signal,
+          },
+          workspaceId || undefined
+        );
 
         if (!res.ok || !res.body) {
           const text = await res.text().catch(() => res.statusText);
@@ -240,14 +241,15 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
       if (!session?.executionId) return;
 
       try {
-        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-        if (workspaceId) headers['X-Workspace-Id'] = workspaceId;
-
-        await fetch(`${RUNTIME_URL}/api/v1/exec/${session.executionId}/stdin`, {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({ input }),
-        });
+        await fetchRuntime(
+          `/api/v1/exec/${session.executionId}/stdin`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ input }),
+          },
+          workspaceId || undefined
+        );
         // Echo the input in the target terminal session output
         appendLine(targetId, { stream: 'stdout', chunk: input + '\n' });
       } catch (err) {

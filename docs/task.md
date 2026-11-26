@@ -37,11 +37,11 @@ Completed Tasks:    TASK-001 through TASK-041 (all tasks complete)
                     TASK-052 — Problems & Diagnostics Drawer with 1-Click AI Fix (COMPLETE)
                     TASK-053 — Saved Agent Task & Run History (Supabase, API, Runtime & AgentPanel UI) (COMPLETE)
                     TASK-054 — Multi-Tab Terminal Sessions in Bottom Drawer (COMPLETE)
+                    TASK-055 — Runtime Isolation, Auth, Strict CORS & Policy Alignment (COMPLETE)
                     NOTE: Audit (2026-11-26) reclassified TASK-040 as INCOMPLETE (STUB) and identified P0 wiring/hardening work (TASK-055..TASK-059).
-Next Task:          TASK-055 — Enforce Runtime Token Auth, Strict CORS & Docker/ProcessManager Execution
+Next Task:          TASK-056 — Worker AuthZ Hardening, RBAC Enforcement & Postgres Audit Persistence
 Blocked Tasks:      Docker live container assertions skipped on dev host without Docker daemon; live Playwright E2E requires Supabase/CF staging env.
 Known Risks:        - Browser memory overhead during long-lived Yjs sessions.
-                    - Local runtime pairing server currently exposes wildcard CORS (`*`) without bearer auth and spawns allowlisted commands on host rather than via DockerManager/ProcessManager.
                     - Worker `/api/v1/git/*` and `/api/v1/changesets/*` endpoints are stubs; `ws/runtime` lacks RPC bridge; `GitWorktreeManager`/`ChangeSetManager` are not wired into `pairingServer.ts`.
                     - `workspaceWs.ts` and `agentHistory.ts` lack project/workspace RBAC membership verification; `auditService.ts` stores events in memory only.
                     - `tests/e2e/workspace.spec.ts` (`TASK-040`) is currently a commented placeholder spec; CRDT <300ms SLA and 24h DO stability remain unbenchmarked.
@@ -2600,8 +2600,15 @@ This checklist directly verifies compliance with the Technical Requirements Docu
 Generated from the comprehensive 2026-11-26 engineering audit ([docs/audit.md](file:///d:/Projects/Co-Vibe/docs/audit.md) Section 16 & [docs/bugs.md](file:///d:/Projects/Co-Vibe/docs/bugs.md) `BUG-018`–`BUG-021`):
 
 ### TASK-055 — Runtime Auth Boundary, Strict CORS & Docker/ProcessManager Execution (Priority P0)
+- **Status:** DONE (2026-11-26)
 - **Fixes:** `BUG-018`
-- **Scope:** Replace `Access-Control-Allow-Origin: *` in `apps/runtime/src/server/pairingServer.ts` with configured origin allowlist; require valid runtime pairing/bearer token on `/api/v1/files/*`, `/api/v1/exec`, `/api/v1/agent/run`, `/api/v1/changesets/*`; route `/api/v1/exec` and agent shell execution through `ProcessManager` + `DockerManager` when sandbox mode is enabled; unify command allowlists between `pairingServer.ts` and `@co-vibe/security` (`command-policy.ts`); add `AIza` and `github_pat_` patterns to `redactor.ts`.
+- **Scope & Implementation:**
+  - Enforced `Authorization: Bearer <token>` JWT verification (`tokenManager.verifyRuntimeToken`) and `workspaceId` vs `X-Workspace-Id` claim matching (`401`/`403`) on `/api/v1/files*`, `/api/v1/exec*`, `/api/v1/agent/run` (`/api/v1/agent/task`), and `/api/v1/changesets/*` in `apps/runtime/src/server/pairingServer.ts`, keeping `/health`, `/`, `/api/v1/pairing/*`, `/api/v1/agent/info`, and allowlisted `OPTIONS` preflight unauthenticated.
+  - Replaced wildcard CORS (`*`) with configurable origin allowlists in `apps/runtime/src/server/pairingServer.ts` (`RUNTIME_ALLOWED_ORIGINS` / `ALLOWED_ORIGINS` / `FRONTEND_URL`) and `apps/api/src/index.ts` (`ALLOWED_ORIGINS` / `FRONTEND_URL` from Worker `Env`, dev fallback to localhost:5173 / 127.0.0.1:5173).
+  - Enforced `--network=none` (`NetworkDisabled: true`, `HostConfig.NetworkMode: 'none'`) and workspace-scoped container lifecycle in `apps/runtime/src/docker/DockerManager.ts`; added stdin support (`attachStdin` / `writeStdin`) in `apps/runtime/src/process/ProcessManager.ts`; routed `/api/v1/exec`, `/kill`, `/stdin`, and `packages/agent/src/tools/shell.ts` through injectable `DockerManager` + `ProcessManager` execution with 60s timeout and `StreamBuffer` redaction/throttling (removing host `child_process.spawn` / `execFile`).
+  - Unified command validation on `validateCommandPolicy()` in `packages/security/src/command-policy.ts` (blocking risky inline-eval/shell-escape flags such as `node -e`, `--eval`, `-p`, `npx -c`, `git -c`) and added `AIza...` and `github_pat_...` patterns to `packages/security/src/redactor.ts`.
+  - Updated `apps/web/src/lib/runtimeConfig.ts` and web runtime callers (`useFiles.ts`, `useCollaboration.ts`, `AppLayout.tsx`, `AgentPanel.tsx`, `DiffViewer.tsx`, `useTerminalStore.ts`) to store/attach runtime bearer tokens and auto-pair on `401`.
+- **Verification:** `pnpm build`, `pnpm typecheck`, `pnpm lint`, `pnpm test:coverage` all passed (`56` test files / `357` tests; `@co-vibe/protocol` 100%, `@co-vibe/security` 96.68% stmts / 100% funcs). Added S0 regression suite in `tests/security/regressions/bug-018-security.test.ts`. Live Docker container assertions remain skipped when host Docker daemon is unreachable.
 
 ### TASK-056 — Worker AuthZ Hardening, RBAC Enforcement & Postgres Audit Persistence (Priority P0)
 - **Fixes:** `BUG-020`

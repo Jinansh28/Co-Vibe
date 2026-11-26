@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { DockerManager } from '../src/docker/DockerManager.js';
 
 describe('DockerManager Unit & Integration Tests', () => {
@@ -32,6 +32,58 @@ describe('DockerManager Unit & Integration Tests', () => {
     it('should initialize DockerManager instance cleanly', () => {
       expect(dockerManager).toBeDefined();
       expect(dockerManager.getDockerInstance()).toBeDefined();
+    });
+
+    it('enforces --network=none, CapDrop ALL, no-new-privileges, Init, and UID 10001 on container creation', async () => {
+      const manager = new DockerManager();
+      const dockerInstance = manager.getDockerInstance() as unknown as {
+        createContainer: (opts: any) => Promise<{ id: string }>;
+        getContainer: (id: string) => {
+          start: () => Promise<void>;
+          inspect: () => Promise<any>;
+        };
+      };
+
+      let capturedOptions: any = null;
+      const createSpy = vi
+        .spyOn(dockerInstance, 'createContainer')
+        .mockImplementation(async (opts: any) => {
+          capturedOptions = opts;
+          return { id: 'mock-container-123' } as any;
+        });
+      const startMock = vi.fn().mockResolvedValue(undefined);
+      const inspectMock = vi.fn().mockResolvedValue({ State: { Running: true } });
+      vi.spyOn(dockerInstance, 'getContainer').mockReturnValue({
+        start: startMock,
+        inspect: inspectMock,
+      } as any);
+
+      const containerId = await manager.ensureWorkspaceContainer('ws-isolated', '/tmp/ws-isolated');
+      expect(containerId).toBe('mock-container-123');
+      expect(createSpy).toHaveBeenCalledTimes(1);
+      expect(startMock).toHaveBeenCalledTimes(1);
+
+      expect(capturedOptions).toMatchObject({
+        User: '10001',
+        WorkingDir: '/workspace',
+        NetworkDisabled: true,
+        HostConfig: expect.objectContaining({
+          NetworkMode: 'none',
+          Init: true,
+          NanoCpus: 2 * 1e9,
+          Memory: 1024 * 1024 * 1024,
+          PidsLimit: 256,
+          CapDrop: ['ALL'],
+          SecurityOpt: ['no-new-privileges:true'],
+          Binds: ['/tmp/ws-isolated:/workspace:rw'],
+        }),
+      });
+
+      // Second call reuses the running workspace container without recreating it
+      const reusedId = await manager.ensureWorkspaceContainer('ws-isolated', '/tmp/ws-isolated');
+      expect(reusedId).toBe('mock-container-123');
+      expect(createSpy).toHaveBeenCalledTimes(1);
+      expect(inspectMock).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -73,6 +125,8 @@ describe('DockerManager Unit & Integration Tests', () => {
       expect(info.HostConfig.PidsLimit).toBe(256);
       expect(info.HostConfig.CapDrop).toContain('ALL');
       expect(info.HostConfig.SecurityOpt).toContain('no-new-privileges:true');
+      expect(info.HostConfig.NetworkMode).toBe('none');
+      expect(info.Config.NetworkDisabled).toBe(true);
 
       // 4. Exec command 'whoami' or 'id -u'
       const whoamiRes = await dockerManager.execCommand(containerId, ['id', '-u']);

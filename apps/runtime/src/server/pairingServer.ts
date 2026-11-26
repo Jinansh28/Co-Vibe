@@ -2,11 +2,12 @@ import http from 'node:http';
 import fs from 'node:fs/promises';
 import syncFs from 'node:fs';
 import path from 'node:path';
-import { spawn, ChildProcess } from 'node:child_process';
 import crypto from 'node:crypto';
 import { PairingVerifySchema, type AgentTaskProgressPayload } from '@co-vibe/protocol';
-import { TokenManager } from '../auth/tokenManager.js';
-import { assertWorkspacePath } from '@co-vibe/security';
+import { TokenManager, type JwtPayload } from '../auth/tokenManager.js';
+import { DockerManager } from '../docker/DockerManager.js';
+import { ProcessManager } from '../process/ProcessManager.js';
+import { assertWorkspacePath, redactSecrets, validateCommandPolicy } from '@co-vibe/security';
 import {
   AgentOrchestrator,
   AgentStateMachine,
@@ -14,28 +15,27 @@ import {
   createFilesystemTools,
   createShellTools,
   createAIProvider,
+  type ShellCommandExecutor,
 } from '@co-vibe/agent';
 import { ContextRetriever } from '@co-vibe/context';
 
-const activeProcesses = new Map<string, ChildProcess>();
+const DEFAULT_ALLOWED_ORIGINS = ['http://localhost:5173', 'http://127.0.0.1:5173'];
 
-function terminateChildProcess(child: ChildProcess): void {
-  try {
-    child.kill('SIGTERM');
-  } catch {
-    // Ignore if process has already exited
-  }
-  const forceKillTimer = setTimeout(() => {
-    if (!child.killed && child.exitCode === null) {
-      try {
-        child.kill('SIGKILL');
-      } catch {
-        // Ignore if process has already exited
-      }
-    }
-  }, 1000);
-  forceKillTimer.unref?.();
-  child.once('exit', () => clearTimeout(forceKillTimer));
+export function getAllowedOrigins(): string[] {
+  const raw = process.env.RUNTIME_ALLOWED_ORIGINS || process.env.ALLOWED_ORIGINS;
+  const configured = raw
+    ? raw
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
+    : [];
+
+  return configured.length > 0 ? configured : [...DEFAULT_ALLOWED_ORIGINS];
+}
+
+export interface PairingServerDependencies {
+  dockerManager?: DockerManager;
+  processManager?: ProcessManager;
 }
 
 export interface PendingChangeSet {
@@ -137,10 +137,39 @@ function getWorkspaceRoot(req?: http.IncomingMessage) {
   return currentRoot;
 }
 
-export function setCorsHeaders(res: http.ServerResponse): void {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+function getWorkspaceKey(req?: http.IncomingMessage): string {
+  const raw = req?.headers['x-workspace-id'];
+  if (typeof raw === 'string' && raw.trim()) {
+    return validateWorkspaceId(raw);
+  }
+  return 'default';
+}
+
+function toContainerCwd(workspaceRoot: string, safeCwd: string): string {
+  const rel = path.relative(workspaceRoot, safeCwd).replace(/\\/g, '/');
+  if (!rel || rel === '.') {
+    return '/workspace';
+  }
+  return path.posix.join('/workspace', rel);
+}
+
+export function setCorsHeaders(res: http.ServerResponse, req?: http.IncomingMessage): boolean {
+  res.setHeader('Vary', 'Origin');
+
+  const origin = req?.headers?.origin;
+  if (!origin) {
+    return true;
+  }
+
+  const allowedOrigins = getAllowedOrigins();
+  if (!allowedOrigins.includes(origin)) {
+    return false;
+  }
+
+  res.setHeader('Access-Control-Allow-Origin', origin);
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Workspace-Id');
+  return true;
 }
 
 export async function parseJsonBody<T>(req: http.IncomingMessage): Promise<T | null> {
@@ -160,22 +189,80 @@ export async function parseJsonBody<T>(req: http.IncomingMessage): Promise<T | n
   });
 }
 
-// Allowed binaries for the host exec endpoint (security allowlist)
-const EXEC_ALLOWLIST = new Set([
-  'npm', 'npx', 'pnpm', 'node', 'yarn', 'python', 'python3', 'bash', 'sh', 'go', 'cargo',
-  'tsc', 'vitest', 'vite',
-  'git', 'gcc', 'g++', 'clang', 'clang++', 'make', 'a.exe', 'main.exe', './a.out', './main', './main.exe'
-]);
+function isProtectedRoute(pathname: string): boolean {
+  return (
+    pathname === '/api/v1/files' ||
+    pathname.startsWith('/api/v1/files/') ||
+    pathname === '/api/v1/exec' ||
+    pathname.startsWith('/api/v1/exec/') ||
+    pathname === '/api/v1/agent/run' ||
+    pathname === '/api/v1/agent/task' ||
+    pathname.startsWith('/api/v1/changesets/')
+  );
+}
 
-export function createPairingRequestHandler(tokenManager: TokenManager) {
+function extractBearerToken(req: http.IncomingMessage): string | null {
+  const authHeader = req.headers.authorization;
+  if (typeof authHeader !== 'string') {
+    return null;
+  }
+  const match = authHeader.match(/^Bearer\s+(.+)$/);
+  if (!match) {
+    return null;
+  }
+  const token = match[1].trim();
+  return token.length > 0 ? token : null;
+}
+
+export function createPairingRequestHandler(
+  tokenManager: TokenManager,
+  deps?: PairingServerDependencies
+) {
+  const dockerManager = deps?.dockerManager ?? new DockerManager();
+  const processManager = deps?.processManager ?? new ProcessManager(dockerManager);
+
   return async (req: http.IncomingMessage, res: http.ServerResponse) => {
-    setCorsHeaders(res);
+    const originAllowed = setCorsHeaders(res, req);
     res.setHeader('Content-Type', 'application/json');
+
+    if (!originAllowed) {
+      res.writeHead(403);
+      res.end(JSON.stringify({ ok: false, error: 'Origin not allowed' }));
+      return;
+    }
 
     if (req.method === 'OPTIONS') {
       res.writeHead(204);
       res.end();
       return;
+    }
+
+    const url = new URL(req.url || '/', `http://${req.headers.host || '127.0.0.1'}`);
+    const pathname = url.pathname;
+    const method = req.method?.toUpperCase();
+
+    // Enforce runtime bearer auth on protected routes
+    let verifiedClaims: JwtPayload | null = null;
+    if (isProtectedRoute(pathname)) {
+      const token = extractBearerToken(req);
+      if (!token) {
+        res.writeHead(401);
+        res.end(JSON.stringify({ ok: false, error: 'Missing or malformed Authorization Bearer token' }));
+        return;
+      }
+
+      try {
+        verifiedClaims = tokenManager.verifyRuntimeToken(token);
+      } catch (err) {
+        res.writeHead(401);
+        res.end(
+          JSON.stringify({
+            ok: false,
+            error: err instanceof Error ? err.message : 'Invalid or expired runtime token',
+          })
+        );
+        return;
+      }
     }
 
     // Reject path-traversal or malformed X-Workspace-Id headers up front
@@ -192,11 +279,21 @@ export function createPairingRequestHandler(tokenManager: TokenManager) {
         );
         return;
       }
-    }
 
-    const url = new URL(req.url || '/', `http://${req.headers.host || '127.0.0.1'}`);
-    const pathname = url.pathname;
-    const method = req.method?.toUpperCase();
+      if (verifiedClaims?.workspaceId) {
+        const headerWsId = getWorkspaceKey(req);
+        if (verifiedClaims.workspaceId !== headerWsId) {
+          res.writeHead(403);
+          res.end(
+            JSON.stringify({
+              ok: false,
+              error: 'Workspace ID mismatch for runtime token',
+            })
+          );
+          return;
+        }
+      }
+    }
 
     if (pathname === '/health' && method === 'GET') {
       res.writeHead(200);
@@ -314,11 +411,11 @@ export function createPairingRequestHandler(tokenManager: TokenManager) {
     }
 
     // -------------------------------------------------------------------------
-    // POST /api/v1/exec — Run a command on the host and stream output as NDJSON
+    // POST /api/v1/exec — Run a command inside workspace sandbox & stream NDJSON
     // -------------------------------------------------------------------------
     if (pathname === '/api/v1/exec' && method === 'POST') {
       const body = await parseJsonBody<any>(req);
-      if (!body || typeof body.cmd !== 'string') {
+      if (!body || typeof body.cmd !== 'string' || !body.cmd.trim()) {
         res.writeHead(400);
         res.end(JSON.stringify({ ok: false, error: 'Missing required field: cmd' }));
         return;
@@ -328,41 +425,54 @@ export function createPairingRequestHandler(tokenManager: TokenManager) {
       const args: string[] = Array.isArray(body.args) ? body.args.map(String) : [];
       const rawCwd: string = typeof body.cwd === 'string' ? body.cwd : '.';
 
-      // Security: validate binary against allowlist
-      if (!EXEC_ALLOWLIST.has(cmd)) {
+      // Security: unify validation through @co-vibe/security command policy
+      try {
+        validateCommandPolicy([cmd, ...args]);
+      } catch (err) {
         res.writeHead(403);
-        res.end(JSON.stringify({ ok: false, error: `Command not allowed: ${cmd}` }));
+        res.end(
+          JSON.stringify({
+            ok: false,
+            error: err instanceof Error ? err.message : 'POLICY_VIOLATION',
+          })
+        );
         return;
       }
+
+      const workspaceRoot = getWorkspaceRoot(req);
+      const workspaceKey = getWorkspaceKey(req);
 
       // Security: validate cwd is within workspace root
       let safeCwd: string;
       try {
-        safeCwd = assertWorkspacePath(getWorkspaceRoot(req), rawCwd);
+        safeCwd = assertWorkspacePath(workspaceRoot, rawCwd);
       } catch {
         res.writeHead(403);
         res.end(JSON.stringify({ ok: false, error: 'Working directory outside workspace root' }));
         return;
       }
 
-      // Stream output as NDJSON lines: {"stream":"stdout","chunk":"..."} per line
-      res.setHeader('Content-Type', 'application/x-ndjson');
-      res.setHeader('Transfer-Encoding', 'chunked');
-      res.writeHead(200);
-
-      const isWin = process.platform === 'win32';
-      const actualCmd = isWin && ['npm', 'npx', 'pnpm', 'yarn', 'tsc', 'vite', 'vitest'].includes(cmd) 
-        ? `${cmd}.cmd` 
-        : cmd;
-
-      const child = spawn(actualCmd, args, {
-        cwd: safeCwd,
-        shell: isWin && actualCmd.endsWith('.cmd'),      // require shell for .cmd files on Windows to avoid EINVAL (CVE-2024-27980)
-        env: { ...process.env },
-      });
+      let containerId: string;
+      try {
+        await fs.mkdir(workspaceRoot, { recursive: true });
+        containerId = await dockerManager.ensureWorkspaceContainer(workspaceKey, workspaceRoot);
+      } catch (err) {
+        res.writeHead(503);
+        res.end(
+          JSON.stringify({
+            ok: false,
+            error: redactSecrets(
+              err instanceof Error ? err.message : 'Sandbox container unavailable'
+            ),
+          })
+        );
+        return;
+      }
 
       const executionId = crypto.randomUUID();
-      activeProcesses.set(executionId, child);
+      const containerCwd = toContainerCwd(workspaceRoot, safeCwd);
+      const earlyChunks: string[] = [];
+      let streamStarted = false;
 
       const safeWrite = (payload: string) => {
         if (!res.writableEnded && !res.destroyed) {
@@ -384,58 +494,87 @@ export function createPairingRequestHandler(tokenManager: TokenManager) {
         }
       };
 
-      safeWrite(JSON.stringify({ stream: 'system', executionId, chunk: `[System] Process started. Execution ID: ${executionId}\n` }) + '\n');
+      const emitLine = (obj: Record<string, unknown>) => {
+        const line = JSON.stringify(obj) + '\n';
+        if (!streamStarted) {
+          earlyChunks.push(line);
+        } else {
+          safeWrite(line);
+        }
+      };
 
-      const TIMEOUT_MS = 5 * 60 * 1000; // 5 minute hard limit for run commands
-      const timer = setTimeout(() => {
-        terminateChildProcess(child);
-        safeWrite(JSON.stringify({ stream: 'system', chunk: '[Timeout] Process killed after 5 minutes\n' }) + '\n');
-      }, TIMEOUT_MS);
-      timer.unref?.();
+      let proc;
+      try {
+        proc = await processManager.spawnProcess(containerId, [cmd, ...args], {
+          processId: executionId,
+          workspaceId: workspaceKey,
+          cwd: containerCwd,
+          timeoutMs: 60000,
+          attachStdin: true,
+          onStdout: (chunk) => emitLine({ stream: 'stdout', chunk }),
+          onStderr: (chunk) => emitLine({ stream: 'stderr', chunk }),
+        });
+      } catch (err) {
+        res.writeHead(500);
+        res.end(
+          JSON.stringify({
+            ok: false,
+            error: redactSecrets(
+              err instanceof Error ? err.message : 'Failed to start sandboxed process'
+            ),
+          })
+        );
+        return;
+      }
+
+      // Stream output as NDJSON lines: {"stream":"stdout","chunk":"..."} per line
+      res.setHeader('Content-Type', 'application/x-ndjson');
+      res.setHeader('Transfer-Encoding', 'chunked');
+      res.writeHead(200);
+      streamStarted = true;
+
+      safeWrite(
+        JSON.stringify({
+          stream: 'system',
+          executionId,
+          chunk: `[System] Process started. Execution ID: ${executionId}\n`,
+        }) + '\n'
+      );
+      for (const bufferedLine of earlyChunks) {
+        safeWrite(bufferedLine);
+      }
 
       res.on('close', () => {
-        clearTimeout(timer);
-        // If client disconnected before process ended, cleanly terminate
-        if (!res.writableEnded && activeProcesses.has(executionId)) {
-          activeProcesses.delete(executionId);
-          terminateChildProcess(child);
+        if (!res.writableEnded && processManager.getProcess(executionId)) {
+          processManager.killProcess(executionId, 'SIGKILL').catch(() => {});
         }
       });
 
-      child.stdout?.on('data', (data: Buffer) => {
-        safeWrite(JSON.stringify({ stream: 'stdout', chunk: data.toString() }) + '\n');
-      });
-
-      child.stderr?.on('data', (data: Buffer) => {
-        safeWrite(JSON.stringify({ stream: 'stderr', chunk: data.toString() }) + '\n');
-      });
-
-      child.on('close', (code) => {
-        activeProcesses.delete(executionId);
-        clearTimeout(timer);
-        safeWrite(JSON.stringify({ stream: 'exit', exitCode: code ?? -1 }) + '\n');
-        safeEnd();
-      });
-
-      child.on('error', (err) => {
-        activeProcesses.delete(executionId);
-        clearTimeout(timer);
-        safeWrite(JSON.stringify({ stream: 'system', chunk: `[Error] ${err.message}\n` }) + '\n');
-        safeWrite(JSON.stringify({ stream: 'exit', exitCode: -1 }) + '\n');
-        safeEnd();
-      });
+      proc
+        .wait()
+        .then((result) => {
+          safeWrite(JSON.stringify({ stream: 'exit', exitCode: result.exitCode }) + '\n');
+          safeEnd();
+        })
+        .catch((err: unknown) => {
+          const msg = redactSecrets(err instanceof Error ? err.message : String(err));
+          const code = (err as { code?: string })?.code;
+          const prefix = code === 'TIMEOUT' ? '[Timeout]' : code === 'KILLED' ? '[Killed]' : '[Error]';
+          safeWrite(JSON.stringify({ stream: 'system', chunk: `${prefix} ${msg}\n` }) + '\n');
+          safeWrite(JSON.stringify({ stream: 'exit', exitCode: -1 }) + '\n');
+          safeEnd();
+        });
 
       return;
     }
 
-    // POST /api/v1/exec/:id/kill — Terminate running child process
+    // POST /api/v1/exec/:id/kill — Terminate running sandbox process
     if (pathname.startsWith('/api/v1/exec/') && pathname.endsWith('/kill') && method === 'POST') {
       const parts = pathname.split('/');
       const executionId = parts.length === 6 ? parts[4] : '';
-      const child = executionId ? activeProcesses.get(executionId) : undefined;
-      if (child) {
-        activeProcesses.delete(executionId);
-        terminateChildProcess(child);
+      const proc = executionId ? processManager.getProcess(executionId) : undefined;
+      if (proc) {
+        await processManager.killProcess(executionId, 'SIGKILL');
         res.writeHead(200);
         res.end(JSON.stringify({ ok: true, message: 'Process terminated' }));
       } else {
@@ -447,19 +586,17 @@ export function createPairingRequestHandler(tokenManager: TokenManager) {
 
     if (pathname.startsWith('/api/v1/exec/') && pathname.endsWith('/stdin') && method === 'POST') {
       const parts = pathname.split('/');
-      const executionId = parts[4];
+      const executionId = parts.length === 6 ? parts[4] : '';
       const body = await parseJsonBody<any>(req);
-      const process = activeProcesses.get(executionId);
+      const input = typeof body?.input === 'string' ? body.input : '';
 
-      if (!process || !process.stdin) {
+      const written = executionId ? processManager.writeStdin(executionId, input) : false;
+      if (!written) {
         res.writeHead(404);
         res.end(JSON.stringify({ ok: false, error: 'Process not found or stdin closed' }));
         return;
       }
-      
-      const input = typeof body?.input === 'string' ? body.input : '';
-      process.stdin.write(input + '\n');
-      
+
       res.writeHead(200);
       res.end(JSON.stringify({ ok: true }));
       return;
@@ -556,9 +693,29 @@ export function createPairingRequestHandler(tokenManager: TokenManager) {
 
         await readFilesRecursively(workspaceRoot, '');
 
-        // Initialize tool registry with workspace-scoped filesystem & shell execution tools
+        // Initialize tool registry with workspace-scoped filesystem & sandboxed shell execution tools
+        const workspaceKey = getWorkspaceKey(req);
+        const sandboxExecutor: ShellCommandExecutor = async (command, args, opts) => {
+          const containerId = await dockerManager.ensureWorkspaceContainer(workspaceKey, workspaceRoot);
+          const requestedCwd = opts?.cwd ? assertWorkspacePath(workspaceRoot, opts.cwd) : workspaceRoot;
+          const containerCwd = toContainerCwd(workspaceRoot, requestedCwd);
+          const execResult = await processManager.execCommand(containerId, [command, ...args], {
+            workspaceId: workspaceKey,
+            cwd: containerCwd,
+            timeoutMs: opts?.timeoutMs ?? 60000,
+          });
+          return {
+            stdout: execResult.stdout,
+            stderr: execResult.stderr,
+            exitCode: execResult.exitCode,
+          };
+        };
+
         const { readFileTool, writeFileTool, listDirTool } = createFilesystemTools(workspaceRoot);
-        const { runCommandTool, runTestsTool } = createShellTools(workspaceRoot);
+        const { runCommandTool, runTestsTool } = createShellTools({
+          workspaceRoot,
+          executor: sandboxExecutor,
+        });
 
         const stagingWriteFileTool = {
           ...writeFileTool,
@@ -640,7 +797,7 @@ export function createPairingRequestHandler(tokenManager: TokenManager) {
           runId,
           state: 'FAILED',
           stepName: 'Execution Error',
-          message: err?.message || String(err),
+          message: redactSecrets(err?.message || String(err)),
           percentage: 100,
         });
       } finally {
@@ -863,7 +1020,10 @@ export function createPairingRequestHandler(tokenManager: TokenManager) {
   };
 }
 
-export function createPairingServer(tokenManager: TokenManager = new TokenManager()): http.Server {
-  const handler = createPairingRequestHandler(tokenManager);
+export function createPairingServer(
+  tokenManager: TokenManager = new TokenManager(),
+  deps?: PairingServerDependencies
+): http.Server {
+  const handler = createPairingRequestHandler(tokenManager, deps);
   return http.createServer(handler);
 }

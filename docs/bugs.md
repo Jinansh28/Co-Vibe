@@ -322,7 +322,7 @@ The quality engineering manager monitors basic bug health metrics per release cy
 | **BUG-015** | Agent tool JSON schemas serialized as empty `{ type: 'object', properties: {} }` under `zod@^3.25.76` | S1 | Agent Tools / Model Orchestration | **FIXED** | 2026-11-26 | `packages/agent/tests/toolRegistry.test.ts`, `orchestrator.test.ts` |
 | **BUG-016** | Unvalidated `X-Workspace-Id` path traversal and global `WORKSPACE_ROOT` race in pairing server | S0 | Runtime Server / Agent Tools | **FIXED** | 2026-11-26 | `apps/runtime/tests/pairing.test.ts` |
 | **BUG-017** | Missing symlink escape resolution in `assertWorkspacePath` & uncovered barrel failing `test:coverage` at 75% | S1 | Security Policy / Test Gate | **FIXED** | 2026-11-26 | `packages/security/tests/pathPolicy.test.ts`, `index.test.ts` |
-| **BUG-018** | Runtime HTTP API allows wildcard CORS (`*`) without auth and executes commands on host bypassing `DockerManager`/`ProcessManager` | S0 | Runtime Server / Security | **CONFIRMED** | — | None (`TASK-055`) |
+| **BUG-018** | Runtime HTTP API allows wildcard CORS (`*`) without auth and executes commands on host bypassing `DockerManager`/`ProcessManager` | S0 | Runtime Server / Security | **FIXED** | 2026-11-26 | `TASK-055` (`tests/security/regressions/bug-018-security.test.ts`) |
 | **BUG-019** | Worker `/api/v1/git/*` and `/changesets/*` routes are stubs, `ProjectsPage` drops `repoUrl`, and worktree 3-way patch manager is unwired | S1 | API Worker / Git / Runtime | **CONFIRMED** | — | None (`TASK-057`) |
 | **BUG-020** | Missing workspace/project membership RBAC checks on `workspaceWs.ts` and `agentHistory.ts`, plus in-memory-only `auditService.ts` | S1 | API Worker / AuthZ / Audit | **CONFIRMED** | — | None (`TASK-056`) |
 | **BUG-021** | `tests/e2e/workspace.spec.ts` (`TASK-040`) contains only commented-out workflow steps and `expect(true).toBe(true)` placeholders | S2 | QA / Playwright E2E | **CONFIRMED** | — | None (`TASK-059`) |
@@ -855,12 +855,18 @@ Added disk `realpathSync` validation when the workspace root exists in `packages
 
 ## BUG-018 — Runtime HTTP API Wildcard CORS, Missing Auth, and Host Execution Bypassing Docker/ProcessManager
 
-**Status:** **CONFIRMED** (Open — Tracked in `TASK-055`)  
+**Status:** **FIXED** (2026-11-26 — Resolved in `TASK-055`)  
 **Severity:** S0 (Critical)  
-**Component:** `apps/runtime/src/server/pairingServer.ts`  
+**Component:** `apps/runtime/src/server/pairingServer.ts`, `DockerManager.ts`, `ProcessManager.ts`, `apps/api/src/index.ts`, `packages/security`, `packages/agent`  
 
 ### Description
-`pairingServer.ts` responds with `Access-Control-Allow-Origin: *`, performs no bearer token authentication on `/api/v1/files/*`, `/api/v1/exec`, `/api/v1/agent/run`, or `/api/v1/changesets/*`, and spawns allowlisted executables (`bash`, `sh`, `python`, `node`, etc.) directly on the host via `child_process.spawn` rather than routing execution through `DockerManager` and `ProcessManager`.
+`pairingServer.ts` responded with `Access-Control-Allow-Origin: *`, performed no bearer token authentication on `/api/v1/files/*`, `/api/v1/exec`, `/api/v1/agent/run`, or `/api/v1/changesets/*`, and spawned allowlisted executables (`bash`, `sh`, `python`, `node`, etc.) directly on the host via `child_process.spawn` rather than routing execution through `DockerManager` and `ProcessManager`.
+
+### Fix & Regression Test
+1. **Runtime Auth & Strict CORS (`apps/runtime/src/server/pairingServer.ts`, `apps/api/src/index.ts`, `apps/web/src/lib/runtimeConfig.ts`):** Required valid bearer JWTs via `tokenManager.verifyRuntimeToken()` (`401` on missing/invalid/expired, `403` on `workspaceId` vs `X-Workspace-Id` mismatch) on protected runtime endpoints, replaced wildcard `*` CORS with configurable origin allowlists (`Vary: Origin`), and updated frontend runtime callers to store/attach runtime bearer tokens and auto-pair on `401`.
+2. **Docker/ProcessManager Sandbox Routing (`DockerManager.ts`, `ProcessManager.ts`, `pairingServer.ts`, `packages/agent/src/tools/shell.ts`):** Enforced `--network=none` (`NetworkDisabled: true`, `HostConfig.NetworkMode: 'none'`), added container exec stdin support (`attachStdin`/`writeStdin`), and routed `/api/v1/exec*` and agent shell tools through injectable `DockerManager` + `ProcessManager` execution with 60s timeout and `StreamBuffer` redaction/throttling (removing host `child_process.spawn` / `execFile`).
+3. **Policy & Redaction Alignment (`packages/security/src/command-policy.ts`, `redactor.ts`):** Removed divergent `EXEC_ALLOWLIST` in `pairingServer.ts`, unified validation on `validateCommandPolicy()` (blocking `sh`/`bash`/`eval` and risky flags like `node -e`, `--eval`, `-p`, `npx -c`, `git -c`), and added `AIza...` and `github_pat_...` redaction patterns.
+4. **Regression Tests & Verification:** Added S0 regression suite in `tests/security/regressions/bug-018-security.test.ts` plus unit/integration tests in `apps/runtime/tests/pairing.test.ts`, `dockerManager.test.ts`, `processManager.test.ts`, `apps/api/tests/cors.test.ts`, `packages/security/tests/commandPolicy.test.ts`, `redactor.test.ts`, `packages/agent/tests/toolRegistry.test.ts`, and `apps/web/src/lib/runtimeConfig.test.ts`. Verified via `pnpm build`, `pnpm typecheck`, `pnpm lint`, and `pnpm test:coverage` (`56` test files, `357` tests passing; `98.18%` stmts / `100%` funcs coverage; live Docker daemon container tests skipped on host without Docker).
 
 ---
 
