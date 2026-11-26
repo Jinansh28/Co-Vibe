@@ -2,6 +2,11 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useDiagnosticsStore, DiagnosticItem } from '../../features/editor/useDiagnosticsStore.js';
 import { ProblemsView } from '../../features/editor/ProblemsView.js';
 import { useTerminalStore, type TerminalLine } from '../../features/terminal/useTerminalStore.js';
+import { ResizeHandle, clampSize } from './ResizeHandle.js';
+
+const DEFAULT_TERMINAL_HEIGHT = 220;
+const DEFAULT_TERMINAL_MIN_HEIGHT = 140;
+const DEFAULT_TERMINAL_MAX_HEIGHT = 520;
 
 export type { TerminalLine };
 
@@ -22,6 +27,11 @@ interface TerminalPaneProps {
   onNavigateToFile?: (filePath: string, line: number, column: number) => void;
   onFixWithAI?: (item: DiagnosticItem) => void;
   onFixTerminalError?: (errorText: string) => void;
+  height?: number;
+  minHeight?: number;
+  maxHeight?: number;
+  onResize?: (height: number) => void;
+  onResetHeight?: () => void;
 }
 
 export const TerminalPane: React.FC<TerminalPaneProps> = ({
@@ -35,7 +45,13 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({
   onNavigateToFile,
   onFixWithAI,
   onFixTerminalError,
+  height,
+  minHeight = DEFAULT_TERMINAL_MIN_HEIGHT,
+  maxHeight = DEFAULT_TERMINAL_MAX_HEIGHT,
+  onResize,
+  onResetHeight,
 }) => {
+  const [internalHeight, setInternalHeight] = useState(DEFAULT_TERMINAL_HEIGHT);
   const [activeTab, setActiveTab] = useState<'terminal' | 'output' | 'problems' | 'tests'>('terminal');
   const [inputValue, setInputValue] = useState('');
   const outputEndRef = useRef<HTMLDivElement>(null);
@@ -177,12 +193,17 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({
       ? activeSession
       : [...sessions].reverse().find((s) => s.runType === 'tests');
 
+  const effectiveHeight = clampSize(height ?? internalHeight, minHeight, maxHeight);
+  const handleResize = onResize ?? setInternalHeight;
+  const handleReset = onResetHeight ?? (() => setInternalHeight(DEFAULT_TERMINAL_HEIGHT));
+
   return (
     <section
+      data-testid="terminal-panel"
       style={{
-        height: '220px',
-        minHeight: '140px',
-        maxHeight: '420px',
+        position: 'relative',
+        height: `${effectiveHeight}px`,
+        flexShrink: 0,
         backgroundColor: 'var(--bg-panel-solid)',
         borderTop: '1px solid var(--border-subtle)',
         display: 'flex',
@@ -191,6 +212,16 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({
         zIndex: 15,
       }}
     >
+      <ResizeHandle
+        edge="top"
+        currentSize={effectiveHeight}
+        minSize={minHeight}
+        maxSize={maxHeight}
+        onResize={handleResize}
+        onReset={handleReset}
+        label="Resize Terminal Panel"
+        testId="terminal-resize-handle"
+      />
       {/* Terminal Drawer Header */}
       <div
         style={{
@@ -435,6 +466,7 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({
         }}
         style={{
           flex: 1,
+          minHeight: 0,
           padding: activeTab === 'problems' ? 0 : '8px 12px',
           fontFamily: 'var(--font-code)',
           fontSize: '12px',

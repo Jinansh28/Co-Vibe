@@ -169,7 +169,8 @@ export const HtmlPreview: React.FC<HtmlPreviewProps> = ({
         borderLeft: '1px solid var(--border-subtle)',
         overflow: 'hidden',
         position: 'relative',
-        minWidth: '320px',
+        minWidth: 0,
+        minHeight: 0,
       }}
     >
       {/* Top Toolbar */}

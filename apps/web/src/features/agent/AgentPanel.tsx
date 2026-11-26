@@ -2,6 +2,11 @@ import React, { useState, useEffect, useCallback, useRef, useContext } from 'rea
 import { ToolTimeline } from './ToolTimeline.js';
 import { AgentTaskProgressPayload } from '@co-vibe/protocol';
 import { AuthContext } from '../auth/AuthProvider.js';
+import { ResizeHandle, clampSize } from '../../components/layout/ResizeHandle.js';
+
+const DEFAULT_AGENT_WIDTH = 320;
+const DEFAULT_AGENT_MIN_WIDTH = 260;
+const DEFAULT_AGENT_MAX_WIDTH = 520;
 
 const RUNTIME_URL = 'http://127.0.0.1:7890';
 const AGENT_HISTORY_STORAGE_KEY_PREFIX = 'co_vibe_agent_tasks_';
@@ -55,6 +60,11 @@ export interface AgentPanelProps {
   onClearSnippet?: () => void;
   initialPrompt?: string;
   autoExecute?: boolean;
+  width?: number;
+  minWidth?: number;
+  maxWidth?: number;
+  onResize?: (width: number) => void;
+  onResetWidth?: () => void;
 }
 
 export const AgentPanel: React.FC<AgentPanelProps> = ({
@@ -68,7 +78,13 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
   onClearSnippet,
   initialPrompt,
   autoExecute = false,
+  width,
+  minWidth = DEFAULT_AGENT_MIN_WIDTH,
+  maxWidth = DEFAULT_AGENT_MAX_WIDTH,
+  onResize,
+  onResetWidth,
 }) => {
+  const [internalWidth, setInternalWidth] = useState(DEFAULT_AGENT_WIDTH);
   const auth = useContext(AuthContext);
   const token = auth?.session?.access_token;
 
@@ -525,13 +541,17 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
 
   if (!isOpen) return null;
 
+  const effectiveWidth = clampSize(width ?? internalWidth, minWidth, maxWidth);
+  const handleResize = onResize ?? setInternalWidth;
+  const handleReset = onResetWidth ?? (() => setInternalWidth(DEFAULT_AGENT_WIDTH));
+
   return (
     <aside
       data-testid="agent-panel"
       style={{
-        width: '320px',
-        minWidth: '260px',
-        maxWidth: '450px',
+        position: 'relative',
+        width: `${effectiveWidth}px`,
+        flexShrink: 0,
         height: '100%',
         backgroundColor: 'var(--bg-panel-solid)',
         borderLeft: '1px solid var(--border-subtle)',
@@ -541,6 +561,16 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
         zIndex: 10,
       }}
     >
+      <ResizeHandle
+        edge="left"
+        currentSize={effectiveWidth}
+        minSize={minWidth}
+        maxSize={maxWidth}
+        onResize={handleResize}
+        onReset={handleReset}
+        label="Resize AI Agent Panel"
+        testId="agent-resize-handle"
+      />
       {/* Header */}
       <div
         style={{
@@ -686,7 +716,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
       </div>
 
       {activeTab === 'history' ? (
-        <div data-testid="agent-history-list" style={{ padding: '12px', flex: 1, overflowY: 'auto' }}>
+        <div data-testid="agent-history-list" style={{ padding: '12px', flex: 1, minHeight: 0, minWidth: 0, overflowY: 'auto' }}>
           <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--text-muted)', marginBottom: '8px' }}>
             SAVED WORKSPACE RUNS
           </div>
@@ -769,7 +799,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
         </div>
       ) : (
         /* Active Task / Plan Status Card */
-        <div style={{ padding: '12px', flex: 1, overflowY: 'auto' }}>
+        <div style={{ padding: '12px', flex: 1, minHeight: 0, minWidth: 0, overflowY: 'auto' }}>
           <div
             style={{
               padding: '10px',

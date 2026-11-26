@@ -6,6 +6,7 @@ import { AppLayout } from './AppLayout.js';
 import { useEditorStore } from '../../features/editor/useEditorStore.js';
 import { useDiagnosticsStore } from '../../features/editor/useDiagnosticsStore.js';
 import { useTerminalStore } from '../../features/terminal/useTerminalStore.js';
+import { useFileTreeStore } from '../../features/editor/useFiles.js';
 
 vi.mock('../../features/auth/useAuth.js', () => ({
   useAuth: () => ({ user: { email: 'test@example.com' } })
@@ -15,6 +16,7 @@ describe('AppLayout IDE Shell Grid', () => {
   beforeEach(() => {
     useTerminalStore.getState().resetSessions();
     useDiagnosticsStore.getState().clearDiagnostics();
+    useFileTreeStore.getState().reset();
     vi.restoreAllMocks();
   });
   it('renders top bar, sidebar, editor pane, agent panel, and terminal drawer', () => {
@@ -200,6 +202,56 @@ describe('AppLayout IDE Shell Grid', () => {
     });
 
     expect(screen.getByTestId('quick-open-modal')).toBeDefined();
+  });
+
+  it('populates Ctrl+P QuickOpenModal with workspace files from runtime even when Sidebar is closed', async () => {
+    const fetchSpy = vi.spyOn(global, 'fetch').mockImplementation((url: any) => {
+      if (String(url).includes('/api/v1/files')) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              ok: true,
+              files: [
+                {
+                  id: 'src',
+                  name: 'src',
+                  type: 'folder',
+                  children: [
+                    { id: 'src/monacoWorker.ts', name: 'monacoWorker.ts', type: 'file' },
+                    { id: 'src/main.tsx', name: 'main.tsx', type: 'file' },
+                  ],
+                },
+                { id: 'package.json', name: 'package.json', type: 'file' },
+              ],
+            }),
+            { status: 200 }
+          )
+        );
+      }
+      return Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+    });
+
+    render(<AppLayout workspaceId="ws-quickopen" initialSidebarOpen={false} />);
+
+    fireEvent.keyDown(window, {
+      key: 'p',
+      ctrlKey: true,
+    });
+
+    const input = await screen.findByTestId('quick-open-input');
+    await waitFor(() => {
+      expect(screen.getByTestId('quick-open-results').textContent).toContain('monacoWorker.ts');
+    });
+
+    fireEvent.change(input, { target: { value: 'monaco' } });
+
+    const topResult = screen.getByTestId('quick-open-item-0');
+    expect(topResult.getAttribute('data-filepath')).toBe('src/monacoWorker.ts');
+
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(useEditorStore.getState().activeFilePath).toBe('src/monacoWorker.ts');
+
+    fetchSpy.mockRestore();
   });
 
   it('opens AgentPanel and dispatches repair task when Fix with AI is clicked in ProblemsView', async () => {

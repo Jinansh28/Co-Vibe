@@ -155,7 +155,7 @@ export const QuickOpenModal: React.FC<QuickOpenModalProps> = ({
   workspaceId,
 }) => {
   const { openFiles, openFile } = useEditorStore();
-  const { fileTree } = useFiles(workspaceId);
+  const { fileTree, fetchTree } = useFiles(workspaceId);
 
   const [query, setQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -163,12 +163,24 @@ export const QuickOpenModal: React.FC<QuickOpenModalProps> = ({
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
-  // Derive file paths list from prop or hook
+  // Refresh workspace files when modal opens if no explicit non-empty list was provided
+  useEffect(() => {
+    if (isOpen && (!propFiles || propFiles.length === 0)) {
+      fetchTree();
+    }
+  }, [isOpen, propFiles, fetchTree]);
+
+  // Derive file paths list from prop, shared fileTree, and open tabs fallback
   const allFiles = useMemo(() => {
     if (propFiles && propFiles.length > 0) return propFiles;
-    if (fileTree && fileTree.length > 0) return flattenFileTree(fileTree);
-    return [];
-  }, [propFiles, fileTree]);
+    const treeFiles = fileTree && fileTree.length > 0 ? flattenFileTree(fileTree) : [];
+    if (treeFiles.length > 0) {
+      const seen = new Set(treeFiles);
+      const extraOpen = openFiles.filter((f) => !seen.has(f));
+      return extraOpen.length > 0 ? [...treeFiles, ...extraOpen] : treeFiles;
+    }
+    return openFiles;
+  }, [propFiles, fileTree, openFiles]);
 
   // Compute fuzzy search results
   const results: FuzzyMatchResult[] = useMemo(() => {

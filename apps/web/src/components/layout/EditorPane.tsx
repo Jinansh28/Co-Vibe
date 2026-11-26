@@ -275,6 +275,8 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
       data-testid="editor-pane"
       style={{
         flex: 1,
+        minWidth: 0,
+        minHeight: 0,
         height: '100%',
         backgroundColor: 'var(--bg-app)',
         display: 'flex',
@@ -291,6 +293,8 @@ export const EditorPane: React.FC<EditorPaneProps> = ({
         ref={editorContainerRef}
         style={{
           flex: 1,
+          minWidth: 0,
+          minHeight: 0,
           display: 'flex',
           backgroundColor: '#1e1e1e',
           overflow: 'hidden',

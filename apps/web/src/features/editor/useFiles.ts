@@ -1,22 +1,73 @@
-import { useState, useCallback } from 'react';
+import { useCallback } from 'react';
+import { create } from 'zustand';
 import type { FileItem } from './FileTree.js';
 
 const RUNTIME_URL = 'http://127.0.0.1:7890';
+const EMPTY_TREE: FileItem[] = [];
 
 export const DEFAULT_STARTER_FILES: FileItem[] = [];
 
+interface FileTreeState {
+  treesByWorkspace: Record<string, FileItem[]>;
+  loadingByWorkspace: Record<string, boolean>;
+  errorByWorkspace: Record<string, string | null>;
+  setTree: (key: string, files: FileItem[] | ((prev: FileItem[]) => FileItem[])) => void;
+  setLoading: (key: string, isLoading: boolean) => void;
+  setError: (key: string, error: string | null) => void;
+  reset: () => void;
+}
+
+export const useFileTreeStore = create<FileTreeState>((set) => ({
+  treesByWorkspace: {},
+  loadingByWorkspace: {},
+  errorByWorkspace: {},
+  setTree: (key, files) =>
+    set((state) => {
+      const prev = state.treesByWorkspace[key] ?? EMPTY_TREE;
+      const next = typeof files === 'function' ? files(prev) : files;
+      return {
+        treesByWorkspace: {
+          ...state.treesByWorkspace,
+          [key]: next,
+        },
+      };
+    }),
+  setLoading: (key, isLoading) =>
+    set((state) => ({
+      loadingByWorkspace: {
+        ...state.loadingByWorkspace,
+        [key]: isLoading,
+      },
+    })),
+  setError: (key, error) =>
+    set((state) => ({
+      errorByWorkspace: {
+        ...state.errorByWorkspace,
+        [key]: error,
+      },
+    })),
+  reset: () =>
+    set({
+      treesByWorkspace: {},
+      loadingByWorkspace: {},
+      errorByWorkspace: {},
+    }),
+}));
+
 export function useFiles(workspaceId?: string | null) {
-  const [fileTree, setFileTree] = useState<FileItem[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const workspaceKey = workspaceId || '__default__';
+  const fileTree = useFileTreeStore((s) => s.treesByWorkspace[workspaceKey] ?? EMPTY_TREE);
+  const isLoading = useFileTreeStore((s) => s.loadingByWorkspace[workspaceKey] ?? false);
+  const error = useFileTreeStore((s) => s.errorByWorkspace[workspaceKey] ?? null);
 
   const fetchTree = useCallback(async () => {
-    setIsLoading(true);
-    setError(null);
+    const store = useFileTreeStore.getState();
+    store.setLoading(workspaceKey, true);
+    store.setError(workspaceKey, null);
     try {
       const headers: Record<string, string> = {};
       if (workspaceId) headers['X-Workspace-Id'] = workspaceId;
-      
+
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 2000);
 
@@ -24,14 +75,15 @@ export function useFiles(workspaceId?: string | null) {
       clearTimeout(timeoutId);
       const data = await res.json();
       if (!res.ok || !data.ok) throw new Error(data.error || 'Failed to fetch files');
-      setFileTree(Array.isArray(data.files) ? data.files : []);
+      useFileTreeStore
+        .getState()
+        .setTree(workspaceKey, Array.isArray(data.files) ? data.files : []);
     } catch (err: any) {
-      setError(err.message);
-      setFileTree((prev) => prev);
+      useFileTreeStore.getState().setError(workspaceKey, err.message);
     } finally {
-      setIsLoading(false);
+      useFileTreeStore.getState().setLoading(workspaceKey, false);
     }
-  }, [workspaceId]);
+  }, [workspaceId, workspaceKey]);
 
   const getFileContent = useCallback(async (path: string): Promise<string> => {
     const headers: Record<string, string> = {};
@@ -90,10 +142,10 @@ export function useFiles(workspaceId?: string | null) {
           children: item.children ? filterOutPath(item.children, target) : undefined,
         }));
     };
-    setFileTree((prev) => filterOutPath(prev, path));
+    useFileTreeStore.getState().setTree(workspaceKey, (prev) => filterOutPath(prev, path));
 
     await fetchTree(); // Refresh tree
-  }, [fetchTree, workspaceId]);
+  }, [fetchTree, workspaceId, workspaceKey]);
 
   return {
     fileTree,

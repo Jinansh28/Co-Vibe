@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import { useFiles, flattenFileTree } from './useFiles.js';
+import { useFiles, useFileTreeStore, flattenFileTree } from './useFiles.js';
 import type { FileItem } from './FileTree.js';
 
 describe('useFiles Hook', () => {
   beforeEach(() => {
+    useFileTreeStore.getState().reset();
     vi.restoreAllMocks();
   });
 
@@ -71,6 +72,31 @@ describe('useFiles Hook', () => {
     expect(result.current.fileTree).toEqual([
       { id: 'index.js', name: 'index.js', type: 'file' },
     ]);
+  });
+
+  it('shares fetched fileTree across independent useFiles consumers for the same workspace', async () => {
+    const mockFiles = [
+      {
+        id: 'src',
+        name: 'src',
+        type: 'folder' as const,
+        children: [{ id: 'src/app.ts', name: 'app.ts', type: 'file' as const }],
+      },
+    ];
+
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: true, files: mockFiles }),
+    } as any);
+
+    const { result: consumerA } = renderHook(() => useFiles('ws-shared'));
+    const { result: consumerB } = renderHook(() => useFiles('ws-shared'));
+
+    await act(async () => {
+      await consumerA.current.fetchTree();
+    });
+
+    expect(consumerB.current.fileTree).toEqual(mockFiles);
   });
 
   describe('flattenFileTree helper', () => {

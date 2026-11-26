@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { TopBar } from './TopBar.js';
 import { Sidebar } from './Sidebar.js';
 import { EditorPane, type CodeActionTriggerPayload } from './EditorPane.js';
 import { AgentPanel, type VisualAttachment, type CodeSnippetAttachment } from '../../features/agent/AgentPanel.js';
 import { TerminalPane } from './TerminalPane.js';
+import { clampSize } from './ResizeHandle.js';
 import { useTerminalStore, type TerminalLine } from '../../features/terminal/useTerminalStore.js';
 import { HtmlPreview } from '../../features/preview/HtmlPreview.js';
 import { useEditorStore } from '../../features/editor/useEditorStore.js';
@@ -15,6 +16,22 @@ import type { DiagnosticItem } from '../../features/editor/useDiagnosticsStore.j
 import * as monaco from 'monaco-editor';
 
 const RUNTIME_URL = 'http://127.0.0.1:7890';
+
+const DEFAULT_SIDEBAR_WIDTH = 260;
+const SIDEBAR_MIN_WIDTH = 180;
+const SIDEBAR_MAX_WIDTH = 480;
+
+const DEFAULT_AGENT_WIDTH = 320;
+const AGENT_MIN_WIDTH = 260;
+const AGENT_MAX_WIDTH = 520;
+
+const DEFAULT_TERMINAL_HEIGHT = 220;
+const TERMINAL_MIN_HEIGHT = 140;
+const TERMINAL_MAX_HEIGHT = 520;
+
+const TOPBAR_HEIGHT = 48;
+const MIN_WORKSPACE_BODY_HEIGHT = 160;
+const MIN_EDITOR_WIDTH = 220;
 
 interface AppLayoutProps {
   workspaceId?: string | null;
@@ -35,9 +52,58 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   const [isTerminalOpen, setIsTerminalOpen] = useState(initialTerminalOpen);
   const [isAgentOpen, setIsAgentOpen] = useState(initialAgentOpen);
 
+  const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_SIDEBAR_WIDTH);
+  const [terminalHeight, setTerminalHeight] = useState(DEFAULT_TERMINAL_HEIGHT);
+  const [agentWidth, setAgentWidth] = useState(DEFAULT_AGENT_WIDTH);
+
+  const layoutRef = useRef<HTMLDivElement>(null);
+  const [viewportSize, setViewportSize] = useState<{ width: number; height: number }>(() => ({
+    width: typeof window !== 'undefined' && window.innerWidth > 0 ? window.innerWidth : 1280,
+    height: typeof window !== 'undefined' && window.innerHeight > 0 ? window.innerHeight : 800,
+  }));
+
+  useEffect(() => {
+    const updateSize = () => {
+      const el = layoutRef.current;
+      const width =
+        el && el.clientWidth > 0
+          ? el.clientWidth
+          : window.innerWidth > 0
+            ? window.innerWidth
+            : 1280;
+      const height =
+        el && el.clientHeight > 0
+          ? el.clientHeight
+          : window.innerHeight > 0
+            ? window.innerHeight
+            : 800;
+      setViewportSize((prev) =>
+        prev.width === width && prev.height === height ? prev : { width, height }
+      );
+    };
+
+    updateSize();
+    window.addEventListener('resize', updateSize);
+
+    let observer: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined' && layoutRef.current) {
+      observer = new ResizeObserver(updateSize);
+      observer.observe(layoutRef.current);
+    }
+
+    return () => {
+      window.removeEventListener('resize', updateSize);
+      observer?.disconnect();
+    };
+  }, []);
+
   const { activeFilePath, openFiles, openFile, saveActiveFile } = useEditorStore();
-  const { fileTree, saveFileContent, getFileContent } = useFiles(workspaceId);
+  const { fileTree, fetchTree, saveFileContent, getFileContent } = useFiles(workspaceId);
   const flattenedFiles = useMemo(() => flattenFileTree(fileTree), [fileTree]);
+
+  useEffect(() => {
+    fetchTree();
+  }, [fetchTree]);
   const notificationContext = useOptionalNotification();
   const [activeDiff, setActiveDiff] = useState<DiffData | null>(null);
   const [isQuickOpen, setIsQuickOpen] = useState(false);
@@ -410,8 +476,57 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
     };
   }, []);
 
+  const minEditorWidth =
+    viewportSize.width >= 600
+      ? MIN_EDITOR_WIDTH
+      : Math.max(120, Math.floor(viewportSize.width * 0.35));
+  const availableSideWidth = Math.max(0, viewportSize.width - minEditorWidth);
+
+  const sidebarMinBound = Math.min(SIDEBAR_MIN_WIDTH, Math.max(100, Math.floor(availableSideWidth * 0.4)));
+  const agentMinBound = Math.min(AGENT_MIN_WIDTH, Math.max(140, Math.floor(availableSideWidth * 0.5)));
+
+  let effectiveSidebarWidth = isSidebarOpen
+    ? clampSize(sidebarWidth, sidebarMinBound, SIDEBAR_MAX_WIDTH)
+    : 0;
+  let effectiveAgentWidth = isAgentOpen
+    ? clampSize(agentWidth, agentMinBound, AGENT_MAX_WIDTH)
+    : 0;
+
+  if (isSidebarOpen && isAgentOpen && effectiveSidebarWidth + effectiveAgentWidth > availableSideWidth) {
+    const totalRequested = effectiveSidebarWidth + effectiveAgentWidth;
+    const ratio = availableSideWidth / Math.max(1, totalRequested);
+    effectiveSidebarWidth = Math.max(
+      Math.min(sidebarMinBound, Math.floor(availableSideWidth * 0.45)),
+      Math.floor(effectiveSidebarWidth * ratio)
+    );
+    effectiveAgentWidth = Math.max(0, availableSideWidth - effectiveSidebarWidth);
+  } else if (isSidebarOpen && effectiveSidebarWidth > availableSideWidth) {
+    effectiveSidebarWidth = Math.max(0, availableSideWidth);
+  } else if (isAgentOpen && effectiveAgentWidth > availableSideWidth) {
+    effectiveAgentWidth = Math.max(0, availableSideWidth);
+  }
+
+  const sidebarMaxBound = Math.max(
+    sidebarMinBound,
+    Math.min(SIDEBAR_MAX_WIDTH, availableSideWidth - (isAgentOpen ? effectiveAgentWidth : 0))
+  );
+  const agentMaxBound = Math.max(
+    agentMinBound,
+    Math.min(AGENT_MAX_WIDTH, availableSideWidth - (isSidebarOpen ? effectiveSidebarWidth : 0))
+  );
+
+  const availableBodyHeight = Math.max(200, viewportSize.height - TOPBAR_HEIGHT);
+  const terminalMaxBound = Math.max(
+    100,
+    Math.min(TERMINAL_MAX_HEIGHT, availableBodyHeight - MIN_WORKSPACE_BODY_HEIGHT)
+  );
+  const terminalMinBound = Math.min(TERMINAL_MIN_HEIGHT, terminalMaxBound);
+  const effectiveTerminalHeight = clampSize(terminalHeight, terminalMinBound, terminalMaxBound);
+
   return (
     <div
+      ref={layoutRef}
+      data-testid="app-layout"
       style={{
         width: '100vw',
         height: '100vh',
@@ -441,8 +556,11 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
 
       {/* Main Content Area (Sidebar + Editor + Preview + Agent Panel) */}
       <div
+        data-testid="workspace-main-row"
         style={{
           flex: 1,
+          minHeight: 0,
+          minWidth: 0,
           display: 'flex',
           flexDirection: 'row',
           overflow: 'hidden',
@@ -450,7 +568,15 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
         }}
       >
         {/* Left Explorer Sidebar */}
-        <Sidebar isOpen={isSidebarOpen} workspaceId={workspaceId} />
+        <Sidebar
+          isOpen={isSidebarOpen}
+          workspaceId={workspaceId}
+          width={effectiveSidebarWidth}
+          minWidth={sidebarMinBound}
+          maxWidth={sidebarMaxBound}
+          onResize={setSidebarWidth}
+          onResetWidth={() => setSidebarWidth(DEFAULT_SIDEBAR_WIDTH)}
+        />
 
         {/* Central Editor Surface */}
         <EditorPane
@@ -494,6 +620,11 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
           onClearSnippet={() => setAttachedSnippet(null)}
           initialPrompt={agentInitialPrompt}
           autoExecute={agentAutoExecute}
+          width={effectiveAgentWidth}
+          minWidth={agentMinBound}
+          maxWidth={agentMaxBound}
+          onResize={setAgentWidth}
+          onResetWidth={() => setAgentWidth(DEFAULT_AGENT_WIDTH)}
         />
       </div>
 
@@ -575,6 +706,11 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
         onNavigateToFile={handleNavigateToFile}
         onFixWithAI={handleFixWithAI}
         onFixTerminalError={handleFixTerminalError}
+        height={effectiveTerminalHeight}
+        minHeight={terminalMinBound}
+        maxHeight={terminalMaxBound}
+        onResize={setTerminalHeight}
+        onResetHeight={() => setTerminalHeight(DEFAULT_TERMINAL_HEIGHT)}
       />
     </div>
   );
