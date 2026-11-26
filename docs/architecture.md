@@ -2568,6 +2568,8 @@ The supplied TRD recommends this lightweight quality pipeline and GitHub Actions
 
 The supplied technical baseline also selects pnpm workspaces and a TypeScript monorepo. fileciteturn2file6L1364-L1380
 
+> **Implementation Drift Note (Verified 2026-11-26):** Actual workspace packages differ slightly from the initial blueprint above: the Cloudflare Hono Worker lives in `apps/api/` (not `apps/worker/`); shared contracts and runtime schemas live in `packages/shared/` and `packages/protocol/` (rather than `contracts/`, `domain/`, `runtime-protocol/`); `packages/observability/` does not exist (`apps/api/src/middleware/audit.ts` + `auditService.ts` fill this role); root orchestration uses `pnpm --recursive` (`turbo.json` is omitted); and `packages/agent/src/model/factory.ts` selects `GeminiProvider` whenever `GEMINI_API_KEY` is configured rather than defaulting exclusively to Ollama.
+
 ---
 
 # 51. Package Rules
@@ -3593,3 +3595,5 @@ Git records.
 Humans approve.
 
 That is the smallest architecture that still demonstrates the project's intended depth in CRDTs, WebSockets, stateful edge computing, agentic tool use, deterministic repository retrieval, Docker isolation, Git worktrees, optimistic concurrency, state machines, authorization, failure recovery, and measurable performance. The supplied TRD explicitly identifies these as the core technical/interview value of the project. fileciteturn2file8L1776-L1807
+
+> **Runtime & Worker Wiring Status (Verified 2026-11-26):** Core isolation and orchestration libraries (`DockerManager`, `ProcessManager`, `TestRunner`, `GitManager`, `GitWorktreeManager`, `ChangeSetManager`) are implemented and unit-tested, while `apps/runtime/src/server/pairingServer.ts` currently executes local commands directly on the host and `apps/api/src/routes/git.ts`, `changesets.ts`, and `runtimeWs.ts` await full runtime RPC/worktree wiring (`TASK-055`–`TASK-057`).

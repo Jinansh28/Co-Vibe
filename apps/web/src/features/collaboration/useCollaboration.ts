@@ -4,6 +4,7 @@ import { WebsocketProvider } from 'y-websocket';
 import { YjsMonacoAdapter, AwarenessManager } from '@co-vibe/collaboration';
 import type { editor } from 'monaco-editor';
 import { useAuth } from '../auth/useAuth.js';
+import { RUNTIME_URL } from '../../lib/runtimeConfig.js';
 
 export function useCollaboration(
   workspaceId: string,
@@ -108,7 +109,7 @@ export function useCollaboration(
       const timeoutId = setTimeout(() => controller.abort(), 2000);
 
       // Fetch content from local runtime with 2s timeout
-      fetch(`http://127.0.0.1:7890/api/v1/files/content?path=${encodeURIComponent(filePath)}`, {
+      fetch(`${RUNTIME_URL}/api/v1/files/content?path=${encodeURIComponent(filePath)}`, {
         headers,
         signal: controller.signal,
       })

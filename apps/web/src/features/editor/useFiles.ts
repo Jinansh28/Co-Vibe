@@ -1,8 +1,8 @@
 import { useCallback } from 'react';
 import { create } from 'zustand';
 import type { FileItem } from './FileTree.js';
+import { RUNTIME_URL } from '../../lib/runtimeConfig.js';
 
-const RUNTIME_URL = 'http://127.0.0.1:7890';
 const EMPTY_TREE: FileItem[] = [];
 
 export const DEFAULT_STARTER_FILES: FileItem[] = [];

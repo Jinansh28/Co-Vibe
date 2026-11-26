@@ -13,9 +13,8 @@ import { DiffReviewModal, type DiffData } from '../../features/changeset/DiffRev
 import { QuickOpenModal } from '../../features/editor/QuickOpenModal.js';
 import { useOptionalNotification } from '../../context/NotificationContext.js';
 import type { DiagnosticItem } from '../../features/editor/useDiagnosticsStore.js';
+import { RUNTIME_URL } from '../../lib/runtimeConfig.js';
 import * as monaco from 'monaco-editor';
-
-const RUNTIME_URL = 'http://127.0.0.1:7890';
 
 const DEFAULT_SIDEBAR_WIDTH = 260;
 const SIDEBAR_MIN_WIDTH = 180;

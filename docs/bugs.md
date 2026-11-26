@@ -319,6 +319,13 @@ The quality engineering manager monitors basic bug health metrics per release cy
 | **BUG-012** | Workspace playground hangs on load with offline credentials or stopped runtime | S2 | Frontend / Auth | **FIXED** | 2026-11-20 | None |
 | **BUG-013** | Projects not displaying on dashboard when remote tables unmigrated or offline | S2 | Frontend / API Service | **FIXED** | 2026-11-21 | None |
 | **BUG-014** | Hardcoded React template in editor and file deletion state bugs | S2 | Frontend / Runtime Server | **FIXED** | 2026-11-21 | None |
+| **BUG-015** | Agent tool JSON schemas serialized as empty `{ type: 'object', properties: {} }` under `zod@^3.25.76` | S1 | Agent Tools / Model Orchestration | **FIXED** | 2026-11-26 | `packages/agent/tests/toolRegistry.test.ts`, `orchestrator.test.ts` |
+| **BUG-016** | Unvalidated `X-Workspace-Id` path traversal and global `WORKSPACE_ROOT` race in pairing server | S0 | Runtime Server / Agent Tools | **FIXED** | 2026-11-26 | `apps/runtime/tests/pairing.test.ts` |
+| **BUG-017** | Missing symlink escape resolution in `assertWorkspacePath` & uncovered barrel failing `test:coverage` at 75% | S1 | Security Policy / Test Gate | **FIXED** | 2026-11-26 | `packages/security/tests/pathPolicy.test.ts`, `index.test.ts` |
+| **BUG-018** | Runtime HTTP API allows wildcard CORS (`*`) without auth and executes commands on host bypassing `DockerManager`/`ProcessManager` | S0 | Runtime Server / Security | **CONFIRMED** | — | None (`TASK-055`) |
+| **BUG-019** | Worker `/api/v1/git/*` and `/changesets/*` routes are stubs, `ProjectsPage` drops `repoUrl`, and worktree 3-way patch manager is unwired | S1 | API Worker / Git / Runtime | **CONFIRMED** | — | None (`TASK-057`) |
+| **BUG-020** | Missing workspace/project membership RBAC checks on `workspaceWs.ts` and `agentHistory.ts`, plus in-memory-only `auditService.ts` | S1 | API Worker / AuthZ / Audit | **CONFIRMED** | — | None (`TASK-056`) |
+| **BUG-021** | `tests/e2e/workspace.spec.ts` (`TASK-040`) contains only commented-out workflow steps and `expect(true).toBe(true)` placeholders | S2 | QA / Playwright E2E | **CONFIRMED** | — | None (`TASK-059`) |
 
 ---
 
@@ -800,5 +807,95 @@ When opening a workspace, a hardcoded React setup (`src/App.tsx`, `src/main.ts`,
 
 Opening a workspace loads real files from the runtime daemon, deleting a file cleanly removes it from disk and the UI, closing the last file displays the empty editor state, and empty directories do not resurrect fake React starter files.
 
+---
 
+## BUG-015 — Agent Tool JSON Schemas Serialized as Empty Objects Under Zod v3
 
+**Status:** **FIXED** (2026-11-26)  
+**Severity:** S1 (High)  
+**Component:** `@co-vibe/agent` (`ToolRegistry`, `AgentOrchestrator`, `RepairLoop`)  
+
+### Root Cause
+`ToolRegistry` inspected `(t.schema as any).jsonSchema` while passing tool declarations to `AIProvider.chat()`, which evaluated to `undefined` under `zod@^3.25.76` and caused every tool declaration sent to Gemini/Ollama to fall back to `{ type: 'object', properties: {} }`.
+
+### Fix & Verification
+Added `zodSchemaToJsonSchema()` and `ToolRegistry.toAITools()` in `packages/agent/src/tools/registry.ts`, updated `orchestrator.ts` and `repair.ts` to use `toAITools()`, and added regression tests in `packages/agent/tests/toolRegistry.test.ts` and `packages/agent/tests/orchestrator.test.ts`.
+
+---
+
+## BUG-016 — Unvalidated `X-Workspace-Id` Header Traversal & Global `WORKSPACE_ROOT` Mutation
+
+**Status:** **FIXED** (2026-11-26)  
+**Severity:** S0 (Critical)  
+**Component:** `apps/runtime` (`pairingServer.ts`), `@co-vibe/agent` (`filesystem.ts`, `shell.ts`)  
+
+### Root Cause
+1. `pairingServer.ts` used the `X-Workspace-Id` HTTP header directly in `path.join(WORKSPACES_BASE, workspaceId)` across file, exec, and agent endpoints without validating against `../` or separator injection.
+2. `POST /api/v1/agent/run` mutated global `process.env.WORKSPACE_ROOT` before building tools, creating a race condition across concurrent workspace agent runs.
+
+### Fix & Verification
+Added `InvalidWorkspaceIdError` and strict `^[a-zA-Z0-9_-]{1,64}$` validation returning HTTP `403` in `apps/runtime/src/server/pairingServer.ts`, added per-workspace factories `createFilesystemTools(workspaceRoot)` and `createShellTools(workspaceRoot)` in `packages/agent`, and added a `403` path-traversal regression test in `apps/runtime/tests/pairing.test.ts`.
+
+---
+
+## BUG-017 — Missing Symlink Escape Resolution & Uncovered Barrel Failing Coverage Threshold
+
+**Status:** **FIXED** (2026-11-26)  
+**Severity:** S1 (High)  
+**Component:** `@co-vibe/security` (`path-policy.ts`, `index.ts`)  
+
+### Root Cause
+1. `assertWorkspacePath()` checked only normalized lexical paths (`path.resolve`) and did not canonicalize on-disk symlinks/directory junctions via `fs.realpathSync` when the workspace root existed on disk.
+2. `packages/security/src/index.ts` had 0% function coverage (never imported directly in security tests), pulling `security` functions coverage to `75%` and failing the `vitest.config.ts` `80%` threshold.
+
+### Fix & Verification
+Added disk `realpathSync` validation when the workspace root exists in `packages/security/src/path-policy.ts`, added a directory symlink/junction escape test in `packages/security/tests/pathPolicy.test.ts`, and added `packages/security/tests/index.test.ts` (bringing `pnpm test:coverage` to `97.28%` Stmts / `100%` Funcs, exit `0`).
+
+---
+
+## BUG-018 — Runtime HTTP API Wildcard CORS, Missing Auth, and Host Execution Bypassing Docker/ProcessManager
+
+**Status:** **CONFIRMED** (Open — Tracked in `TASK-055`)  
+**Severity:** S0 (Critical)  
+**Component:** `apps/runtime/src/server/pairingServer.ts`  
+
+### Description
+`pairingServer.ts` responds with `Access-Control-Allow-Origin: *`, performs no bearer token authentication on `/api/v1/files/*`, `/api/v1/exec`, `/api/v1/agent/run`, or `/api/v1/changesets/*`, and spawns allowlisted executables (`bash`, `sh`, `python`, `node`, etc.) directly on the host via `child_process.spawn` rather than routing execution through `DockerManager` and `ProcessManager`.
+
+---
+
+## BUG-019 — Stubbed Worker Git/ChangeSet Routes, Dropped `repoUrl`, and Unwired Worktree Isolation
+
+**Status:** **CONFIRMED** (Open — Tracked in `TASK-057`)  
+**Severity:** S1 (High)  
+**Component:** `apps/api/src/routes/git.ts`, `changesets.ts`, `runtimeWs.ts`, `apps/web`, `apps/runtime`  
+
+### Description
+- `apps/api/src/routes/git.ts` and `changesets.ts` return static stub responses (`staged: []`, `diff: ''`).
+- `apps/api/src/routes/runtimeWs.ts` only handles `ping`/`pong` and does not bridge Worker RPC commands to connected runtime daemons.
+- `ProjectsPage.tsx` drops `repoUrl` from `CreateProjectModal.tsx` when creating projects.
+- `@co-vibe/git` (`GitManager`, `GitWorktreeManager`) and `ChangeSetManager` are not wired into `pairingServer.ts`; `/api/v1/changesets/:id/accept` writes full `modifiedContent` directly and ignores `acceptedHunks`.
+
+---
+
+## BUG-020 — Missing Workspace/Project RBAC Checks on WebSocket & History Routes + In-Memory Audit Storage
+
+**Status:** **CONFIRMED** (Open — Tracked in `TASK-056`)  
+**Severity:** S1 (High)  
+**Component:** `apps/api/src/routes/workspaceWs.ts`, `agentHistory.ts`, `services/auditService.ts`  
+
+### Description
+- `workspaceWs.ts` validates JWT identity (when Supabase env is configured) but does not verify membership before forwarding upgrades to `WorkspaceRoom`.
+- `agentHistory.ts` (`POST /runs`, `GET /runs`, `GET /runs/:taskId`) does not check workspace/project membership for `wsId` or `taskId`.
+- `auditService.ts` stores events in an in-memory array rather than persisting to PostgreSQL `public.audit_logs`.
+
+---
+
+## BUG-021 — Placeholder Playwright E2E Spec (`TASK-040`)
+
+**Status:** **CONFIRMED** (Open — Tracked in `TASK-059`)  
+**Severity:** S2 (Medium)  
+**Component:** `tests/e2e/workspace.spec.ts`  
+
+### Description
+All 8 `test.step` blocks in `tests/e2e/workspace.spec.ts` have commented-out assertions ending in `expect(true).toBe(true);`, while `docs/task.md` previously marked `TASK-040` as `DONE`.

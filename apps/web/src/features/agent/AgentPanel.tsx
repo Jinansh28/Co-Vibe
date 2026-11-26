@@ -3,21 +3,76 @@ import { ToolTimeline } from './ToolTimeline.js';
 import { AgentTaskProgressPayload } from '@co-vibe/protocol';
 import { AuthContext } from '../auth/AuthProvider.js';
 import { ResizeHandle, clampSize } from '../../components/layout/ResizeHandle.js';
+import { RUNTIME_URL } from '../../lib/runtimeConfig.js';
 
 const DEFAULT_AGENT_WIDTH = 320;
 const DEFAULT_AGENT_MIN_WIDTH = 260;
 const DEFAULT_AGENT_MAX_WIDTH = 520;
 
-const RUNTIME_URL = 'http://127.0.0.1:7890';
 const AGENT_HISTORY_STORAGE_KEY_PREFIX = 'co_vibe_agent_tasks_';
 
-function getLocalTaskHistory(wsId: string): any[] {
+interface AgentConversationEntry {
+  role: string;
+  content: string;
+}
+
+interface AgentRunSummary {
+  id: string;
+  status?: string;
+}
+
+interface AgentToolCallRecord {
+  runId: string;
+  toolName: string;
+  result?: string;
+}
+
+interface AgentChangeSetRecord {
+  id: string;
+  runId?: string;
+  patch: string;
+  changedFiles?: string[];
+  status?: string;
+  diffData?: NonNullable<AgentTaskProgressPayload['diffData']>;
+}
+
+interface SavedAgentTask {
+  id: string;
+  workspaceId?: string;
+  prompt: string;
+  status: string;
+  createdAt?: string;
+  runCount?: number;
+  hasDiff?: boolean;
+  changedFiles?: string[];
+}
+
+interface AgentTaskDetailsRecord extends SavedAgentTask {
+  runs?: AgentRunSummary[];
+  toolCalls?: AgentToolCallRecord[];
+  conversations?: AgentConversationEntry[];
+  timelineEvents?: AgentTaskProgressPayload[];
+  changeSet?: AgentChangeSetRecord | null;
+}
+
+interface AgentRunRequestPayload {
+  prompt: string;
+  taskId?: string;
+  runId?: string;
+  snippet?: CodeSnippetAttachment;
+  image?: {
+    mimeType: string;
+    base64: string;
+  };
+}
+
+function getLocalTaskHistory(wsId: string): AgentTaskDetailsRecord[] {
   try {
     if (typeof window !== 'undefined' && window.localStorage) {
       const raw = localStorage.getItem(`${AGENT_HISTORY_STORAGE_KEY_PREFIX}${wsId}`);
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) return parsed;
+        if (Array.isArray(parsed)) return parsed as AgentTaskDetailsRecord[];
       }
     }
   } catch {
@@ -26,7 +81,7 @@ function getLocalTaskHistory(wsId: string): any[] {
   return [];
 }
 
-function saveLocalTaskHistory(wsId: string, tasks: any[]): void {
+function saveLocalTaskHistory(wsId: string, tasks: AgentTaskDetailsRecord[]): void {
   try {
     if (typeof window !== 'undefined' && window.localStorage) {
       localStorage.setItem(`${AGENT_HISTORY_STORAGE_KEY_PREFIX}${wsId}`, JSON.stringify(tasks));
@@ -99,9 +154,9 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
   const [localAttachment, setLocalAttachment] = useState<VisualAttachment | null>(null);
   const [localSnippet, setLocalSnippet] = useState<CodeSnippetAttachment | null>(null);
 
-  const [savedTasks, setSavedTasks] = useState<any[]>([]);
+  const [savedTasks, setSavedTasks] = useState<AgentTaskDetailsRecord[]>([]);
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
-  const [selectedTaskDetails, setSelectedTaskDetails] = useState<any | null>(null);
+  const [selectedTaskDetails, setSelectedTaskDetails] = useState<AgentTaskDetailsRecord | null>(null);
   const [activeTab, setActiveTab] = useState<'stream' | 'history'>('stream');
 
   const executedPromptRef = useRef<string | null>(null);
@@ -160,10 +215,13 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
           },
         });
         if (res.ok) {
-          const data = await res.json();
+          const data = (await res.json()) as { tasks?: SavedAgentTask[] };
           const serverTasks = data.tasks || [];
-          const serverIds = new Set(serverTasks.map((t: any) => t.id));
-          const merged = [...serverTasks, ...localTasks.filter((lt: any) => !serverIds.has(lt.id))];
+          const serverIds = new Set(serverTasks.map((t) => t.id));
+          const merged: AgentTaskDetailsRecord[] = [
+            ...serverTasks,
+            ...localTasks.filter((lt) => !serverIds.has(lt.id)),
+          ];
           setSavedTasks(merged);
           saveLocalTaskHistory(effectiveWsId, merged);
           return;
@@ -183,7 +241,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
 
   const loadTaskDetails = async (taskId: string) => {
     setSelectedTaskId(taskId);
-    let details: any = null;
+    let details: AgentTaskDetailsRecord | null = null;
 
     try {
       const res = await fetch(`/api/v1/agent/tasks/${taskId}`, {
@@ -192,8 +250,8 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
         },
       });
       if (res.ok) {
-        const data = await res.json();
-        details = data.task;
+        const data = (await res.json()) as { task?: AgentTaskDetailsRecord };
+        details = data.task ?? null;
       }
     } catch {
       // Offline fallback
@@ -201,7 +259,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
 
     if (!details) {
       const localTasks = getLocalTaskHistory(effectiveWsId);
-      details = localTasks.find((t: any) => t.id === taskId);
+      details = localTasks.find((t) => t.id === taskId) ?? null;
     }
 
     if (details) {
@@ -361,7 +419,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
           headers['X-Workspace-Id'] = workspaceId;
         }
 
-        const requestBody: any = { prompt: fullPrompt };
+        const requestBody: AgentRunRequestPayload = { prompt: fullPrompt };
         if (currentTaskId) {
           requestBody.taskId = currentTaskId;
         }
@@ -437,16 +495,18 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
             }
           }
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
+        const errMessage = err instanceof Error ? err.message : String(err);
+        const errName = err instanceof Error ? err.name : '';
         const netErrEvent: AgentTaskProgressPayload = {
           taskId: 'err',
           runId: 'err',
           state: 'FAILED',
           stepName: 'Network Error',
           message:
-            err?.message?.includes('Failed to fetch') || err?.name === 'TypeError'
-              ? 'Could not connect to the local runtime daemon on http://127.0.0.1:7890. Ensure "pnpm dev:all" or the runtime daemon is running.'
-              : `Agent execution failed: ${err?.message || String(err)}`,
+            errMessage.includes('Failed to fetch') || errName === 'TypeError'
+              ? `Could not connect to the local runtime daemon on ${RUNTIME_URL}. Ensure "pnpm dev:all" or the runtime daemon is running.`
+              : `Agent execution failed: ${errMessage}`,
           percentage: 100,
         };
         streamAccumulator.push(netErrEvent);
@@ -455,23 +515,23 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
         setIsExecuting(false);
         if (currentTaskId) {
           const existingLocal = getLocalTaskHistory(effectiveWsId);
-          const taskIdx = existingLocal.findIndex((t: any) => t.id === currentTaskId);
+          const taskIdx = existingLocal.findIndex((t) => t.id === currentTaskId);
           const lastEvent = streamAccumulator[streamAccumulator.length - 1];
           const hasDiff = streamAccumulator.some((e) => Boolean(e.diffData));
           const diffEvent = streamAccumulator.find((e) => Boolean(e.diffData));
           const status =
             lastEvent?.state === 'SUCCESS' ? 'completed' : lastEvent?.state === 'FAILED' ? 'failed' : 'completed';
 
-          const currentConversations = [
+          const currentConversations: AgentConversationEntry[] = [
             ...(selectedTaskDetails?.conversations || [{ role: 'user', content: text }]),
           ];
-          if (selectedTaskId && !currentConversations.some((c: any) => c.content === text)) {
+          if (selectedTaskId && !currentConversations.some((c) => c.content === text)) {
             currentConversations.push({ role: 'user', content: text });
           }
           if (
             lastEvent &&
             lastEvent.message &&
-            !currentConversations.some((c: any) => c.content === lastEvent.message)
+            !currentConversations.some((c) => c.content === lastEvent.message)
           ) {
             currentConversations.push({ role: 'assistant', content: lastEvent.message });
           }
@@ -846,6 +906,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                 data-testid="review-past-diff-btn"
                 onClick={() => {
                   const cs = selectedTaskDetails.changeSet;
+                  if (!cs) return;
                   onReviewDiff?.(
                     cs.diffData || {
                       changeSetId: cs.id,

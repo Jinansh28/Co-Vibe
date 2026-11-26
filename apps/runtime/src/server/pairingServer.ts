@@ -11,11 +11,8 @@ import {
   AgentOrchestrator,
   AgentStateMachine,
   ToolRegistry,
-  readFileTool,
-  writeFileTool,
-  listDirTool,
-  runCommandTool,
-  runTestsTool,
+  createFilesystemTools,
+  createShellTools,
   createAIProvider,
 } from '@co-vibe/agent';
 import { ContextRetriever } from '@co-vibe/context';
@@ -89,19 +86,52 @@ function loadEnvConfig() {
   }
 }
 
+export class InvalidWorkspaceIdError extends Error {
+  constructor(message = 'Invalid workspace identifier') {
+    super(message);
+    this.name = 'InvalidWorkspaceIdError';
+  }
+}
+
+const SAFE_WORKSPACE_ID_REGEX = /^[a-zA-Z0-9._-]+$/;
+
+function validateWorkspaceId(rawWorkspaceId: string): string {
+  const cleanWsId = rawWorkspaceId.trim();
+  if (
+    !cleanWsId ||
+    cleanWsId === '.' ||
+    cleanWsId === '..' ||
+    cleanWsId.includes('..') ||
+    cleanWsId.includes('/') ||
+    cleanWsId.includes('\\') ||
+    cleanWsId.includes('\0') ||
+    !SAFE_WORKSPACE_ID_REGEX.test(cleanWsId)
+  ) {
+    throw new InvalidWorkspaceIdError();
+  }
+  return cleanWsId;
+}
+
 function getWorkspaceRoot(req?: http.IncomingMessage) {
   const currentRoot = process.env.BASE_WORKSPACE_ROOT || process.env.WORKSPACE_ROOT || process.cwd();
   if (req) {
     const workspaceId = req.headers['x-workspace-id'];
-    if (workspaceId && typeof workspaceId === 'string' && workspaceId.trim()) {
-      const cleanWsId = workspaceId.trim();
-      const wsSegment = path.join('.workspaces', cleanWsId);
-      if (currentRoot.includes(wsSegment)) {
-        return currentRoot;
+    if (workspaceId !== undefined) {
+      if (typeof workspaceId !== 'string') {
+        throw new InvalidWorkspaceIdError();
       }
-      const workspacesIdx = currentRoot.indexOf('.workspaces');
-      const baseDir = workspacesIdx !== -1 ? currentRoot.slice(0, workspacesIdx).replace(/[\\/]+$/, '') : currentRoot;
-      return path.join(baseDir, '.workspaces', cleanWsId);
+      if (workspaceId.trim()) {
+        const cleanWsId = validateWorkspaceId(workspaceId);
+        const wsSegment = path.join('.workspaces', cleanWsId);
+        if (currentRoot.includes(wsSegment)) {
+          return currentRoot;
+        }
+        const workspacesIdx = currentRoot.indexOf('.workspaces');
+        const baseDir =
+          workspacesIdx !== -1 ? currentRoot.slice(0, workspacesIdx).replace(/[\\/]+$/, '') : currentRoot;
+        const workspacesRoot = path.join(baseDir, '.workspaces');
+        return assertWorkspacePath(workspacesRoot, cleanWsId);
+      }
     }
   }
   return currentRoot;
@@ -146,6 +176,22 @@ export function createPairingRequestHandler(tokenManager: TokenManager) {
       res.writeHead(204);
       res.end();
       return;
+    }
+
+    // Reject path-traversal or malformed X-Workspace-Id headers up front
+    if (req.headers['x-workspace-id'] !== undefined) {
+      try {
+        getWorkspaceRoot(req);
+      } catch (err) {
+        res.writeHead(403);
+        res.end(
+          JSON.stringify({
+            ok: false,
+            error: err instanceof Error ? err.message : 'Invalid workspace identifier',
+          })
+        );
+        return;
+      }
     }
 
     const url = new URL(req.url || '/', `http://${req.headers.host || '127.0.0.1'}`);
@@ -510,7 +556,10 @@ export function createPairingRequestHandler(tokenManager: TokenManager) {
 
         await readFilesRecursively(workspaceRoot, '');
 
-        // Initialize tool registry with filesystem & shell execution tools
+        // Initialize tool registry with workspace-scoped filesystem & shell execution tools
+        const { readFileTool, writeFileTool, listDirTool } = createFilesystemTools(workspaceRoot);
+        const { runCommandTool, runTestsTool } = createShellTools(workspaceRoot);
+
         const stagingWriteFileTool = {
           ...writeFileTool,
           execute: async ({ path: targetPath, content }: { path: string; content: string }) => {
@@ -557,10 +606,6 @@ export function createPairingRequestHandler(tokenManager: TokenManager) {
         toolRegistry.register(listDirTool);
         toolRegistry.register(runCommandTool);
         toolRegistry.register(runTestsTool);
-
-        // Configure workspace root for filesystem tools
-        process.env.BASE_WORKSPACE_ROOT = process.env.BASE_WORKSPACE_ROOT || process.env.WORKSPACE_ROOT || process.cwd();
-        process.env.WORKSPACE_ROOT = workspaceRoot;
 
         // Ensure .env is loaded
         loadEnvConfig();

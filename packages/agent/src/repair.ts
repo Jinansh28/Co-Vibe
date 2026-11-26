@@ -44,14 +44,7 @@ export async function runRepairLoop(
       { role: 'system', content: `Updated Context for Repair:\n${contextString}` }
     ];
 
-    const tools = options.toolRegistry.getTools().map(t => ({
-        type: 'function' as const,
-        function: {
-          name: t.name,
-          description: t.description,
-          parameters: (t.schema as any).jsonSchema || { type: 'object', properties: {} }
-        }
-    }));
+    const tools = options.toolRegistry.toAITools();
 
     await options.stateMachine.transition('executing');
 

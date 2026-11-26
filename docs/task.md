@@ -37,14 +37,14 @@ Completed Tasks:    TASK-001 through TASK-041 (all tasks complete)
                     TASK-052 — Problems & Diagnostics Drawer with 1-Click AI Fix (COMPLETE)
                     TASK-053 — Saved Agent Task & Run History (Supabase, API, Runtime & AgentPanel UI) (COMPLETE)
                     TASK-054 — Multi-Tab Terminal Sessions in Bottom Drawer (COMPLETE)
-Next Task:          None — Ready for staging deployment and cloud credentials provisioning.
-Blocked Tasks:      None
+                    NOTE: Audit (2026-11-26) reclassified TASK-040 as INCOMPLETE (STUB) and identified P0 wiring/hardening work (TASK-055..TASK-059).
+Next Task:          TASK-055 — Enforce Runtime Token Auth, Strict CORS & Docker/ProcessManager Execution
+Blocked Tasks:      Docker live container assertions skipped on dev host without Docker daemon; live Playwright E2E requires Supabase/CF staging env.
 Known Risks:        - Browser memory overhead during long-lived Yjs sessions.
-                    - Ollama model inference latency on consumer hardware.
-                    - Docker socket security boundaries on developer host OS.
-                    - Local runtime file API has no token auth (MVP accepted limitation; CORS-only boundary).
-                    - E2E Playwright suite requires live Cloudflare + Supabase; not part of offline CI gate.
-                    - CRDT sub-300ms convergence SLA and 24h memory stability not yet benchmarked end-to-end.
+                    - Local runtime pairing server currently exposes wildcard CORS (`*`) without bearer auth and spawns allowlisted commands on host rather than via DockerManager/ProcessManager.
+                    - Worker `/api/v1/git/*` and `/api/v1/changesets/*` endpoints are stubs; `ws/runtime` lacks RPC bridge; `GitWorktreeManager`/`ChangeSetManager` are not wired into `pairingServer.ts`.
+                    - `workspaceWs.ts` and `agentHistory.ts` lack project/workspace RBAC membership verification; `auditService.ts` stores events in memory only.
+                    - `tests/e2e/workspace.spec.ts` (`TASK-040`) is currently a commented placeholder spec; CRDT <300ms SLA and 24h DO stability remain unbenchmarked.
 ```
 
 ---
@@ -1696,7 +1696,7 @@ Cloudflare Worker control plane live on public deployment URL.
 
 ## TASK-040 — Playwright Full E2E Test Suite (`e2e.test.ts`)
 
-Status: DONE  
+Status: INCOMPLETE (STUB)  
 Priority: P0  
 Component: Testing  
 Depends on: All previous tasks  
@@ -1726,11 +1726,11 @@ Create full end-to-end automated browser test suite using Playwright orchestrati
 
 ### Acceptance Criteria
 
-- [x] Playwright test executes end-to-end workflow on test fixture repository without errors.
+- [ ] Playwright test executes end-to-end workflow on test fixture repository without errors.
 
 ### Tests
 
-- [x] Executing `pnpm test:e2e` passes full scenario.
+- [ ] Executing `pnpm test:e2e` passes full scenario.
 
 ### Definition of Done
 
@@ -1738,10 +1738,11 @@ E2E suite automated and passing.
 
 ### Completion Notes
 
-- **Completed Work**: Installed `@playwright/test` to the root workspace. Created `playwright.config.ts` and `workspace.spec.ts` inside `tests/e2e`. Implemented the test outline required by the AC using `test.step` functionality mapping each phase of the user lifecycle. Configured the `test:e2e` script in `package.json` to execute Playwright.
+- **Completed Work**: Installed `@playwright/test` to the root workspace and scaffolded `playwright.config.ts` and `workspace.spec.ts` inside `tests/e2e` with `test.step` structure mapping all 8 phases.
+- **Audit Correction (2026-11-26)**: Verified `tests/e2e/workspace.spec.ts` contains commented-out test steps with placeholder `expect(true).toBe(true);` assertions. Reclassified to `INCOMPLETE (STUB)` and tracked completion under `TASK-059`.
 - **Files Changed**: `package.json`, `tests/e2e/playwright.config.ts`, `tests/e2e/workspace.spec.ts`
-- **Tests & Validation**: Ran `pnpm test:e2e` (passed). Ran `pnpm run lint` (passed). Ran `pnpm typecheck` (passed).
-- **Known Issues**: None.
+- **Tests & Validation**: Scaffold only; real end-to-end assertions require live Cloudflare + Supabase + runtime staging environment.
+- **Known Issues**: Real E2E browser assertions commented out.
 - **Next Task**: TASK-041 — Comprehensive System Documentation (`README.md`)
 
 ---
@@ -2591,3 +2592,29 @@ This checklist directly verifies compliance with the Technical Requirements Docu
 - [ ] **SEC-01:** Path traversal attempt `../../etc/passwd` throws `PATH_NOT_ALLOWED` error.
 - [ ] **SEC-02:** Arbitrary shell execution `sh -c` is blocked by command policy validator.
 - [ ] **SEC-03:** GitHub tokens and JWT secrets are redacted from stdout/stderr terminal streams.
+
+---
+
+## 7. POST-AUDIT HARDENING BACKLOG (Added 2026-11-26)
+
+Generated from the comprehensive 2026-11-26 engineering audit ([docs/audit.md](file:///d:/Projects/Co-Vibe/docs/audit.md) Section 16 & [docs/bugs.md](file:///d:/Projects/Co-Vibe/docs/bugs.md) `BUG-018`–`BUG-021`):
+
+### TASK-055 — Runtime Auth Boundary, Strict CORS & Docker/ProcessManager Execution (Priority P0)
+- **Fixes:** `BUG-018`
+- **Scope:** Replace `Access-Control-Allow-Origin: *` in `apps/runtime/src/server/pairingServer.ts` with configured origin allowlist; require valid runtime pairing/bearer token on `/api/v1/files/*`, `/api/v1/exec`, `/api/v1/agent/run`, `/api/v1/changesets/*`; route `/api/v1/exec` and agent shell execution through `ProcessManager` + `DockerManager` when sandbox mode is enabled; unify command allowlists between `pairingServer.ts` and `@co-vibe/security` (`command-policy.ts`); add `AIza` and `github_pat_` patterns to `redactor.ts`.
+
+### TASK-056 — Worker AuthZ Hardening, RBAC Enforcement & Postgres Audit Persistence (Priority P0)
+- **Fixes:** `BUG-020`
+- **Scope:** Reject startup in non-dev environments when `SUPABASE_JWT_SECRET`/`RUNTIME_JWT_SECRET` uses fallback dev secret in `apps/api/src/middleware/auth.ts` and `routes/runtimeWs.ts`; enforce project/workspace membership checks in `workspaceWs.ts` before `WorkspaceRoom` DO upgrade and in `agentHistory.ts`; persist `auditService.ts` events to PostgreSQL `public.audit_logs`.
+
+### TASK-057 — Worker-to-Runtime RPC Bridge, Git/GitHub Flow & Worktree ChangeSet Execution (Priority P0)
+- **Fixes:** `BUG-019`
+- **Scope:** Implement RPC command dispatch in `apps/api/src/routes/runtimeWs.ts` and `apps/runtime/src/server/workerClient.ts`; replace stub routes in `apps/api/src/routes/git.ts` and `changesets.ts`; wire `repoUrl` from `ProjectsPage.tsx` / `CreateProjectModal.tsx` to real clone/init flow; wire `GitWorktreeManager` + `ChangeSetManager` (including real diff hunks and `git apply --3way`) into `pairingServer.ts`.
+
+### TASK-058 — Frontend Status Fidelity, Collaboration Lifecycle & Gemini Header Hardening (Priority P1)
+- **Scope:** Poll runtime health/pairing status in `TopBar.tsx` instead of static `Runtime Ready`; bind live git branch and cursor `Ln`/`Col` in `EditorPane.tsx`; replace hardcoded `Co-Vibe Monorepo` header in `FileTree.tsx`; remove static pre-run test pass line in `TerminalPane.tsx`; reset `synced` state cleanly on `workspaceId`/`token` change in `useCollaboration.ts`; switch `GeminiProvider` API key from URL query string to `x-goog-api-key` header; deduplicate `apps/api/wrangler.toml` vs `infrastructure/cloudflare/wrangler.toml`.
+
+### TASK-059 — Live Playwright E2E Suite, Multi-Client CRDT Convergence & Expanded Coverage Gate (Priority P1)
+- **Fixes:** `BUG-021`
+- **Scope:** Implement non-commented Playwright E2E steps in `tests/e2e/workspace.spec.ts`; add multi-client Yjs convergence latency & 24h DO soak harness; expand `vitest.config.ts` `coverage.include` beyond `protocol`/`security` to cover `agent`, `git`, `context`, `api`, `runtime`, and `web`.
+

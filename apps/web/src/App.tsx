@@ -8,11 +8,9 @@ import { ProjectsPage } from './features/projects/ProjectsPage.js';
 
 function MainContent() {
   const [activeView, setActiveView] = useState<'dashboard' | 'workspace'>('dashboard');
-  const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null);
 
-  const handleOpenWorkspace = (projectId: string, workspaceId?: string) => {
-    setActiveProjectId(projectId);
+  const handleOpenWorkspace = (_projectId: string, workspaceId?: string) => {
     setActiveWorkspaceId(workspaceId || null);
     setActiveView('workspace');
   };

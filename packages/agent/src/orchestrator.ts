@@ -84,14 +84,7 @@ export class AgentOrchestrator {
 
       await this.stateMachine.transition('executing');
       
-      const tools = this.toolRegistry.getTools().map(t => ({
-        type: 'function' as const,
-        function: {
-          name: t.name,
-          description: t.description,
-          parameters: (t.schema as any).jsonSchema || { type: 'object', properties: {} }
-        }
-      }));
+      const tools = this.toolRegistry.toAITools();
 
       this.sendProgress('EXECUTING', 'Model Query', 'Querying LLM with context and tools', 30);
       

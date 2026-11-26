@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { RUNTIME_URL } from '../../lib/runtimeConfig.js';
 
 export interface TerminalLine {
   stream: 'stdout' | 'stderr' | 'system' | 'exit';
@@ -35,8 +36,6 @@ interface TerminalState {
   setSessionRunType: (sessionId: string, runType: 'terminal' | 'tests') => void;
   resetSessions: () => void;
 }
-
-const DEFAULT_RUNTIME_URL = 'http://127.0.0.1:7890';
 
 const createDefaultSession = (): TerminalSession => ({
   id: 'default',
@@ -102,7 +101,7 @@ export const useTerminalStore = create<TerminalState>((set, get) => ({
     }
 
     if (target.isRunning && target.executionId && typeof fetch === 'function') {
-      fetch(`${DEFAULT_RUNTIME_URL}/api/v1/exec/${target.executionId}/kill`, {
+      fetch(`${RUNTIME_URL}/api/v1/exec/${target.executionId}/kill`, {
         method: 'POST',
       }).catch(() => {
         // Ignore network errors if runtime already exited or is unreachable

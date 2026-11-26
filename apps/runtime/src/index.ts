@@ -53,6 +53,11 @@ export function createRuntimeServer(tokenManager?: TokenManager): Server {
 }
 
 if (process.env.NODE_ENV !== 'test') {
+  if (!process.env.RUNTIME_JWT_SECRET && !process.env.SUPABASE_JWT_SECRET) {
+    console.warn(
+      '[Runtime Daemon] Security Warning: RUNTIME_JWT_SECRET/SUPABASE_JWT_SECRET not set; using development fallback secret.'
+    );
+  }
   const tokenManager = new TokenManager();
   const server = createPairingServer(tokenManager);
 

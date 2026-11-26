@@ -1,6 +1,6 @@
 import { LexicalIndex } from './lexical.js';
-import { SymbolParser, SymbolInfo } from './symbols.js';
-import { StackTraceParser, StackFrame } from './stackTrace.js';
+import { SymbolParser } from './symbols.js';
+import { StackTraceParser } from './stackTrace.js';
 
 export interface ContextChunk {
   file: string;

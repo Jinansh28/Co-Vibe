@@ -517,3 +517,38 @@ The repository is technically **MVP-ready** for staging deployment with the foll
 - CRDT convergence SLA (< 300ms p95) must be benchmarked under real network conditions
 - 24-hour memory stability test for Durable Objects must be completed
 
+---
+
+## 16. COMPREHENSIVE ENGINEERING AUDIT — 2026-11-26
+
+### 16.1 Verified Tooling & Test Results (Post-Fix Run)
+
+| Check | Command | Exit Status | Exact Scope & Outcome |
+|---|---|---|---|
+| Workspace Build | `pnpm build` | `0` | Built all 10 workspace packages (`apps/web` Vite bundle succeeded in 1m 40s; `monaco-vendor` = 4,504.38 kB / 1,159.72 kB gzip, `index` = 144.37 kB / 37.33 kB gzip). |
+| Linter | `pnpm lint` | `0` | `eslint .` — 0 errors across repository. |
+| Typecheck | `pnpm typecheck` | `0` | All 10 workspace projects passed after `pnpm build` refreshed workspace `dist/*.d.ts` files. |
+| Full Tests & Coverage | `pnpm test:coverage` | `0` | **53 passed (53)** test files, **339 passed (339)** tests (`Duration 68.22s`). Three live-container assertions in `dockerManager.test.ts` (1) and `processManager.test.ts` (2) returned early because host Docker daemon was unreachable. |
+| V8 Coverage Scope | `vitest.config.ts` | Threshold Met (`>=80%`) | Covers `protocol/src/**/*.ts` (100% Stmts/Branch/Funcs/Lines) and `security/src/**/*.ts` (91.54% Stmts, 94.44% Branch, 100% Funcs, 91.54% Lines); combined All files: **97.28% Stmts, 94.44% Branch, 100% Funcs, 97.28% Lines**. |
+
+### 16.2 Corrections to Earlier Audit Claims (Sections 3, 4, 10, 15)
+
+Re-verification against actual repository files identified inaccuracies in the 2026-09-23 sections above:
+1. **Referenced Non-Existent Paths:** Earlier Section 3/4 referenced `apps/runtime/src/preview/preview.ts`, `tests/preview.test.ts`, `tests/yjs-sync.test.ts`, `tests/awareness.test.ts`, and `tests/docker.test.ts`. Actual implementations live under `apps/web/src/features/preview/HtmlPreview.tsx`, `packages/collaboration/tests/yjsMonacoBinding.test.ts`, and `apps/runtime/tests/dockerManager.test.ts`.
+2. **Coverage Measurement Scope:** Section 10 reported per-package statement coverage (`86%`–`95%`) across all modules, whereas root `vitest.config.ts` strictly limits coverage instrumentation (`coverage.include`) to `packages/protocol/src/**/*.ts` and `packages/security/src/**/*.ts`.
+3. **E2E Suite Claim (`TASK-040`):** `tests/e2e/workspace.spec.ts` (lines 1–63) consists solely of commented-out workflow blocks ending in `expect(true).toBe(true);` and is not an executable functional E2E gate.
+
+### 16.3 Issues Fixed During 2026-11-26 Audit
+
+1. **`BUG-015` — Empty Tool Schemas Sent to AI Providers (`packages/agent`):** `ToolRegistry` inspected non-existent `(t.schema as any).jsonSchema` under `zod@^3.25.76`, sending empty `{ type: 'object', properties: {} }` parameters to Gemini/Ollama. Added `zodSchemaToJsonSchema()` and `ToolRegistry.toAITools()` in `packages/agent/src/tools/registry.ts`, wired into `orchestrator.ts` and `repair.ts`.
+2. **`BUG-016` — `X-Workspace-Id` Header Traversal & Global `WORKSPACE_ROOT` Race (`apps/runtime`, `packages/agent`):** Added `InvalidWorkspaceIdError` and strict validation (`^[a-zA-Z0-9_-]{1,64}$`) rejecting traversal payloads with `403`, and added `createFilesystemTools(workspaceRoot)` / `createShellTools(workspaceRoot)` to avoid mutating `process.env.WORKSPACE_ROOT` across concurrent runs.
+3. **`BUG-017` — Symlink/Junction Escape & Coverage Gate Failure (`packages/security`):** Extended `assertWorkspacePath()` in `packages/security/src/path-policy.ts` to resolve real on-disk paths via `fs.realpathSync` when the workspace root exists; added `packages/security/tests/index.test.ts` resolving the pre-audit `75%` function coverage failure.
+4. **Hygiene & Frontend Hardening (`apps/web`, `packages/context`):** Deleted dead `apps/web/src/components/layout/FileExplorer.tsx`, centralized `RUNTIME_URL` in `apps/web/src/lib/runtimeConfig.ts`, replaced `any` casts in `AgentPanel.tsx`, removed unused state/imports in `App.tsx` and `packages/context/src/retrieval.ts`, and added non-test startup JWT fallback warning in `apps/runtime/src/index.ts`.
+
+### 16.4 Remaining Confirmed Architecture & Security Gaps (Open)
+
+1. **`BUG-018` (Critical / S0):** `apps/runtime/src/server/pairingServer.ts` uses wildcard CORS (`Access-Control-Allow-Origin: *`), does not verify runtime bearer tokens on `/api/v1/files`, `/api/v1/exec`, `/api/v1/agent/run`, or `/api/v1/changesets/*`, and spawns host commands (`bash`, `sh`, `node`, `python`, etc.) directly via `child_process.spawn` instead of routing execution through `DockerManager` and `ProcessManager`.
+2. **`BUG-019` (High / S1):** `apps/api/src/routes/git.ts` and `apps/api/src/routes/changesets.ts` are stubs; `apps/api/src/routes/runtimeWs.ts` handles only `ping`/`pong` rather than Worker-to-Runtime RPC dispatch; `ProjectsPage.tsx` drops `repoUrl` from `CreateProjectModal`; and `@co-vibe/git` (`GitWorktreeManager`, `GitManager`) / `ChangeSetManager` are not wired into `pairingServer.ts`.
+3. **`BUG-020` (High / S1):** `apps/api/src/routes/workspaceWs.ts` and `apps/api/src/routes/agentHistory.ts` lack project/workspace membership RBAC enforcement, and `apps/api/src/services/auditService.ts` buffers audit events in memory rather than writing to PostgreSQL `audit_logs`.
+4. **`BUG-021` (Medium / S2):** `tests/e2e/workspace.spec.ts` (`TASK-040`) and two-client live Yjs Durable Object convergence / 24h stability benchmarks remain unimplemented.
+

@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest';
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { assertWorkspacePath } from '../src/path-policy.js';
 
@@ -34,5 +36,25 @@ describe('assertWorkspacePath', () => {
     const root = path.resolve('/workspace/root');
     const resolved = assertWorkspacePath(root, '.');
     expect(resolved).toBe(root);
+  });
+
+  it('rejects directory symlinks or junctions pointing outside workspace root', () => {
+    const tempParent = fs.mkdtempSync(path.join(os.tmpdir(), 'covibe-symlink-test-'));
+    const workspaceRoot = path.join(tempParent, 'workspace');
+    const outsideDir = path.join(tempParent, 'outside');
+    fs.mkdirSync(workspaceRoot, { recursive: true });
+    fs.mkdirSync(outsideDir, { recursive: true });
+    fs.writeFileSync(path.join(outsideDir, 'secret.txt'), 'top-secret', 'utf8');
+
+    const linkPath = path.join(workspaceRoot, 'escape-link');
+    const linkType = process.platform === 'win32' ? 'junction' : 'dir';
+    try {
+      fs.symlinkSync(outsideDir, linkPath, linkType);
+      expect(() => assertWorkspacePath(workspaceRoot, 'escape-link/secret.txt')).toThrow(
+        'PATH_NOT_ALLOWED'
+      );
+    } finally {
+      fs.rmSync(tempParent, { recursive: true, force: true });
+    }
   });
 });

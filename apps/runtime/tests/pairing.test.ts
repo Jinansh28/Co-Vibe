@@ -157,6 +157,37 @@ describe('Pairing Server HTTP Endpoints', () => {
     const data2 = (await res2.json()) as Record<string, any>;
     const fileNames2 = data2.files.map((f: any) => f.name);
     expect(fileNames2).not.toContain('README.md');
+
+    await fs.rm(path.join(process.cwd(), '.workspaces', testWsId), { recursive: true, force: true }).catch(() => {});
+  });
+
+  it('rejects path traversal in X-Workspace-Id header across endpoints with 403', async () => {
+    for (const badId of ['../../escape', '../secret', 'foo/bar', 'foo\\bar', '..']) {
+      const filesRes = await fetch(`${baseUrl}/api/v1/files`, {
+        headers: { 'X-Workspace-Id': badId },
+      });
+      expect(filesRes.status).toBe(403);
+
+      const execRes = await fetch(`${baseUrl}/api/v1/exec`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Workspace-Id': badId,
+        },
+        body: JSON.stringify({ cmd: 'node', args: ['--version'] }),
+      });
+      expect(execRes.status).toBe(403);
+
+      const agentRes = await fetch(`${baseUrl}/api/v1/agent/run`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Workspace-Id': badId,
+        },
+        body: JSON.stringify({ prompt: 'Hello' }),
+      });
+      expect(agentRes.status).toBe(403);
+    }
   });
 
   it('POST /api/v1/agent/run rejects missing prompt with 400 Bad Request', async () => {
@@ -194,6 +225,8 @@ describe('Pairing Server HTTP Endpoints', () => {
     expect(states).toContain('PLANNING');
     expect(states).toContain('EXECUTING');
     expect(states).toContain('SUCCESS');
+
+    await fs.rm(path.join(process.cwd(), '.workspaces', testWsId), { recursive: true, force: true }).catch(() => {});
   });
 
   it('POST /api/v1/agent/run accepts optional visual snapshot image and passes to agent', async () => {
@@ -224,6 +257,8 @@ describe('Pairing Server HTTP Endpoints', () => {
     expect(visualEvent).toBeDefined();
     expect(visualEvent.image?.mimeType).toBe('image/png');
     expect(visualEvent.image?.base64).toBeDefined();
+
+    await fs.rm(path.join(process.cwd(), '.workspaces', testWsId), { recursive: true, force: true }).catch(() => {});
   });
 
   it('handles changeset endpoints: accept saves staged file and reject discards it', async () => {

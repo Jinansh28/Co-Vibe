@@ -8,11 +8,15 @@ import { z } from 'zod';
 
 describe('AgentOrchestrator', () => {
   it('should execute end-to-end task loop streaming step updates', async () => {
+    let capturedTools: any[] = [];
     const mockProvider: AIProvider = {
       supportsToolCalling: true,
-      generate: vi.fn().mockResolvedValue({
-        message: { role: 'assistant', content: 'Mock response' },
-        finishReason: 'stop'
+      generate: vi.fn().mockImplementation(async (options) => {
+        capturedTools = options.tools || [];
+        return {
+          message: { role: 'assistant', content: 'Mock response' },
+          finishReason: 'stop'
+        };
       }),
       stream: vi.fn()
     };
@@ -45,6 +49,11 @@ describe('AgentOrchestrator', () => {
     const result = await orchestrator.executeTask('test prompt');
     
     expect(result).toBe('Mock response');
+    expect(capturedTools[0]?.function?.parameters).toMatchObject({
+      type: 'object',
+      required: ['arg'],
+      properties: { arg: { type: 'string' } },
+    });
     expect(stateMachine.state).toBe('awaiting_review');
     expect(onProgress).toHaveBeenCalledWith(expect.objectContaining({
       state: 'PLANNING',
