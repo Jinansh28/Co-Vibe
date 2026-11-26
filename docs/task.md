@@ -36,6 +36,7 @@ Completed Tasks:    TASK-001 through TASK-041 (all tasks complete)
                     TASK-051 — Quick Open / File Fuzzy Finder (Ctrl+P / Cmd+P) (COMPLETE)
                     TASK-052 — Problems & Diagnostics Drawer with 1-Click AI Fix (COMPLETE)
                     TASK-053 — Saved Agent Task & Run History (Supabase, API, Runtime & AgentPanel UI) (COMPLETE)
+                    TASK-054 — Multi-Tab Terminal Sessions in Bottom Drawer (COMPLETE)
 Next Task:          None — Ready for staging deployment and cloud credentials provisioning.
 Blocked Tasks:      None
 Known Risks:        - Browser memory overhead during long-lived Yjs sessions.
@@ -2447,6 +2448,68 @@ Wire the existing Supabase PostgreSQL schema (`agent_tasks`, `agent_runs`, `tool
 - [x] `apps/web/src/features/agent/AgentPanel.test.tsx` (6 tests)
 - [x] `apps/runtime/tests/pairing.test.ts` (15 tests)
 - [x] Full monorepo typecheck: 10/10 workspaces clean (0 errors)
+
+---
+
+## TASK-054 — Multi-Tab Terminal Sessions in Bottom Drawer
+
+Status: DONE  
+Priority: P0  
+Component: Runtime / Frontend / Terminal  
+Depends on: TASK-004, TASK-015  
+Estimated effort: M
+
+### Objective
+
+Enable multiple concurrent terminal sessions in the bottom drawer (`TerminalPane.tsx`) so developers can keep long-lived processes (such as dev servers or watchers) running in one tab while opening and interacting with additional terminal tabs concurrently without clobbering output, stdin, or active processes.
+
+### Implementation
+
+- `apps/runtime/src/server/pairingServer.ts`:
+  - Added `POST /api/v1/exec/:id/kill` endpoint using `terminateChildProcess` (`SIGTERM` followed by `SIGKILL` fallback) to terminate active child processes and return `404` when already exited or missing.
+  - Added response `close` disconnect cleanup on `POST /api/v1/exec` to terminate orphaned child processes when clients abort streams, plus safe write/end stream guards.
+- `apps/web/src/features/terminal/useTerminalStore.ts`:
+  - Created Zustand store managing `sessions` (`TerminalSession[]`), `activeSessionId`, `createSession`, `closeSession`, `setActiveSession`, `appendLine`, `clearSession`, `setSessionRunning`, `setSessionTitle`, `setSessionRunType`, and `resetSessions`.
+  - Closing a running session aborts its `AbortController`, dispatches `POST /api/v1/exec/:id/kill`, removes the session (preventing closing the last remaining tab), and focuses the nearest remaining tab.
+- `apps/web/src/components/layout/TerminalPane.tsx`:
+  - Added `.terminal-session-tabs` sub-toolbar above the stream output when the `terminal` drawer tab is active, displaying status dots (`🟢` running / `⏹` idle), session titles, per-tab `✕` close buttons (hidden when 1 tab remains), and `+` New Terminal button.
+  - Maintained per-session scroll position and routed stdin submissions and `Fix with AI` error extraction to the active session.
+- `apps/web/src/components/layout/AppLayout.tsx`:
+  - Updated `runCommand` to assign execution to the active idle session or spawn a dedicated session tab if the active tab is already running, storing `AbortController` per session and routing `handleSendInput` to the active session's `executionId`.
+  - Added `Ctrl+Shift+\`` global shortcut to open a new terminal session.
+
+### Files
+
+- `apps/runtime/src/server/pairingServer.ts`
+- `apps/runtime/tests/pairing.test.ts`
+- `apps/web/src/features/terminal/useTerminalStore.ts`
+- `apps/web/src/features/terminal/useTerminalStore.test.ts`
+- `apps/web/src/components/layout/TerminalPane.tsx`
+- `apps/web/src/components/layout/TerminalPane.test.tsx`
+- `apps/web/src/components/layout/AppLayout.tsx`
+- `apps/web/src/components/layout/AppLayout.test.tsx`
+- `docs/task.md`
+
+### Acceptance Criteria
+
+- [x] The terminal pane renders a session tab bar with `+ (New Tab)` button.
+- [x] Clicking `+` creates a new terminal session and switches active focus to it.
+- [x] Running a long-running process (e.g. `npm run dev`) in Tab 1 continues streaming while Tab 2 executes independent commands.
+- [x] Stdin commands typed into Tab 2 route only to Tab 2's process without interfering with Tab 1.
+- [x] Clicking `✕` on a running tab terminates the child process on the local runtime daemon via `POST /api/v1/exec/:id/kill` and deletes the session.
+- [x] Closing a tab with an active stream aborts the client `fetch` connection cleanly without throwing unhandled exceptions.
+- [x] `pnpm test`, `pnpm typecheck`, `pnpm lint`, and `pnpm build` pass with 0 errors.
+
+### Tests
+
+- [x] `apps/runtime/tests/pairing.test.ts` (17 tests)
+- [x] `apps/web/src/features/terminal/useTerminalStore.test.ts` (6 tests)
+- [x] `apps/web/src/components/layout/TerminalPane.test.tsx` (8 tests)
+- [x] `apps/web/src/components/layout/AppLayout.test.tsx` (12 tests)
+- [x] Full monorepo `pnpm test`: 51 test files, 323 tests passing.
+- [x] `pnpm typecheck`: 10/10 workspaces clean (0 errors).
+- [x] `pnpm lint`: clean (0 errors).
+- [x] `pnpm build`: clean (0 errors).
 
 ---
 

@@ -22,6 +22,25 @@ import { ContextRetriever } from '@co-vibe/context';
 
 const activeProcesses = new Map<string, ChildProcess>();
 
+function terminateChildProcess(child: ChildProcess): void {
+  try {
+    child.kill('SIGTERM');
+  } catch {
+    // Ignore if process has already exited
+  }
+  const forceKillTimer = setTimeout(() => {
+    if (!child.killed && child.exitCode === null) {
+      try {
+        child.kill('SIGKILL');
+      } catch {
+        // Ignore if process has already exited
+      }
+    }
+  }, 1000);
+  forceKillTimer.unref?.();
+  child.once('exit', () => clearTimeout(forceKillTimer));
+}
+
 export interface PendingChangeSet {
   id: string;
   filePath: string;
@@ -298,37 +317,85 @@ export function createPairingRequestHandler(tokenManager: TokenManager) {
 
       const executionId = crypto.randomUUID();
       activeProcesses.set(executionId, child);
-      res.write(JSON.stringify({ stream: 'system', executionId, chunk: `[System] Process started. Execution ID: ${executionId}\n` }) + '\n');
+
+      const safeWrite = (payload: string) => {
+        if (!res.writableEnded && !res.destroyed) {
+          try {
+            res.write(payload);
+          } catch {
+            // Ignore write errors on closed response streams
+          }
+        }
+      };
+
+      const safeEnd = () => {
+        if (!res.writableEnded && !res.destroyed) {
+          try {
+            res.end();
+          } catch {
+            // Ignore end errors on closed response streams
+          }
+        }
+      };
+
+      safeWrite(JSON.stringify({ stream: 'system', executionId, chunk: `[System] Process started. Execution ID: ${executionId}\n` }) + '\n');
 
       const TIMEOUT_MS = 5 * 60 * 1000; // 5 minute hard limit for run commands
       const timer = setTimeout(() => {
-        child.kill('SIGKILL');
-        res.write(JSON.stringify({ stream: 'system', chunk: '[Timeout] Process killed after 5 minutes\n' }) + '\n');
+        terminateChildProcess(child);
+        safeWrite(JSON.stringify({ stream: 'system', chunk: '[Timeout] Process killed after 5 minutes\n' }) + '\n');
       }, TIMEOUT_MS);
+      timer.unref?.();
+
+      res.on('close', () => {
+        clearTimeout(timer);
+        // If client disconnected before process ended, cleanly terminate
+        if (!res.writableEnded && activeProcesses.has(executionId)) {
+          activeProcesses.delete(executionId);
+          terminateChildProcess(child);
+        }
+      });
 
       child.stdout?.on('data', (data: Buffer) => {
-        res.write(JSON.stringify({ stream: 'stdout', chunk: data.toString() }) + '\n');
+        safeWrite(JSON.stringify({ stream: 'stdout', chunk: data.toString() }) + '\n');
       });
 
       child.stderr?.on('data', (data: Buffer) => {
-        res.write(JSON.stringify({ stream: 'stderr', chunk: data.toString() }) + '\n');
+        safeWrite(JSON.stringify({ stream: 'stderr', chunk: data.toString() }) + '\n');
       });
 
       child.on('close', (code) => {
         activeProcesses.delete(executionId);
         clearTimeout(timer);
-        res.write(JSON.stringify({ stream: 'exit', exitCode: code ?? -1 }) + '\n');
-        res.end();
+        safeWrite(JSON.stringify({ stream: 'exit', exitCode: code ?? -1 }) + '\n');
+        safeEnd();
       });
 
       child.on('error', (err) => {
         activeProcesses.delete(executionId);
         clearTimeout(timer);
-        res.write(JSON.stringify({ stream: 'system', chunk: `[Error] ${err.message}\n` }) + '\n');
-        res.write(JSON.stringify({ stream: 'exit', exitCode: -1 }) + '\n');
-        res.end();
+        safeWrite(JSON.stringify({ stream: 'system', chunk: `[Error] ${err.message}\n` }) + '\n');
+        safeWrite(JSON.stringify({ stream: 'exit', exitCode: -1 }) + '\n');
+        safeEnd();
       });
 
+      return;
+    }
+
+    // POST /api/v1/exec/:id/kill — Terminate running child process
+    if (pathname.startsWith('/api/v1/exec/') && pathname.endsWith('/kill') && method === 'POST') {
+      const parts = pathname.split('/');
+      const executionId = parts.length === 6 ? parts[4] : '';
+      const child = executionId ? activeProcesses.get(executionId) : undefined;
+      if (child) {
+        activeProcesses.delete(executionId);
+        terminateChildProcess(child);
+        res.writeHead(200);
+        res.end(JSON.stringify({ ok: true, message: 'Process terminated' }));
+      } else {
+        res.writeHead(404);
+        res.end(JSON.stringify({ ok: false, error: 'Process not found or already exited' }));
+      }
       return;
     }
 

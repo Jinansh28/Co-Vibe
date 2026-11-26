@@ -317,4 +317,134 @@ describe('Pairing Server HTTP Endpoints', () => {
     // Clean up
     await fs.rm(wsRoot, { recursive: true, force: true }).catch(() => {});
   });
+
+  it('POST /api/v1/exec/:id/kill terminates a running child process and returns 404 afterwards', async () => {
+    const testWsId = `test-ws-exec-kill-${Date.now()}`;
+    const wsRoot = path.join(process.cwd(), '.workspaces', testWsId);
+    await fs.mkdir(wsRoot, { recursive: true });
+
+    const execRes = await fetch(`${baseUrl}/api/v1/exec`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Workspace-Id': testWsId,
+      },
+      body: JSON.stringify({
+        cmd: 'node',
+        args: ['-e', 'setInterval(() => console.log("alive"), 50)'],
+        cwd: '.',
+      }),
+    });
+
+    expect(execRes.status).toBe(200);
+    expect(execRes.body).not.toBeNull();
+
+    const reader = execRes.body!.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let executionId = '';
+
+    // Read until we receive the initial system line containing executionId
+    while (!executionId) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        const parsed = JSON.parse(line);
+        if (parsed.executionId) {
+          executionId = parsed.executionId;
+          break;
+        }
+      }
+    }
+
+    expect(executionId).toBeTruthy();
+
+    // Terminate the running process via kill endpoint
+    const killRes = await fetch(`${baseUrl}/api/v1/exec/${executionId}/kill`, {
+      method: 'POST',
+    });
+    expect(killRes.status).toBe(200);
+    const killData = (await killRes.json()) as Record<string, any>;
+    expect(killData.ok).toBe(true);
+    expect(killData.message).toBe('Process terminated');
+
+    // Drain stream until it closes
+    while (true) {
+      const { done } = await reader.read();
+      if (done) break;
+    }
+
+    // Killing the same executionId again should return 404
+    const killAgainRes = await fetch(`${baseUrl}/api/v1/exec/${executionId}/kill`, {
+      method: 'POST',
+    });
+    expect(killAgainRes.status).toBe(404);
+    const killAgainData = (await killAgainRes.json()) as Record<string, any>;
+    expect(killAgainData.ok).toBe(false);
+
+    await fs.rm(wsRoot, { recursive: true, force: true }).catch(() => {});
+  });
+
+  it('aborted POST /api/v1/exec stream terminates the child process cleanly', async () => {
+    const testWsId = `test-ws-exec-abort-${Date.now()}`;
+    const wsRoot = path.join(process.cwd(), '.workspaces', testWsId);
+    await fs.mkdir(wsRoot, { recursive: true });
+
+    const abortController = new AbortController();
+    const execRes = await fetch(`${baseUrl}/api/v1/exec`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Workspace-Id': testWsId,
+      },
+      body: JSON.stringify({
+        cmd: 'node',
+        args: ['-e', 'setInterval(() => console.log("tick"), 50)'],
+        cwd: '.',
+      }),
+      signal: abortController.signal,
+    });
+
+    const reader = execRes.body!.getReader();
+    const decoder = new TextDecoder();
+    let executionId = '';
+    while (!executionId) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const chunk = decoder.decode(value, { stream: true });
+      for (const line of chunk.split('\n')) {
+        if (!line.trim()) continue;
+        try {
+          const parsed = JSON.parse(line);
+          if (parsed.executionId) {
+            executionId = parsed.executionId;
+            break;
+          }
+        } catch {
+          // Wait for full JSON line
+        }
+      }
+    }
+
+    expect(executionId).toBeTruthy();
+
+    // Abort client connection mid-stream
+    abortController.abort();
+    await reader.cancel().catch(() => {});
+
+    // Give server event loop a brief tick to handle socket close
+    await new Promise((r) => setTimeout(r, 100));
+
+    // Process should have been cleaned up from activeProcesses
+    const killRes = await fetch(`${baseUrl}/api/v1/exec/${executionId}/kill`, {
+      method: 'POST',
+    });
+    expect(killRes.status).toBe(404);
+
+    await fs.rm(wsRoot, { recursive: true, force: true }).catch(() => {});
+  });
 });

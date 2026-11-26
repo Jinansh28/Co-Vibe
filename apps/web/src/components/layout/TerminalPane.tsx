@@ -1,13 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useDiagnosticsStore, DiagnosticItem } from '../../features/editor/useDiagnosticsStore.js';
 import { ProblemsView } from '../../features/editor/ProblemsView.js';
+import { useTerminalStore, type TerminalLine } from '../../features/terminal/useTerminalStore.js';
 
-export interface TerminalLine {
-  stream: 'stdout' | 'stderr' | 'system' | 'exit';
-  chunk?: string;
-  exitCode?: number;
-  executionId?: string;
-}
+export type { TerminalLine };
 
 const stripAnsi = (str: string) => {
   // Regex to match ANSI escape codes
@@ -21,7 +17,7 @@ interface TerminalPaneProps {
   onClear?: () => void;
   outputLines?: TerminalLine[];
   isRunning?: boolean;
-  onSendInput?: (input: string) => void;
+  onSendInput?: (input: string, sessionId?: string) => void;
   runType?: 'terminal' | 'tests';
   onNavigateToFile?: (filePath: string, line: number, column: number) => void;
   onFixWithAI?: (item: DiagnosticItem) => void;
@@ -32,10 +28,10 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({
   isOpen,
   onClose,
   onClear,
-  outputLines = [],
-  isRunning = false,
+  outputLines,
+  isRunning,
   onSendInput,
-  runType = 'terminal',
+  runType,
   onNavigateToFile,
   onFixWithAI,
   onFixTerminalError,
@@ -43,12 +39,26 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({
   const [activeTab, setActiveTab] = useState<'terminal' | 'output' | 'problems' | 'tests'>('terminal');
   const [inputValue, setInputValue] = useState('');
   const outputEndRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const scrollPositionsRef = useRef<Record<string, number>>({});
+
+  const sessions = useTerminalStore((s) => s.sessions);
+  const activeSessionId = useTerminalStore((s) => s.activeSessionId);
+  const createSession = useTerminalStore((s) => s.createSession);
+  const closeSession = useTerminalStore((s) => s.closeSession);
+  const setActiveSession = useTerminalStore((s) => s.setActiveSession);
+  const clearSession = useTerminalStore((s) => s.clearSession);
+
+  const activeSession = sessions.find((s) => s.id === activeSessionId) ?? sessions[0];
+  const effectiveLines = outputLines ?? activeSession?.lines ?? [];
+  const effectiveIsRunning = isRunning !== undefined ? isRunning : Boolean(activeSession?.isRunning);
+  const effectiveRunType = runType ?? activeSession?.runType ?? 'terminal';
 
   const diagnostics = useDiagnosticsStore((s) => s.diagnostics);
   const errorCount = diagnostics.filter((d) => d.severity === 'error').length;
   const totalCount = diagnostics.length;
 
-  const hasTerminalError = outputLines.some(
+  const hasTerminalError = effectiveLines.some(
     (l) =>
       l.stream === 'stderr' ||
       (l.stream === 'exit' && (l.exitCode ?? 0) !== 0) ||
@@ -56,19 +66,31 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({
         /(?:TypeError|ReferenceError|SyntaxError|Error|Exception|ERR!):/i.test(l.chunk))
   );
 
+  // Restore scroll position when switching terminal session tabs
+  useEffect(() => {
+    if (activeTab === 'terminal' && scrollContainerRef.current) {
+      const saved = scrollPositionsRef.current[activeSessionId];
+      if (saved !== undefined) {
+        scrollContainerRef.current.scrollTop = saved;
+      } else {
+        scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
+      }
+    }
+  }, [activeSessionId, activeTab]);
+
   // Auto-scroll to bottom when new output arrives
   useEffect(() => {
     if ((activeTab === 'terminal' || activeTab === 'tests') && outputEndRef.current) {
       outputEndRef.current.scrollIntoView?.({ behavior: 'smooth' });
     }
-  }, [outputLines, activeTab]);
+  }, [effectiveLines, activeTab]);
 
   // Switch to correct tab when a run starts
   useEffect(() => {
-    if (isRunning) {
-      setActiveTab(runType || 'terminal');
+    if (effectiveIsRunning) {
+      setActiveTab(effectiveRunType || 'terminal');
     }
-  }, [isRunning, runType]);
+  }, [effectiveIsRunning, effectiveRunType]);
 
   if (!isOpen) return null;
 
@@ -81,12 +103,86 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({
     }
   };
 
+  const handleClear = () => {
+    if (activeSession) {
+      clearSession(activeSession.id);
+    }
+    onClear?.();
+  };
+
+  const renderOutput = (linesToRender: TerminalLine[], showRunningPrompt: boolean, mode: 'terminal' | 'tests') => (
+    <div>
+      {linesToRender.length === 0 ? (
+        mode === 'tests' ? (
+          <div style={{ color: 'var(--text-muted)' }}>Running tests...</div>
+        ) : (
+          <>
+            <div style={{ color: 'var(--text-muted)' }}>$ pnpm --filter web dev</div>
+            <div style={{ color: 'var(--accent)' }}>VITE v5.4.10 ready in 240 ms</div>
+            <div style={{ color: 'var(--text-secondary)' }}>
+              ➜ Local: <span style={{ color: 'var(--info)' }}>http://localhost:5173/</span>
+            </div>
+            <div style={{ color: 'var(--success)' }}>✓ Local daemon connected on ws://127.0.0.1:7890/ws/runtime</div>
+          </>
+        )
+      ) : (
+        linesToRender.map((line, i) => (
+          <div
+            key={i}
+            style={{ color: getLineColor(line.stream), whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}
+          >
+            {line.stream === 'exit'
+              ? `[Process exited with code ${line.exitCode ?? -1}]`
+              : stripAnsi(line.chunk || '')}
+          </div>
+        ))
+      )}
+      {showRunningPrompt && onSendInput && (
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (inputValue) {
+              onSendInput(inputValue, activeSession?.id);
+              setInputValue('');
+            }
+          }}
+          style={{ display: 'flex', marginTop: '4px' }}
+        >
+          <span style={{ color: 'var(--success)', marginRight: '8px' }}>&gt;</span>
+          <input
+            type="text"
+            aria-label="Terminal stdin input"
+            data-testid="terminal-stdin-input"
+            value={inputValue}
+            onChange={(e) => setInputValue(e.target.value)}
+            placeholder="Enter input for the running program..."
+            style={{
+              flex: 1,
+              background: 'transparent',
+              border: 'none',
+              color: 'var(--text-primary)',
+              fontFamily: 'inherit',
+              outline: 'none',
+            }}
+            autoComplete="off"
+          />
+        </form>
+      )}
+      <div ref={outputEndRef} />
+    </div>
+  );
+
+  const testSession =
+    activeSession?.runType === 'tests'
+      ? activeSession
+      : [...sessions].reverse().find((s) => s.runType === 'tests');
+
   return (
     <section
       style={{
-        height: '200px',
-        minHeight: '120px',
-        maxHeight: '400px',
+        height: '220px',
+        minHeight: '140px',
+        maxHeight: '420px',
         backgroundColor: 'var(--bg-panel-solid)',
         borderTop: '1px solid var(--border-subtle)',
         display: 'flex',
@@ -150,7 +246,7 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({
               )}
             </button>
           ))}
-          {isRunning && (
+          {effectiveIsRunning && (
             <span
               style={{
                 marginLeft: '8px',
@@ -182,7 +278,7 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({
             <button
               data-testid="fix-terminal-error-btn"
               onClick={() => {
-                const errorText = outputLines
+                const errorText = effectiveLines
                   .filter(
                     (l) =>
                       l.stream === 'stderr' ||
@@ -191,7 +287,7 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({
                   )
                   .map((l) => stripAnsi(l.chunk || (l.stream === 'exit' ? `[Process exited with code ${l.exitCode}]` : '')))
                   .join('\n');
-                onFixTerminalError(errorText || outputLines.map((l) => stripAnsi(l.chunk || '')).slice(-15).join('\n'));
+                onFixTerminalError(errorText || effectiveLines.map((l) => stripAnsi(l.chunk || '')).slice(-15).join('\n'));
               }}
               title="Fix this runtime error with AI Agent"
               style={{
@@ -213,7 +309,7 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({
             </button>
           )}
           <button
-            onClick={onClear}
+            onClick={handleClear}
             title="Clear Log"
             aria-label="Clear Log"
             style={{ padding: '2px', color: 'var(--text-muted)', borderRadius: 'var(--radius-xs)' }}
@@ -237,8 +333,106 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({
         </div>
       </div>
 
+      {/* Multi-Session Sub-Toolbar (visible when terminal tab is active) */}
+      {activeTab === 'terminal' && (
+        <div
+          className="terminal-session-tabs"
+          data-testid="terminal-session-tabs"
+          style={{
+            display: 'flex',
+            gap: '4px',
+            alignItems: 'center',
+            padding: '4px 8px',
+            borderBottom: '1px solid var(--border-subtle)',
+            backgroundColor: '#0e131a',
+            overflowX: 'auto',
+            flexShrink: 0,
+          }}
+        >
+          {sessions.map((s) => {
+            const isActive = s.id === activeSessionId;
+            return (
+              <div
+                key={s.id}
+                role="tab"
+                aria-selected={isActive}
+                data-testid={`session-tab-${s.id}`}
+                onClick={() => setActiveSession(s.id)}
+                className={`session-tab ${isActive ? 'active' : ''}`}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '3px 8px',
+                  fontSize: '11px',
+                  borderRadius: 'var(--radius-xs)',
+                  cursor: 'pointer',
+                  backgroundColor: isActive ? 'var(--bg-selected, #222c38)' : 'transparent',
+                  color: isActive ? 'var(--text-primary)' : 'var(--text-muted)',
+                  border: isActive ? '1px solid var(--border-default, #303946)' : '1px solid transparent',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                <span aria-hidden="true" style={{ fontSize: '9px' }}>
+                  {s.isRunning ? '🟢' : '⏹'}
+                </span>
+                <span>{s.title}</span>
+                {sessions.length > 1 && (
+                  <button
+                    type="button"
+                    data-testid={`close-session-${s.id}`}
+                    aria-label={`Close ${s.title}`}
+                    title="Close Terminal Session"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      closeSession(s.id);
+                    }}
+                    style={{
+                      marginLeft: '2px',
+                      padding: '0 3px',
+                      fontSize: '10px',
+                      lineHeight: '14px',
+                      color: 'var(--text-muted)',
+                      borderRadius: '2px',
+                    }}
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+            );
+          })}
+          <button
+            type="button"
+            data-testid="new-terminal-btn"
+            aria-label="New Terminal"
+            onClick={() => createSession()}
+            title="New Terminal (Ctrl+Shift+`)"
+            style={{
+              padding: '2px 7px',
+              fontSize: '13px',
+              fontWeight: 600,
+              lineHeight: '16px',
+              color: 'var(--text-secondary)',
+              backgroundColor: 'var(--bg-panel-raised)',
+              border: '1px solid var(--border-subtle)',
+              borderRadius: 'var(--radius-xs)',
+              cursor: 'pointer',
+            }}
+          >
+            +
+          </button>
+        </div>
+      )}
+
       {/* Terminal Stream Output */}
       <div
+        ref={scrollContainerRef}
+        onScroll={(e) => {
+          if (activeTab === 'terminal' && activeSession) {
+            scrollPositionsRef.current[activeSession.id] = e.currentTarget.scrollTop;
+          }
+        }}
         style={{
           flex: 1,
           padding: activeTab === 'problems' ? 0 : '8px 12px',
@@ -254,73 +448,21 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({
         }}
       >
         {(() => {
-          const renderOutput = () => (
-            <div>
-              {outputLines.length === 0 ? (
-                runType === 'tests' ? (
-                  <div style={{ color: 'var(--text-muted)' }}>Running tests...</div>
-                ) : (
-                  <>
-                    <div style={{ color: 'var(--text-muted)' }}>$ pnpm --filter web dev</div>
-                    <div style={{ color: 'var(--accent)' }}>VITE v5.4.10 ready in 240 ms</div>
-                    <div style={{ color: 'var(--text-secondary)' }}>
-                      ➜ Local: <span style={{ color: 'var(--info)' }}>http://localhost:5173/</span>
-                    </div>
-                    <div style={{ color: 'var(--success)' }}>✓ Local daemon connected on ws://127.0.0.1:7890/ws/runtime</div>
-                  </>
-                )
-              ) : (
-                outputLines.map((line, i) => (
-                  <div
-                    key={i}
-                    style={{ color: getLineColor(line.stream), whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}
-                  >
-                    {line.stream === 'exit'
-                      ? `[Process exited with code ${line.exitCode ?? -1}]`
-                      : stripAnsi(line.chunk || '')}
-                  </div>
-                ))
-              )}
-              {isRunning && onSendInput && runType === 'terminal' && (
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    if (inputValue) {
-                      onSendInput(inputValue);
-                      setInputValue('');
-                    }
-                  }}
-                  style={{ display: 'flex', marginTop: '4px' }}
-                >
-                  <span style={{ color: 'var(--success)', marginRight: '8px' }}>&gt;</span>
-                  <input
-                    type="text"
-                    value={inputValue}
-                    onChange={(e) => setInputValue(e.target.value)}
-                    placeholder="Enter input for the running program..."
-                    style={{
-                      flex: 1,
-                      background: 'transparent',
-                      border: 'none',
-                      color: 'var(--text-primary)',
-                      fontFamily: 'inherit',
-                      outline: 'none',
-                    }}
-                    autoComplete="off"
-                  />
-                </form>
-              )}
-              <div ref={outputEndRef} />
-            </div>
-          );
-
           if (activeTab === 'terminal') {
-            return runType === 'terminal' ? renderOutput() : null;
+            return renderOutput(effectiveLines, effectiveIsRunning, 'terminal');
           }
           if (activeTab === 'tests') {
-            return runType === 'tests' ? renderOutput() : <div style={{ color: 'var(--success)' }}>✓ 6 test suites passed (21 tests)</div>;
+            if (runType === 'tests' || (outputLines !== undefined && effectiveRunType === 'tests')) {
+              return renderOutput(effectiveLines, effectiveIsRunning, 'tests');
+            }
+            if (testSession) {
+              return renderOutput(testSession.lines, testSession.isRunning, 'tests');
+            }
+            return <div style={{ color: 'var(--success)' }}>✓ 6 test suites passed (21 tests)</div>;
           }
-          if (activeTab === 'output') return <div style={{ color: 'var(--text-muted)' }}>[System Log] Container sandbox ready.</div>;
+          if (activeTab === 'output') {
+            return <div style={{ color: 'var(--text-muted)' }}>[System Log] Container sandbox ready.</div>;
+          }
           if (activeTab === 'problems') {
             return (
               <ProblemsView
@@ -335,4 +477,3 @@ export const TerminalPane: React.FC<TerminalPaneProps> = ({
     </section>
   );
 };
-

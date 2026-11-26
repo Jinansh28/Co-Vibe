@@ -3,7 +3,8 @@ import { TopBar } from './TopBar.js';
 import { Sidebar } from './Sidebar.js';
 import { EditorPane, type CodeActionTriggerPayload } from './EditorPane.js';
 import { AgentPanel, type VisualAttachment, type CodeSnippetAttachment } from '../../features/agent/AgentPanel.js';
-import { TerminalPane, type TerminalLine } from './TerminalPane.js';
+import { TerminalPane } from './TerminalPane.js';
+import { useTerminalStore, type TerminalLine } from '../../features/terminal/useTerminalStore.js';
 import { HtmlPreview } from '../../features/preview/HtmlPreview.js';
 import { useEditorStore } from '../../features/editor/useEditorStore.js';
 import { useFiles, flattenFileTree } from '../../features/editor/useFiles.js';
@@ -48,25 +49,46 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
   const [agentInitialPrompt, setAgentInitialPrompt] = useState<string | undefined>(undefined);
   const [agentAutoExecute, setAgentAutoExecute] = useState(false);
 
-  const [outputLines, setOutputLines] = useState<TerminalLine[]>([]);
-  const [isRunning, setIsRunning] = useState(false);
-  const [executionId, setExecutionId] = useState<string | null>(null);
-  const [runType, setRunType] = useState<'terminal' | 'tests'>('terminal');
-
   /**
    * Stream output from POST /api/v1/exec on the local runtime daemon.
    * The daemon returns NDJSON: one JSON object per line.
+   * Assigns execution to the active idle session or creates a dedicated tab if busy.
    */
   const runCommand = useCallback(
-    async (cmd: string, args: string[], label: string, type: 'terminal' | 'tests' = 'terminal'): Promise<number | null> => {
-      if (isRunning) return null;
+    async (
+      cmd: string,
+      args: string[],
+      label: string,
+      type: 'terminal' | 'tests' = 'terminal',
+      targetSessionIdOverride?: string
+    ): Promise<number | null> => {
+      const store = useTerminalStore.getState();
+      let targetSessionId = targetSessionIdOverride;
 
-      // Open terminal drawer and clear previous output
+      if (!targetSessionId || !store.sessions.some((s) => s.id === targetSessionId)) {
+        const activeSession =
+          store.sessions.find((s) => s.id === store.activeSessionId) ?? store.sessions[0];
+        if (activeSession && !activeSession.isRunning) {
+          targetSessionId = activeSession.id;
+          store.clearSession(targetSessionId);
+          store.setSessionTitle(targetSessionId, label);
+          store.setSessionRunType(targetSessionId, type);
+        } else {
+          targetSessionId = store.createSession(label);
+          store.setSessionRunType(targetSessionId, type);
+        }
+      } else {
+        store.clearSession(targetSessionId);
+        store.setSessionTitle(targetSessionId, label);
+        store.setSessionRunType(targetSessionId, type);
+      }
+
+      const abortController = new AbortController();
+
+      // Open terminal drawer and mark session as running
       setIsTerminalOpen(true);
-      setOutputLines([{ stream: 'system', chunk: `$ ${[cmd, ...args].join(' ')}\n` }]);
-      setIsRunning(true);
-      setExecutionId(null);
-      setRunType(type);
+      store.setSessionRunning(targetSessionId, true, null, abortController);
+      store.appendLine(targetSessionId, { stream: 'system', chunk: `$ ${[cmd, ...args].join(' ')}\n` });
 
       try {
         const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -76,15 +98,16 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
           method: 'POST',
           headers,
           body: JSON.stringify({ cmd, args, cwd: '.' }),
+          signal: abortController.signal,
         });
 
         if (!res.ok || !res.body) {
           const text = await res.text().catch(() => res.statusText);
-          setOutputLines((prev) => [
-            ...prev,
-            { stream: 'system', chunk: `[Error] Runtime returned ${res.status}: ${text}\n` },
-          ]);
-          setIsRunning(false);
+          useTerminalStore.getState().appendLine(targetSessionId, {
+            stream: 'system',
+            chunk: `[Error] Runtime returned ${res.status}: ${text}\n`,
+          });
+          useTerminalStore.getState().setSessionRunning(targetSessionId, false, null, null);
           return -1;
         }
 
@@ -106,57 +129,68 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
             try {
               const parsed = JSON.parse(line) as TerminalLine;
               if (parsed.executionId) {
-                setExecutionId(parsed.executionId);
+                useTerminalStore
+                  .getState()
+                  .setSessionRunning(targetSessionId, true, parsed.executionId, abortController);
               }
-              setOutputLines((prev) => [...prev, parsed]);
+              useTerminalStore.getState().appendLine(targetSessionId, parsed);
               if (parsed.stream === 'exit') {
-                setIsRunning(false);
-                setExecutionId(null);
+                useTerminalStore.getState().setSessionRunning(targetSessionId, false, null, null);
                 return parsed.exitCode ?? 0;
               }
             } catch {
               // non-JSON chunk — display as-is
-              setOutputLines((prev) => [...prev, { stream: 'stdout', chunk: line + '\n' }]);
+              useTerminalStore.getState().appendLine(targetSessionId, {
+                stream: 'stdout',
+                chunk: line + '\n',
+              });
             }
           }
         }
       } catch (err: any) {
-        setOutputLines((prev) => [
-          ...prev,
-          {
-            stream: 'system',
-            chunk: `[Error] Could not reach local runtime daemon at ${RUNTIME_URL}.\nMake sure "pnpm --filter runtime dev" is running.\nDetails: ${err.message}\n`,
-          },
-        ]);
-        setIsRunning(false);
+        if (err?.name === 'AbortError' || abortController.signal.aborted) {
+          useTerminalStore.getState().setSessionRunning(targetSessionId, false, null, null);
+          return null;
+        }
+        useTerminalStore.getState().appendLine(targetSessionId, {
+          stream: 'system',
+          chunk: `[Error] Could not reach local runtime daemon at ${RUNTIME_URL}.\nMake sure "pnpm --filter runtime dev" is running.\nDetails: ${err.message}\n`,
+        });
+        useTerminalStore.getState().setSessionRunning(targetSessionId, false, null, null);
         return -1;
       }
-      
+
       // If we exit loop without returning
-      setIsRunning(false);
-      setExecutionId(null);
+      useTerminalStore.getState().setSessionRunning(targetSessionId, false, null, null);
       return 0;
     },
-    [isRunning, workspaceId]
+    [workspaceId]
   );
 
-  const handleSendInput = useCallback(async (input: string) => {
-    if (!executionId) return;
-    try {
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (workspaceId) headers['X-Workspace-Id'] = workspaceId;
+  const handleSendInput = useCallback(
+    async (input: string, sessionId?: string) => {
+      const { sessions, activeSessionId, appendLine } = useTerminalStore.getState();
+      const targetId = sessionId ?? activeSessionId;
+      const session = sessions.find((s) => s.id === targetId);
+      if (!session?.executionId) return;
 
-      await fetch(`${RUNTIME_URL}/api/v1/exec/${executionId}/stdin`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ input }),
-      });
-      // Optionally echo the input in the terminal output
-      setOutputLines((prev) => [...prev, { stream: 'stdout', chunk: input + '\n' }]);
-    } catch (err) {
-      console.error('Failed to send input', err);
-    }
-  }, [executionId, workspaceId]);
+      try {
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (workspaceId) headers['X-Workspace-Id'] = workspaceId;
+
+        await fetch(`${RUNTIME_URL}/api/v1/exec/${session.executionId}/stdin`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ input }),
+        });
+        // Echo the input in the target terminal session output
+        appendLine(targetId, { stream: 'stdout', chunk: input + '\n' });
+      } catch (err) {
+        console.error('Failed to send input', err);
+      }
+    },
+    [workspaceId]
+  );
 
   const handleRefreshPreview = useCallback(async () => {
     if (!activeFilePath) return;
@@ -220,40 +254,43 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
         setIsPreviewOpen((prev) => !prev);
         return;
       }
+      const fileLabel = activeFilePath.split('/').pop() || activeFilePath;
       if (activeFilePath.endsWith('.ts') || activeFilePath.endsWith('.tsx')) {
-        runCommand('npx', ['tsx', activeFilePath], `Run ${activeFilePath}`);
+        runCommand('npx', ['tsx', activeFilePath], `Run: ${fileLabel}`);
       } else if (activeFilePath.endsWith('.js') || activeFilePath.endsWith('.jsx')) {
-        runCommand('node', [activeFilePath], `Run ${activeFilePath}`);
+        runCommand('node', [activeFilePath], `Run: ${fileLabel}`);
       } else if (activeFilePath.endsWith('.py')) {
-        runCommand('python', [activeFilePath], `Run ${activeFilePath}`);
+        runCommand('python', [activeFilePath], `Run: ${fileLabel}`);
       } else if (activeFilePath.endsWith('.sh')) {
-        runCommand('bash', [activeFilePath], `Run ${activeFilePath}`);
+        runCommand('bash', [activeFilePath], `Run: ${fileLabel}`);
       } else if (activeFilePath.endsWith('.go')) {
-        runCommand('go', ['run', activeFilePath], `Run ${activeFilePath}`);
+        runCommand('go', ['run', activeFilePath], `Run: ${fileLabel}`);
       } else if (activeFilePath.endsWith('.rs')) {
-        runCommand('cargo', ['run'], `Run Cargo project`);
+        runCommand('cargo', ['run'], 'cargo run');
       } else if (activeFilePath.endsWith('.c')) {
-        const exitCode = await runCommand('gcc', [activeFilePath, '-o', 'main.exe'], `Compile ${activeFilePath}`);
+        const exitCode = await runCommand('gcc', [activeFilePath, '-o', 'main.exe'], `Run: ${fileLabel}`);
         if (exitCode === 0) {
           const exeName = navigator.userAgent.includes('Windows') ? 'main.exe' : './main.exe';
-          runCommand(exeName, [], `Run ${exeName}`);
+          const sessionId = useTerminalStore.getState().activeSessionId;
+          runCommand(exeName, [], `Run: ${fileLabel}`, 'terminal', sessionId);
         }
       } else if (activeFilePath.endsWith('.cpp')) {
-        const exitCode = await runCommand('g++', [activeFilePath, '-o', 'main.exe'], `Compile ${activeFilePath}`);
+        const exitCode = await runCommand('g++', [activeFilePath, '-o', 'main.exe'], `Run: ${fileLabel}`);
         if (exitCode === 0) {
           const exeName = navigator.userAgent.includes('Windows') ? 'main.exe' : './main.exe';
-          runCommand(exeName, [], `Run ${exeName}`);
+          const sessionId = useTerminalStore.getState().activeSessionId;
+          runCommand(exeName, [], `Run: ${fileLabel}`, 'terminal', sessionId);
         }
       } else {
-        runCommand('npm', ['run', 'dev'], 'Run Project');
+        runCommand('npm', ['run', 'dev'], 'npm run dev');
       }
     } else {
-      runCommand('npm', ['run', 'dev'], 'Run Project');
+      runCommand('npm', ['run', 'dev'], 'npm run dev');
     }
   }, [runCommand, activeFilePath, saveActiveFile, getFileContent]);
 
   const handleRunTests = useCallback(() => {
-    runCommand('npm', ['test'], 'Run Tests', 'tests');
+    runCommand('npm', ['test'], 'npm test', 'tests');
   }, [runCommand]);
 
   // Wire Monaco Inline Action trigger to Agent Panel
@@ -348,7 +385,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
     []
   );
 
-  // Global shortcut: Ctrl+P / Cmd+P or Cmd+K opens Quick Open and prevents browser print
+  // Global shortcut: Ctrl+P / Cmd+P or Cmd+K opens Quick Open; Ctrl+Shift+` opens a new terminal session
   useEffect(() => {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
       const isP = (e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'p';
@@ -357,6 +394,13 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
         e.preventDefault();
         e.stopPropagation();
         setIsQuickOpen((prev) => !prev);
+      }
+      const isNewTerminal = e.ctrlKey && e.shiftKey && (e.key === '`' || e.code === 'Backquote');
+      if (isNewTerminal) {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsTerminalOpen(true);
+        useTerminalStore.getState().createSession();
       }
     };
 
@@ -527,11 +571,7 @@ export const AppLayout: React.FC<AppLayoutProps> = ({
       <TerminalPane
         isOpen={isTerminalOpen}
         onClose={() => setIsTerminalOpen(false)}
-        onClear={() => setOutputLines([])}
-        outputLines={outputLines}
-        isRunning={isRunning}
         onSendInput={handleSendInput}
-        runType={runType}
         onNavigateToFile={handleNavigateToFile}
         onFixWithAI={handleFixWithAI}
         onFixTerminalError={handleFixTerminalError}

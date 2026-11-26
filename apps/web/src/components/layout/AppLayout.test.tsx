@@ -1,16 +1,22 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import React from 'react';
 import { AppLayout } from './AppLayout.js';
 import { useEditorStore } from '../../features/editor/useEditorStore.js';
 import { useDiagnosticsStore } from '../../features/editor/useDiagnosticsStore.js';
+import { useTerminalStore } from '../../features/terminal/useTerminalStore.js';
 
 vi.mock('../../features/auth/useAuth.js', () => ({
   useAuth: () => ({ user: { email: 'test@example.com' } })
 }));
 
 describe('AppLayout IDE Shell Grid', () => {
+  beforeEach(() => {
+    useTerminalStore.getState().resetSessions();
+    useDiagnosticsStore.getState().clearDiagnostics();
+    vi.restoreAllMocks();
+  });
   it('renders top bar, sidebar, editor pane, agent panel, and terminal drawer', () => {
     render(<AppLayout />);
 
@@ -260,6 +266,84 @@ describe('AppLayout IDE Shell Grid', () => {
       }
     });
 
+    fetchSpy.mockRestore();
+  });
+
+  it('spawns a dedicated terminal tab on Run when active tab is busy and routes stdin per tab', async () => {
+    const encoder = new TextEncoder();
+    let secondStreamController: ReadableStreamDefaultController<Uint8Array> | null = null;
+
+    const fetchSpy = vi.spyOn(global, 'fetch').mockImplementation((url: any, init?: RequestInit) => {
+      const urlStr = String(url);
+      if (urlStr.endsWith('/api/v1/exec')) {
+        const body = JSON.parse(String(init?.body || '{}'));
+        if (body.cmd === 'node') {
+          const stream = new ReadableStream<Uint8Array>({
+            start(controller) {
+              secondStreamController = controller;
+              controller.enqueue(
+                encoder.encode(
+                  JSON.stringify({
+                    stream: 'system',
+                    executionId: 'exec-node-2',
+                    chunk: 'started node\n',
+                  }) + '\n'
+                )
+              );
+            },
+          });
+          return Promise.resolve(new Response(stream, { status: 200 }));
+        }
+      }
+      return Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 }));
+    });
+
+    // Simulate Tab 1 running a long-lived dev server
+    const abort1 = new AbortController();
+    useTerminalStore.getState().setSessionTitle('default', 'npm run dev');
+    useTerminalStore.getState().setSessionRunning('default', true, 'exec-dev-1', abort1);
+    useTerminalStore.getState().appendLine('default', { stream: 'stdout', chunk: 'VITE ready' });
+
+    useEditorStore.setState({
+      activeFilePath: 'script.js',
+      openFiles: ['script.js'],
+      saveActiveFile: async () => {},
+    });
+
+    render(<AppLayout initialTerminalOpen={true} />);
+
+    // Click Run in TopBar -> should create a dedicated tab instead of clobbering Tab 1
+    fireEvent.click(screen.getByRole('button', { name: /Run Project/i }));
+
+    await waitFor(() => {
+      expect(useTerminalStore.getState().sessions).toHaveLength(2);
+      const active = useTerminalStore
+        .getState()
+        .sessions.find((s) => s.id === useTerminalStore.getState().activeSessionId);
+      expect(active?.executionId).toBe('exec-node-2');
+    });
+
+    // Tab 1 is still running untouched
+    expect(useTerminalStore.getState().sessions[0].isRunning).toBe(true);
+    expect(useTerminalStore.getState().sessions[0].executionId).toBe('exec-dev-1');
+
+    // Submit stdin in active Tab 2 -> must hit /api/v1/exec/exec-node-2/stdin
+    const stdinInput = screen.getByTestId('terminal-stdin-input') as HTMLInputElement;
+    fireEvent.change(stdinInput, { target: { value: 'test-input' } });
+    fireEvent.submit(stdinInput.closest('form')!);
+
+    await waitFor(() => {
+      const stdinCall = fetchSpy.mock.calls.find((c) =>
+        String(c[0]).includes('/api/v1/exec/exec-node-2/stdin')
+      );
+      expect(stdinCall).toBeDefined();
+    });
+
+    // Cleanly close stream
+    (secondStreamController as ReadableStreamDefaultController<Uint8Array> | null)?.enqueue(
+      encoder.encode(JSON.stringify({ stream: 'exit', exitCode: 0 }) + '\n')
+    );
+    (secondStreamController as ReadableStreamDefaultController<Uint8Array> | null)?.close();
     fetchSpy.mockRestore();
   });
 });
