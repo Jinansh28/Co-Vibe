@@ -1,6 +1,6 @@
 import type { MiddlewareHandler } from 'hono';
 import type { Env } from './auth.js';
-import { auditService } from '../services/auditService.js';
+import { getAuditService } from '../services/auditService.js';
 
 export const auditMiddleware: MiddlewareHandler<Env> = async (c, next) => {
   await next();
@@ -40,20 +40,28 @@ export const auditMiddleware: MiddlewareHandler<Env> = async (c, next) => {
         } else if (path.match(/^\/api\/v1\/changesets\/[^/]+\/accept$/) && c.req.method === 'POST') {
           eventType = 'changeset.accepted';
           targetType = 'changeset';
-          // targetId would be changeset id
           const match = path.match(/^\/api\/v1\/changesets\/([^/]+)\/accept$/);
           if (match) targetId = match[1];
         }
 
-        auditService.logEvent({
-          userId,
-          eventType,
-          targetType,
-          targetId,
-          projectId,
-          workspaceId,
-          metadata: { path, method: c.req.method }
-        });
+        const service = getAuditService(c.env);
+        try {
+          await service.logEvent({
+            userId,
+            eventType,
+            targetType,
+            targetId,
+            projectId,
+            workspaceId,
+            metadata: { path, method: c.req.method },
+          });
+        } catch (persistErr) {
+          console.error('[audit] Error persisting audit event:', {
+            eventType,
+            path,
+            error: persistErr instanceof Error ? persistErr.message : String(persistErr),
+          });
+        }
       } catch (_err) {
         // Ignore parsing errors for responses without JSON
       }

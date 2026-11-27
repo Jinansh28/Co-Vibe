@@ -324,7 +324,7 @@ The quality engineering manager monitors basic bug health metrics per release cy
 | **BUG-017** | Missing symlink escape resolution in `assertWorkspacePath` & uncovered barrel failing `test:coverage` at 75% | S1 | Security Policy / Test Gate | **FIXED** | 2026-11-26 | `packages/security/tests/pathPolicy.test.ts`, `index.test.ts` |
 | **BUG-018** | Runtime HTTP API allows wildcard CORS (`*`) without auth and executes commands on host bypassing `DockerManager`/`ProcessManager` | S0 | Runtime Server / Security | **FIXED** | 2026-11-26 | `TASK-055` (`tests/security/regressions/bug-018-security.test.ts`) |
 | **BUG-019** | Worker `/api/v1/git/*` and `/changesets/*` routes are stubs, `ProjectsPage` drops `repoUrl`, and worktree 3-way patch manager is unwired | S1 | API Worker / Git / Runtime | **CONFIRMED** | — | None (`TASK-057`) |
-| **BUG-020** | Missing workspace/project membership RBAC checks on `workspaceWs.ts` and `agentHistory.ts`, plus in-memory-only `auditService.ts` | S1 | API Worker / AuthZ / Audit | **CONFIRMED** | — | None (`TASK-056`) |
+| **BUG-020** | Missing workspace/project membership RBAC checks on `workspaceWs.ts` and `agentHistory.ts`, plus in-memory-only `auditService.ts` | S1 | API Worker / AuthZ / Audit | **FIXED** | — | `TASK-056` |
 | **BUG-021** | `tests/e2e/workspace.spec.ts` (`TASK-040`) contains only commented-out workflow steps and `expect(true).toBe(true)` placeholders | S2 | QA / Playwright E2E | **CONFIRMED** | — | None (`TASK-059`) |
 
 ---
@@ -886,14 +886,21 @@ Added disk `realpathSync` validation when the workspace root exists in `packages
 
 ## BUG-020 — Missing Workspace/Project RBAC Checks on WebSocket & History Routes + In-Memory Audit Storage
 
-**Status:** **CONFIRMED** (Open — Tracked in `TASK-056`)  
+**Status:** **FIXED** (2026-11-26 — Resolved in `TASK-056`)  
 **Severity:** S1 (High)  
-**Component:** `apps/api/src/routes/workspaceWs.ts`, `agentHistory.ts`, `services/auditService.ts`  
+**Component:** `apps/api/src/middleware/auth.ts`, `routes/runtimeWs.ts`, `routes/workspaceWs.ts`, `routes/agentHistory.ts`, `services/projectService.ts`, `services/agentHistoryService.ts`, `services/auditService.ts`, `middleware/audit.ts`  
 
 ### Description
-- `workspaceWs.ts` validates JWT identity (when Supabase env is configured) but does not verify membership before forwarding upgrades to `WorkspaceRoom`.
-- `agentHistory.ts` (`POST /runs`, `GET /runs`, `GET /runs/:taskId`) does not check workspace/project membership for `wsId` or `taskId`.
-- `auditService.ts` stores events in an in-memory array rather than persisting to PostgreSQL `public.audit_logs`.
+- `auth.ts` and `runtimeWs.ts` fell back to `'dev-secret-key-change-in-prod'` when JWT secrets were unset in non-dev environments.
+- `workspaceWs.ts` validated JWT identity only when Supabase introspection env vars were configured and did not verify workspace/project membership before forwarding upgrades to `WorkspaceRoom`.
+- `agentHistory.ts` did not check workspace/project membership for `wsId` or `taskId` across its routes.
+- `auditService.ts` stored events in an in-memory array rather than persisting to PostgreSQL `public.audit_logs`.
+
+### Fix & Regression Test
+1. **Fail-Closed JWT Secret Resolution (`auth.ts`, `runtimeWs.ts`, `workspaceWs.ts`):** Added `RUNTIME_JWT_SECRET`/`NODE_ENV` bindings and shared `isDevOrTestEnvironment()` + `resolveJwtSecret()` + `verifyAuthToken()` helpers that allow the dev fallback secret only in explicit `development`/`dev`/`test` environments and return `500` otherwise.
+2. **Workspace/Project Membership RBAC (`projectService.ts`, `agentHistoryService.ts`, `workspaceWs.ts`, `agentHistory.ts`):** Added `checkWorkspaceMembership()` to `IProjectService` and `getTaskWorkspaceId()` to `IAgentHistoryService`; enforced identity verification and workspace membership in `workspaceWs.ts` (`401`/`400`/`404`/`403`) prior to WebSocket upgrade/DO forwarding, and enforced membership + non-viewer write checks across all 9 `agentHistory.ts` routes.
+3. **PostgreSQL Audit Persistence (`auditService.ts`, `middleware/audit.ts`):** Implemented `IAuditService` with `SupabaseAuditService` (resolving `users.auth_user_id -> users.id`, UUID-guarding `project_id`/`workspace_id`, and falling back to `InMemoryAuditService` on `PGRST205`) and updated `auditMiddleware` to await `getAuditService(c.env).logEvent(...)` with non-fatal structured error logging.
+4. **Verification:** Added/updated tests in `apps/api/tests/auth.test.ts`, `runtimeWs.test.ts`, `workspaceWs.test.ts`, `collaboration/durableObject.test.ts`, `agentHistory.test.ts`, `supabaseProjectService.test.ts`, and `audit.test.ts`. Verified via `pnpm --filter @co-vibe/api test` (`10` files, `81` tests passed), `pnpm test` (`57` files, `378` tests passed; 3 live Docker container tests skipped without Docker daemon), `pnpm typecheck`, `pnpm lint`, and `pnpm build`.
 
 ---
 

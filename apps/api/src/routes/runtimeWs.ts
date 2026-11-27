@@ -1,10 +1,21 @@
 import { Hono } from 'hono';
 import { verify } from 'hono/jwt';
-import type { Env } from '../middleware/auth.js';
+import { resolveJwtSecret, type Env } from '../middleware/auth.js';
 
 export const runtimeWsRoutes = new Hono<Env>();
 
 runtimeWsRoutes.get('/', async (c) => {
+  const secretResolution = resolveJwtSecret('runtime', c.env);
+  if (!secretResolution.ok) {
+    return c.json(
+      {
+        error: 'Internal Server Error',
+        message: 'Server authentication configuration error',
+      },
+      500
+    );
+  }
+
   const authHeader = c.req.header('Authorization');
   let token = c.req.query('token');
 
@@ -35,12 +46,9 @@ runtimeWsRoutes.get('/', async (c) => {
     );
   }
 
-  const processSecret = typeof process !== 'undefined' ? process.env?.RUNTIME_JWT_SECRET || process.env?.SUPABASE_JWT_SECRET : undefined;
-  const jwtSecret = c.env?.SUPABASE_JWT_SECRET || processSecret || 'dev-secret-key-change-in-prod';
-
   let payload: any;
   try {
-    payload = await verify(token, jwtSecret, 'HS256');
+    payload = await verify(token, secretResolution.secret, 'HS256');
   } catch (_err) {
     return c.json(
       {

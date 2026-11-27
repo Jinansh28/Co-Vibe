@@ -44,6 +44,12 @@ export type JoinProjectResult =
   | { status: 'not_found' }
   | { status: 'already_member' };
 
+export type WorkspaceMembershipResult =
+  | { status: 'ok'; projectId: string; workspaceId: string; role: ProjectMemberRole }
+  | { status: 'invalid_id' }
+  | { status: 'not_found' }
+  | { status: 'forbidden' };
+
 export interface IProjectService {
   reset(): void;
   getOrCreateUser(authUserId: string, email: string): Promise<User>;
@@ -60,6 +66,10 @@ export interface IProjectService {
     input: CreateWorkspaceInput
   ): Promise<CreateWorkspaceResult>;
   listWorkspaces(projectId: string, authUserId: string): Promise<ListWorkspacesResult>;
+  checkWorkspaceMembership(
+    workspaceId: string,
+    authUserId: string
+  ): Promise<WorkspaceMembershipResult>;
   addMember(
     projectId: string,
     authUserId: string,
@@ -483,6 +493,65 @@ export class SupabaseProjectService implements IProjectService {
     return { status: 'ok', workspaces: wsRows.map(mapWorkspace) };
   }
 
+  public async checkWorkspaceMembership(
+    workspaceId: string,
+    authUserId: string
+  ): Promise<WorkspaceMembershipResult> {
+    if (!isValidUuid(workspaceId)) {
+      return { status: 'invalid_id' };
+    }
+
+    const { data: wsRow, error: wsErr } = await this.client
+      .from('workspaces')
+      .select('id, project_id')
+      .eq('id', workspaceId)
+      .maybeSingle();
+
+    if (isTableMissingError(wsErr)) {
+      return this.fallback.checkWorkspaceMembership(workspaceId, authUserId);
+    }
+
+    if (wsErr || !wsRow) {
+      return { status: 'not_found' };
+    }
+
+    const { data: userRow, error: uErr } = await this.client
+      .from('users')
+      .select('id')
+      .eq('auth_user_id', authUserId)
+      .maybeSingle();
+
+    if (isTableMissingError(uErr)) {
+      return this.fallback.checkWorkspaceMembership(workspaceId, authUserId);
+    }
+
+    if (uErr || !userRow) {
+      return { status: 'forbidden' };
+    }
+
+    const { data: memberRow, error: mErr } = await this.client
+      .from('project_members')
+      .select('role')
+      .eq('project_id', wsRow.project_id)
+      .eq('user_id', userRow.id)
+      .maybeSingle();
+
+    if (isTableMissingError(mErr)) {
+      return this.fallback.checkWorkspaceMembership(workspaceId, authUserId);
+    }
+
+    if (mErr || !memberRow) {
+      return { status: 'forbidden' };
+    }
+
+    return {
+      status: 'ok',
+      projectId: wsRow.project_id,
+      workspaceId,
+      role: memberRow.role as ProjectMemberRole,
+    };
+  }
+
   public async addMember(
     projectId: string,
     authUserId: string,
@@ -803,6 +872,37 @@ export class InMemoryProjectService implements IProjectService {
     }
 
     return { status: 'ok', workspaces: result };
+  }
+
+  public async checkWorkspaceMembership(
+    workspaceId: string,
+    authUserId: string
+  ): Promise<WorkspaceMembershipResult> {
+    if (!isValidUuid(workspaceId)) {
+      return { status: 'invalid_id' };
+    }
+
+    const workspace = this.workspaces.get(workspaceId);
+    if (!workspace) {
+      return { status: 'not_found' };
+    }
+
+    const userId = this.userAuthMap.get(authUserId);
+    if (!userId) {
+      return { status: 'forbidden' };
+    }
+
+    const member = this.projectMembers.get(`${workspace.projectId}:${userId}`);
+    if (!member) {
+      return { status: 'forbidden' };
+    }
+
+    return {
+      status: 'ok',
+      projectId: workspace.projectId,
+      workspaceId,
+      role: member.role,
+    };
   }
 
   public async addMember(

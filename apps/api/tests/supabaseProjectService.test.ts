@@ -194,4 +194,72 @@ describe('SupabaseProjectService Unit Tests', () => {
       expect(result.member.role).toBe('editor');
     }
   });
+
+  it('checkWorkspaceMembership returns ok with role for member and forbidden for non-member', async () => {
+    const wsId = '11111111-1111-4111-8111-111111111111';
+    const projId = '22222222-2222-4222-8222-222222222222';
+
+    expect((await service.checkWorkspaceMembership('bad-id', 'auth-1')).status).toBe('invalid_id');
+
+    mockSupabase.from.mockImplementation((table: string) => {
+      if (table === 'workspaces') {
+        return {
+          select: vi.fn().mockReturnThis(),
+          eq: vi.fn().mockReturnThis(),
+          maybeSingle: vi.fn().mockResolvedValue({ data: { id: wsId, project_id: projId }, error: null }),
+        };
+      }
+      if (table === 'users') {
+        return {
+          select: vi.fn().mockReturnThis(),
+          eq: vi.fn().mockReturnThis(),
+          maybeSingle: vi.fn().mockResolvedValue({ data: { id: 'usr-1' }, error: null }),
+        };
+      }
+      if (table === 'project_members') {
+        return {
+          select: vi.fn().mockReturnThis(),
+          eq: vi.fn().mockReturnThis(),
+          maybeSingle: vi.fn().mockResolvedValue({ data: { role: 'editor' }, error: null }),
+        };
+      }
+      return {};
+    });
+
+    const okRes = await service.checkWorkspaceMembership(wsId, 'auth-1');
+    expect(okRes).toEqual({
+      status: 'ok',
+      projectId: projId,
+      workspaceId: wsId,
+      role: 'editor',
+    });
+
+    mockSupabase.from.mockImplementation((table: string) => {
+      if (table === 'workspaces') {
+        return {
+          select: vi.fn().mockReturnThis(),
+          eq: vi.fn().mockReturnThis(),
+          maybeSingle: vi.fn().mockResolvedValue({ data: { id: wsId, project_id: projId }, error: null }),
+        };
+      }
+      if (table === 'users') {
+        return {
+          select: vi.fn().mockReturnThis(),
+          eq: vi.fn().mockReturnThis(),
+          maybeSingle: vi.fn().mockResolvedValue({ data: { id: 'usr-2' }, error: null }),
+        };
+      }
+      if (table === 'project_members') {
+        return {
+          select: vi.fn().mockReturnThis(),
+          eq: vi.fn().mockReturnThis(),
+          maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+        };
+      }
+      return {};
+    });
+
+    const forbiddenRes = await service.checkWorkspaceMembership(wsId, 'auth-2');
+    expect(forbiddenRes).toEqual({ status: 'forbidden' });
+  });
 });

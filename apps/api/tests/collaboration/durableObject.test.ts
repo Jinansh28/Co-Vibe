@@ -1,28 +1,41 @@
-﻿import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { sign } from 'hono/jwt';
 import app from '../../src/index.js';
 import { WorkspaceRoom } from '../../src/durable-objects/WorkspaceRoom.js';
+import { inMemoryProjectService } from '../../src/services/projectService.js';
 
 const SECRET = 'dev-secret-key-change-in-prod';
 
 describe('WorkspaceRoom Route (/api/v1/workspaces/:id/room)', () => {
+  let workspaceId: string;
+
+  beforeEach(async () => {
+    inMemoryProjectService.reset();
+    const { project } = await inMemoryProjectService.createProject('user1', 'user1@co-vibe.dev', {
+      name: 'DO Test Project',
+    });
+    const wsRes = await inMemoryProjectService.createWorkspace(project.id, 'user1', {
+      name: 'DO Test Workspace',
+    });
+    if (wsRes.status !== 'ok') throw new Error('Failed to seed workspace');
+    workspaceId = wsRes.workspace.id;
+  });
+
   it('returns 401 when no token is provided', async () => {
-    const res = await app.request('/api/v1/workspaces/ws-123/room');
+    const res = await app.request(`/api/v1/workspaces/${workspaceId}/room`);
     expect(res.status).toBe(401);
   });
 
   it('returns 426 when Upgrade header is missing (token provided via query param)', async () => {
-    // Route is mounted outside authMiddleware; token is passed as ?token= query param.
-    // In test env SUPABASE_URL is not set so Supabase introspection is skipped.
     const token = await sign({ sub: 'user1' }, SECRET, 'HS256');
-    const res = await app.request(`/api/v1/workspaces/ws-123/room?token=${token}`);
+    const res = await app.request(`/api/v1/workspaces/${workspaceId}/room?token=${token}`);
     expect(res.status).toBe(426);
     expect(await res.text()).toBe('Expected Upgrade: websocket');
   });
 
   it('returns 500 when Durable Object is not bound (token provided via query param)', async () => {
     const token = await sign({ sub: 'user1' }, SECRET, 'HS256');
-    const res = await app.request(`/api/v1/workspaces/ws-123/room?token=${token}`, {
+    const res = await app.request(`/api/v1/workspaces/${workspaceId}/room?token=${token}`, {
       headers: {
         Upgrade: 'websocket',
       },

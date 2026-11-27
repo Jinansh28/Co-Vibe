@@ -58,6 +58,7 @@ export interface AgentTaskDetails extends AgentTaskSummary {
 
 export interface IAgentHistoryService {
   reset(): void;
+  getTaskWorkspaceId(taskId: string): Promise<string | null>;
   listWorkspaceTasks(workspaceId: string): Promise<AgentTaskSummary[]>;
   getTaskDetails(taskId: string): Promise<AgentTaskDetails | null>;
   createTask(workspaceId: string, prompt: string): Promise<{ taskId: string; runId: string }>;
@@ -78,6 +79,22 @@ export class SupabaseAgentHistoryService implements IAgentHistoryService {
 
   public reset(): void {
     this.fallback.reset();
+  }
+
+  public async getTaskWorkspaceId(taskId: string): Promise<string | null> {
+    const { data: task, error } = await this.client
+      .from('agent_tasks')
+      .select('workspace_id')
+      .eq('id', taskId)
+      .maybeSingle();
+
+    if (isTableMissingError(error)) {
+      return this.fallback.getTaskWorkspaceId(taskId);
+    }
+    if (error || !task) {
+      return null;
+    }
+    return task.workspace_id ?? null;
   }
 
   public async listWorkspaceTasks(workspaceId: string): Promise<AgentTaskSummary[]> {
@@ -367,6 +384,11 @@ export class InMemoryAgentHistoryService implements IAgentHistoryService {
     this.toolCalls.clear();
     this.changeSets.clear();
     this.conversations.clear();
+  }
+
+  public async getTaskWorkspaceId(taskId: string): Promise<string | null> {
+    const task = this.tasks.get(taskId);
+    return task ? task.workspaceId : null;
   }
 
   public async listWorkspaceTasks(workspaceId: string): Promise<AgentTaskSummary[]> {

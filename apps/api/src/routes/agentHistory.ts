@@ -1,17 +1,66 @@
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 import type { Env } from '../middleware/auth.js';
 import { getAgentHistoryService } from '../services/agentHistoryService.js';
+import { getProjectService } from '../services/projectService.js';
 
 export const agentHistoryRoutes = new Hono<Env>();
 
+async function authorizeWorkspaceAccess(
+  c: Context<Env>,
+  workspaceId: string,
+  requireWrite: boolean
+): Promise<Response | null> {
+  const authUser = c.get('authUser');
+  if (!authUser?.sub) {
+    return c.json({ error: 'Unauthorized', message: 'Missing user identity' }, 401);
+  }
+
+  const membership = await getProjectService(c.env).checkWorkspaceMembership(
+    workspaceId,
+    authUser.sub
+  );
+
+  if (membership.status === 'invalid_id') {
+    return c.json({ error: 'Bad Request', message: 'Invalid workspace UUID format' }, 400);
+  }
+
+  if (membership.status === 'not_found') {
+    return c.json({ error: 'Not Found', message: 'Workspace not found' }, 404);
+  }
+
+  if (membership.status === 'forbidden') {
+    return c.json(
+      { error: 'Forbidden', message: 'User is not a member of this workspace project' },
+      403
+    );
+  }
+
+  if (requireWrite && membership.role === 'viewer') {
+    return c.json(
+      { error: 'Forbidden', message: 'Viewer role cannot modify agent tasks' },
+      403
+    );
+  }
+
+  return null;
+}
+
+async function authorizeTaskAccess(
+  c: Context<Env>,
+  taskId: string,
+  requireWrite: boolean
+): Promise<Response | null> {
+  const service = getAgentHistoryService(c.env);
+  const workspaceId = await service.getTaskWorkspaceId(taskId);
+  if (!workspaceId) {
+    return c.json({ error: 'Not Found', message: 'Agent task not found' }, 404);
+  }
+  return authorizeWorkspaceAccess(c, workspaceId, requireWrite);
+}
+
 const CreateAgentTaskSchema = z.object({
   prompt: z.string().trim().min(1, 'Prompt cannot be empty'),
-});
-
-const RecordProgressSchema = z.object({
-  runId: z.string().min(1),
-  event: z.record(z.any()),
 });
 
 const SaveChangeSetSchema = z.object({
@@ -28,6 +77,9 @@ const UpdateTaskStatusSchema = z.object({
 // GET /api/v1/workspaces/:wsId/agent/tasks
 agentHistoryRoutes.get('/workspaces/:wsId/agent/tasks', async (c) => {
   const wsId = c.req.param('wsId');
+  const authError = await authorizeWorkspaceAccess(c, wsId, false);
+  if (authError) return authError;
+
   const service = getAgentHistoryService(c.env);
   const tasks = await service.listWorkspaceTasks(wsId);
   return c.json({ tasks });
@@ -36,6 +88,9 @@ agentHistoryRoutes.get('/workspaces/:wsId/agent/tasks', async (c) => {
 // POST /api/v1/workspaces/:wsId/agent/tasks
 agentHistoryRoutes.post('/workspaces/:wsId/agent/tasks', async (c) => {
   const wsId = c.req.param('wsId');
+  const authError = await authorizeWorkspaceAccess(c, wsId, true);
+  if (authError) return authError;
+
   let body: unknown;
   try {
     body = await c.req.json();
@@ -62,6 +117,9 @@ agentHistoryRoutes.post('/workspaces/:wsId/agent/tasks', async (c) => {
 // GET /api/v1/agent/tasks/:taskId
 agentHistoryRoutes.get('/agent/tasks/:taskId', async (c) => {
   const taskId = c.req.param('taskId');
+  const authError = await authorizeTaskAccess(c, taskId, false);
+  if (authError) return authError;
+
   const service = getAgentHistoryService(c.env);
   const task = await service.getTaskDetails(taskId);
 
@@ -81,6 +139,9 @@ const AddConversationSchema = z.object({
 // POST /api/v1/agent/tasks/:taskId/conversations
 agentHistoryRoutes.post('/agent/tasks/:taskId/conversations', async (c) => {
   const taskId = c.req.param('taskId');
+  const authError = await authorizeTaskAccess(c, taskId, true);
+  if (authError) return authError;
+
   let body: unknown;
   try {
     body = await c.req.json();
@@ -107,6 +168,9 @@ agentHistoryRoutes.post('/agent/tasks/:taskId/conversations', async (c) => {
 // POST /api/v1/agent/tasks/:taskId/runs/:runId/progress
 agentHistoryRoutes.post('/agent/tasks/:taskId/runs/:runId/progress', async (c) => {
   const taskId = c.req.param('taskId');
+  const authError = await authorizeTaskAccess(c, taskId, true);
+  if (authError) return authError;
+
   const runId = c.req.param('runId');
   let body: any;
   try {
@@ -124,6 +188,9 @@ agentHistoryRoutes.post('/agent/tasks/:taskId/runs/:runId/progress', async (c) =
 // POST /api/v1/agent/tasks/:taskId/runs/:runId/changeset
 agentHistoryRoutes.post('/agent/tasks/:taskId/runs/:runId/changeset', async (c) => {
   const taskId = c.req.param('taskId');
+  const authError = await authorizeTaskAccess(c, taskId, true);
+  if (authError) return authError;
+
   const runId = c.req.param('runId');
   let body: any;
   try {
@@ -142,6 +209,9 @@ agentHistoryRoutes.post('/agent/tasks/:taskId/runs/:runId/changeset', async (c) 
 // POST /api/v1/agent/tasks/:taskId/progress
 agentHistoryRoutes.post('/agent/tasks/:taskId/progress', async (c) => {
   const taskId = c.req.param('taskId');
+  const authError = await authorizeTaskAccess(c, taskId, true);
+  if (authError) return authError;
+
   let body: any;
   try {
     body = await c.req.json();
@@ -159,6 +229,9 @@ agentHistoryRoutes.post('/agent/tasks/:taskId/progress', async (c) => {
 // POST /api/v1/agent/tasks/:taskId/changesets
 agentHistoryRoutes.post('/agent/tasks/:taskId/changesets', async (c) => {
   const taskId = c.req.param('taskId');
+  const authError = await authorizeTaskAccess(c, taskId, true);
+  if (authError) return authError;
+
   let body: unknown;
   try {
     body = await c.req.json();
@@ -190,6 +263,9 @@ agentHistoryRoutes.post('/agent/tasks/:taskId/changesets', async (c) => {
 // PATCH /api/v1/agent/tasks/:taskId/status
 agentHistoryRoutes.patch('/agent/tasks/:taskId/status', async (c) => {
   const taskId = c.req.param('taskId');
+  const authError = await authorizeTaskAccess(c, taskId, true);
+  if (authError) return authError;
+
   let body: unknown;
   try {
     body = await c.req.json();

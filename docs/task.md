@@ -38,12 +38,12 @@ Completed Tasks:    TASK-001 through TASK-041 (all tasks complete)
                     TASK-053 — Saved Agent Task & Run History (Supabase, API, Runtime & AgentPanel UI) (COMPLETE)
                     TASK-054 — Multi-Tab Terminal Sessions in Bottom Drawer (COMPLETE)
                     TASK-055 — Runtime Isolation, Auth, Strict CORS & Policy Alignment (COMPLETE)
+                    TASK-056 — Worker AuthZ Hardening, RBAC Enforcement & Postgres Audit Persistence (COMPLETE)
                     NOTE: Audit (2026-11-26) reclassified TASK-040 as INCOMPLETE (STUB) and identified P0 wiring/hardening work (TASK-055..TASK-059).
-Next Task:          TASK-056 — Worker AuthZ Hardening, RBAC Enforcement & Postgres Audit Persistence
+Next Task:          TASK-057 — Worker-to-Runtime RPC Bridge, Git/GitHub Flow & Worktree ChangeSet Execution
 Blocked Tasks:      Docker live container assertions skipped on dev host without Docker daemon; live Playwright E2E requires Supabase/CF staging env.
 Known Risks:        - Browser memory overhead during long-lived Yjs sessions.
                     - Worker `/api/v1/git/*` and `/api/v1/changesets/*` endpoints are stubs; `ws/runtime` lacks RPC bridge; `GitWorktreeManager`/`ChangeSetManager` are not wired into `pairingServer.ts`.
-                    - `workspaceWs.ts` and `agentHistory.ts` lack project/workspace RBAC membership verification; `auditService.ts` stores events in memory only.
                     - `tests/e2e/workspace.spec.ts` (`TASK-040`) is currently a commented placeholder spec; CRDT <300ms SLA and 24h DO stability remain unbenchmarked.
 ```
 
@@ -2611,8 +2611,15 @@ Generated from the comprehensive 2026-11-26 engineering audit ([docs/audit.md](f
 - **Verification:** `pnpm build`, `pnpm typecheck`, `pnpm lint`, `pnpm test:coverage` all passed (`56` test files / `357` tests; `@co-vibe/protocol` 100%, `@co-vibe/security` 96.68% stmts / 100% funcs). Added S0 regression suite in `tests/security/regressions/bug-018-security.test.ts`. Live Docker container assertions remain skipped when host Docker daemon is unreachable.
 
 ### TASK-056 — Worker AuthZ Hardening, RBAC Enforcement & Postgres Audit Persistence (Priority P0)
+- **Status:** DONE (2026-11-26)
 - **Fixes:** `BUG-020`
-- **Scope:** Reject startup in non-dev environments when `SUPABASE_JWT_SECRET`/`RUNTIME_JWT_SECRET` uses fallback dev secret in `apps/api/src/middleware/auth.ts` and `routes/runtimeWs.ts`; enforce project/workspace membership checks in `workspaceWs.ts` before `WorkspaceRoom` DO upgrade and in `agentHistory.ts`; persist `auditService.ts` events to PostgreSQL `public.audit_logs`.
+- **Scope & Implementation:**
+  - Added `RUNTIME_JWT_SECRET` and `NODE_ENV` bindings to `Env['Bindings']` and shared fail-closed JWT secret resolution (`isDevOrTestEnvironment`, `resolveJwtSecret`, `verifyAuthToken`) in `apps/api/src/middleware/auth.ts`; wired `apps/api/src/routes/runtimeWs.ts` to fail closed (`500`) in non-dev/non-test environments when secrets are missing or equal to the dev fallback secret.
+  - Added `checkWorkspaceMembership(workspaceId, authUserId)` to `IProjectService` (`SupabaseProjectService` with `PGRST205` fallback and `InMemoryProjectService`) in `apps/api/src/services/projectService.ts`, plus `getTaskWorkspaceId(taskId)` to `IAgentHistoryService` in `apps/api/src/services/agentHistoryService.ts`.
+  - Updated `apps/api/src/routes/workspaceWs.ts` (`GET /:id/room`) to verify identity via Supabase `/auth/v1/user` (parsing `id`/`sub`) or fail-closed `verifyAuthToken` when Supabase env vars are absent, and enforce workspace membership (`400`/`404`/`403`) before WebSocket upgrade or `WORKSPACE_ROOM` DO dispatch.
+  - Enforced workspace/project membership RBAC (and `403` for `viewer` role on mutating `POST`/`PATCH` routes) across all 9 routes in `apps/api/src/routes/agentHistory.ts`.
+  - Refactored `apps/api/src/services/auditService.ts` to dual-mode `IAuditService` (`SupabaseAuditService` resolving `users.auth_user_id -> users.id`, UUID-guarding `project_id`/`workspace_id`, and `PGRST205` fallback to `InMemoryAuditService`) and updated `apps/api/src/middleware/audit.ts` to await `getAuditService(c.env).logEvent(...)` with non-crashing structured error logging.
+- **Verification:** `pnpm --filter @co-vibe/api test` (`10` test files, `81` tests), `pnpm test` (`57` test files, `378` tests; live Docker container assertions skipped on host without Docker), `pnpm typecheck` (`10/10` workspaces), `pnpm lint`, and `pnpm build` all passed. Added/updated tests in `apps/api/tests/auth.test.ts`, `runtimeWs.test.ts`, `workspaceWs.test.ts`, `collaboration/durableObject.test.ts`, `agentHistory.test.ts`, `supabaseProjectService.test.ts`, and `audit.test.ts`.
 
 ### TASK-057 — Worker-to-Runtime RPC Bridge, Git/GitHub Flow & Worktree ChangeSet Execution (Priority P0)
 - **Fixes:** `BUG-019`

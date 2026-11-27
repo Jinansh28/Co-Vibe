@@ -125,4 +125,49 @@ describe('Worker JWT Authentication Middleware', () => {
     expect(body.status).toBe('authenticated');
     expect(body.user.sub).toBe('usr_12345');
   });
+
+  it('fails closed (500) in production when SUPABASE_JWT_SECRET is missing', async () => {
+    const devToken = await sign({ sub: 'usr_12345', exp: Math.floor(Date.now() / 1000) + 3600 }, SECRET, 'HS256');
+    const res = await app.request(
+      '/api/v1/auth/me',
+      {
+        headers: { Authorization: `Bearer ${devToken}` },
+      },
+      { ENVIRONMENT: 'production' } as any
+    );
+    expect(res.status).toBe(500);
+    const body = (await res.json()) as Record<string, any>;
+    expect(body.error).toBe('Internal Server Error');
+  });
+
+  it('fails closed (500) in staging when SUPABASE_JWT_SECRET uses dev fallback secret', async () => {
+    const devToken = await sign({ sub: 'usr_12345', exp: Math.floor(Date.now() / 1000) + 3600 }, SECRET, 'HS256');
+    const res = await app.request(
+      '/api/v1/auth/me',
+      {
+        headers: { Authorization: `Bearer ${devToken}` },
+      },
+      { ENVIRONMENT: 'staging', SUPABASE_JWT_SECRET: SECRET } as any
+    );
+    expect(res.status).toBe(500);
+  });
+
+  it('accepts valid token signed with configured production SUPABASE_JWT_SECRET', async () => {
+    const prodSecret = 'prod-super-strong-jwt-secret-2026';
+    const token = await sign(
+      { sub: 'usr_prod', email: 'prod@co-vibe.dev', exp: Math.floor(Date.now() / 1000) + 3600 },
+      prodSecret,
+      'HS256'
+    );
+    const res = await app.request(
+      '/api/v1/auth/me',
+      {
+        headers: { Authorization: `Bearer ${token}` },
+      },
+      { ENVIRONMENT: 'production', SUPABASE_JWT_SECRET: prodSecret } as any
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as Record<string, any>;
+    expect(body.user.sub).toBe('usr_prod');
+  });
 });

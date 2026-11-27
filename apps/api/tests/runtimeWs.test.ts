@@ -81,4 +81,51 @@ describe('Worker Runtime WebSocket Route (/ws/runtime)', () => {
     expect(body.status).toBe('connected');
     expect(body.runtimeId).toBe('runtime-node-03');
   });
+
+  it('fails closed (500) in production when RUNTIME_JWT_SECRET and SUPABASE_JWT_SECRET are unset', async () => {
+    const token = await sign(
+      { sub: 'runtime-node-04', exp: Math.floor(Date.now() / 1000) + 3600 },
+      SECRET,
+      'HS256'
+    );
+    const res = await app.request(
+      `/ws/runtime?token=${token}`,
+      {},
+      { ENVIRONMENT: 'production' } as any
+    );
+    expect(res.status).toBe(500);
+    const body = (await res.json()) as Record<string, any>;
+    expect(body.error).toBe('Internal Server Error');
+  });
+
+  it('fails closed (500) in production when RUNTIME_JWT_SECRET is set to dev fallback secret', async () => {
+    const token = await sign(
+      { sub: 'runtime-node-05', exp: Math.floor(Date.now() / 1000) + 3600 },
+      SECRET,
+      'HS256'
+    );
+    const res = await app.request(
+      `/ws/runtime?token=${token}`,
+      {},
+      { ENVIRONMENT: 'production', RUNTIME_JWT_SECRET: SECRET } as any
+    );
+    expect(res.status).toBe(500);
+  });
+
+  it('accepts valid token signed with RUNTIME_JWT_SECRET in production', async () => {
+    const runtimeSecret = 'prod-runtime-secret-xyz';
+    const token = await sign(
+      { sub: 'runtime-prod-01', workspaceId: 'ws-prod', exp: Math.floor(Date.now() / 1000) + 3600 },
+      runtimeSecret,
+      'HS256'
+    );
+    const res = await app.request(
+      `/ws/runtime?token=${token}`,
+      {},
+      { ENVIRONMENT: 'production', RUNTIME_JWT_SECRET: runtimeSecret } as any
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as Record<string, any>;
+    expect(body.runtimeId).toBe('runtime-prod-01');
+  });
 });
