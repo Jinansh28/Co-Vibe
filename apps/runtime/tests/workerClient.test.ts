@@ -244,4 +244,139 @@ describe('WorkerClient — Outbound WebSocket Runtime Channel', () => {
 
     expect(() => client.send({ hello: 'world' })).toThrow('Cannot send message: WebSocket is not connected');
   });
+
+  it('dispatches rpc.request messages to registered handlers, emits correlated rpc.response, and redacts secrets on error', async () => {
+    const client = new WorkerClient({
+      workerUrl: 'ws://localhost:8787/ws/runtime',
+      token: 'token-abc',
+      webSocketCtor: MockWebSocket as any,
+    });
+
+    client.registerRpcHandler('git.status', async (params, req) => {
+      return { workspaceId: req.workspaceId, staged: [], modified: [String(params.file || 'a.ts')], untracked: [] };
+    });
+
+    client.registerRpcHandler('git.clone', async () => {
+      throw new Error('Clone failed with token ghp_123456789012345678901234567890abcdef');
+    });
+
+    client.connect();
+    await vi.advanceTimersByTimeAsync(20);
+
+    const mockSocket = MockWebSocket.instances[0];
+
+    // Valid RPC request
+    mockSocket.simulateMessage({
+      type: 'rpc.request',
+      requestId: 'req-1',
+      method: 'git.status',
+      workspaceId: 'ws-123',
+      params: { file: 'index.ts' },
+    });
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(mockSocket.sentMessages).toHaveLength(1);
+    const resp1 = JSON.parse(mockSocket.sentMessages[0]);
+    expect(resp1).toEqual({
+      type: 'rpc.response',
+      requestId: 'req-1',
+      ok: true,
+      result: { workspaceId: 'ws-123', staged: [], modified: ['index.ts'], untracked: [] },
+    });
+
+    // Unregistered method
+    mockSocket.simulateMessage({
+      type: 'rpc.request',
+      requestId: 'req-2',
+      method: 'git.diff',
+      workspaceId: 'ws-123',
+      params: {},
+    });
+
+    await vi.advanceTimersByTimeAsync(0);
+    const resp2 = JSON.parse(mockSocket.sentMessages[1]);
+    expect(resp2.ok).toBe(false);
+    expect(resp2.error.code).toBe('METHOD_NOT_FOUND');
+
+    // Secret redaction on handler error
+    mockSocket.simulateMessage({
+      type: 'rpc.request',
+      requestId: 'req-3',
+      method: 'git.clone',
+      workspaceId: 'ws-123',
+      params: {},
+    });
+
+    await vi.advanceTimersByTimeAsync(0);
+    const resp3 = JSON.parse(mockSocket.sentMessages[2]);
+    expect(resp3.ok).toBe(false);
+    expect(resp3.error.message).not.toContain('ghp_123456789012345678901234567890abcdef');
+
+    client.disconnect();
+  });
+
+  it('wires registerRuntimeRpcHandlers to GitManager and ChangeSetManager on real workspace', { timeout: 15000 }, async () => {
+    vi.useRealTimers();
+    const os = await import('node:os');
+    const path = await import('node:path');
+    const fs = await import('node:fs/promises');
+    const { execFile } = await import('node:child_process');
+    const { promisify } = await import('node:util');
+    const execFileAsync = promisify(execFile);
+
+    const { registerRuntimeRpcHandlers } = await import('../src/server/runtimeRpcHandlers.js');
+    const { DockerManager } = await import('../src/docker/DockerManager.js');
+    const { ProcessManager } = await import('../src/process/ProcessManager.js');
+
+    const tmpWs = await fs.mkdtemp(path.join(os.tmpdir(), 'rt-rpc-git-'));
+    await execFileAsync('git', ['init'], { cwd: tmpWs });
+    await execFileAsync('git', ['config', 'user.name', 'Test'], { cwd: tmpWs });
+    await execFileAsync('git', ['config', 'user.email', 'test@example.com'], { cwd: tmpWs });
+    await fs.writeFile(path.join(tmpWs, 'app.ts'), 'export const v = 1;\n');
+    await execFileAsync('git', ['add', '.'], { cwd: tmpWs });
+    await execFileAsync('git', ['commit', '-m', 'init'], { cwd: tmpWs });
+    await fs.writeFile(path.join(tmpWs, 'app.ts'), 'export const v = 2;\n');
+
+    const dockerManager = new DockerManager();
+    const processManager = new ProcessManager(dockerManager);
+
+    const client = new WorkerClient({
+      workerUrl: 'ws://localhost:8787/ws/runtime',
+      token: 'token-abc',
+      webSocketCtor: MockWebSocket as any,
+    });
+
+    registerRuntimeRpcHandlers(client, {
+      dockerManager,
+      processManager,
+      resolveWorkspaceRoot: () => tmpWs,
+    });
+
+    client.connect();
+    await new Promise((r) => setTimeout(r, 30));
+    const mockSocket = MockWebSocket.instances[0];
+
+    mockSocket.simulateMessage({
+      type: 'rpc.request',
+      requestId: 'rpc-git-status',
+      method: 'git.status',
+      workspaceId: 'ws-real',
+      params: {},
+    });
+
+    const deadline = Date.now() + 5000;
+    let statusMsg: any;
+    while (Date.now() < deadline) {
+      statusMsg = mockSocket.sentMessages
+        .map((m) => JSON.parse(m))
+        .find((m) => m.requestId === 'rpc-git-status');
+      if (statusMsg) break;
+      await new Promise((r) => setTimeout(r, 25));
+    }
+    expect(statusMsg?.ok).toBe(true);
+    expect(statusMsg?.result?.modified).toContain('app.ts');
+
+    client.disconnect();
+    await fs.rm(tmpWs, { recursive: true, force: true }).catch(() => {});
+  });
 });

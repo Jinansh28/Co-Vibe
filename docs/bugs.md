@@ -323,7 +323,7 @@ The quality engineering manager monitors basic bug health metrics per release cy
 | **BUG-016** | Unvalidated `X-Workspace-Id` path traversal and global `WORKSPACE_ROOT` race in pairing server | S0 | Runtime Server / Agent Tools | **FIXED** | 2026-11-26 | `apps/runtime/tests/pairing.test.ts` |
 | **BUG-017** | Missing symlink escape resolution in `assertWorkspacePath` & uncovered barrel failing `test:coverage` at 75% | S1 | Security Policy / Test Gate | **FIXED** | 2026-11-26 | `packages/security/tests/pathPolicy.test.ts`, `index.test.ts` |
 | **BUG-018** | Runtime HTTP API allows wildcard CORS (`*`) without auth and executes commands on host bypassing `DockerManager`/`ProcessManager` | S0 | Runtime Server / Security | **FIXED** | 2026-11-26 | `TASK-055` (`tests/security/regressions/bug-018-security.test.ts`) |
-| **BUG-019** | Worker `/api/v1/git/*` and `/changesets/*` routes are stubs, `ProjectsPage` drops `repoUrl`, and worktree 3-way patch manager is unwired | S1 | API Worker / Git / Runtime | **CONFIRMED** | — | None (`TASK-057`) |
+| **BUG-019** | Worker `/api/v1/git/*` and `/changesets/*` routes are stubs, `ProjectsPage` drops `repoUrl`, and worktree 3-way patch manager is unwired | S1 | API Worker / Git / Runtime | **FIXED** | 2026-11-27 | `TASK-057` |
 | **BUG-020** | Missing workspace/project membership RBAC checks on `workspaceWs.ts` and `agentHistory.ts`, plus in-memory-only `auditService.ts` | S1 | API Worker / AuthZ / Audit | **FIXED** | — | `TASK-056` |
 | **BUG-021** | `tests/e2e/workspace.spec.ts` (`TASK-040`) contains only commented-out workflow steps and `expect(true).toBe(true)` placeholders | S2 | QA / Playwright E2E | **CONFIRMED** | — | None (`TASK-059`) |
 
@@ -872,15 +872,21 @@ Added disk `realpathSync` validation when the workspace root exists in `packages
 
 ## BUG-019 — Stubbed Worker Git/ChangeSet Routes, Dropped `repoUrl`, and Unwired Worktree Isolation
 
-**Status:** **CONFIRMED** (Open — Tracked in `TASK-057`)  
+**Status:** **FIXED** (2026-11-27 — Resolved in `TASK-057`)  
 **Severity:** S1 (High)  
-**Component:** `apps/api/src/routes/git.ts`, `changesets.ts`, `runtimeWs.ts`, `apps/web`, `apps/runtime`  
+**Component:** `apps/api/src/routes/git.ts`, `changesets.ts`, `runtimeWs.ts`, `auth.ts`, `apps/web`, `apps/runtime`, `packages/git`, `packages/agent`  
 
 ### Description
-- `apps/api/src/routes/git.ts` and `changesets.ts` return static stub responses (`staged: []`, `diff: ''`).
-- `apps/api/src/routes/runtimeWs.ts` only handles `ping`/`pong` and does not bridge Worker RPC commands to connected runtime daemons.
-- `ProjectsPage.tsx` drops `repoUrl` from `CreateProjectModal.tsx` when creating projects.
-- `@co-vibe/git` (`GitManager`, `GitWorktreeManager`) and `ChangeSetManager` are not wired into `pairingServer.ts`; `/api/v1/changesets/:id/accept` writes full `modifiedContent` directly and ignores `acceptedHunks`.
+- `apps/api/src/routes/git.ts` and `changesets.ts` returned static stub responses (`staged: []`, `diff: ''`).
+- `apps/api/src/routes/runtimeWs.ts` only handled `ping`/`pong` and did not bridge Worker RPC commands to connected runtime daemons.
+- `ProjectsPage.tsx` dropped `repoUrl` from `CreateProjectModal.tsx` when creating projects.
+- `@co-vibe/git` (`GitManager`, `GitWorktreeManager`) and `ChangeSetManager` were not wired into `pairingServer.ts`; `/api/v1/changesets/:id/accept` wrote full `modifiedContent` directly and ignored `acceptedHunks`.
+
+### Fix & Regression Test
+1. **Worker-to-Runtime RPC Bridge (`apps/api/src/services/runtimeBridge.ts`, `runtimeWs.ts`, `apps/runtime/src/server/workerClient.ts`, `runtimeRpcHandlers.ts`):** Added typed Zod RPC request/response schemas in `@co-vibe/protocol`, indexed runtime WebSockets by `workspaceId`/`runtimeId` with close/error cleanup and `503`/`504` timeout/offline errors, and wired `WorkerClient.registerRpcHandler` to `GitManager`, `ChangeSetManager`, `TestRunner`, `assertWorkspacePath`, and `redactSecrets`.
+2. **Worker Git, ChangeSets, `repoUrl` & AES-256-GCM GitHub Vault (`apps/api/src/routes/git.ts`, `changesets.ts`, `auth.ts`, `services/githubTokenService.ts`, `projectService.ts`, `agentHistoryService.ts`, `008_github_oauth_tokens.sql`):** Replaced stub Git/ChangeSet routes with workspace/project RBAC, Zod validation, RPC forwarding, `active_branch` persistence, and `409` conflict propagation; persisted safe `repoUrl` into `public.repositories`; encrypted GitHub OAuth tokens via Web Crypto AES-256-GCM (`AUTH-03`) without exposing raw tokens in API payloads.
+3. **Worktree Isolation, Hunk Filtering & Frontend (`pairingServer.ts`, `diffParser.ts`, `changeset.ts`, `ProjectsPage.tsx`, `DiffViewer.tsx`, `DiffReviewModal.tsx`):** Isolated Git-backed agent runs in `GitWorktreeManager` worktrees, wired `TestRunner` for JS test suites, added unified diff hunk extraction/filtering (`filterPatchByHunks`) + `ChangeSetManager.applyChangeSet` (`git apply --3way`), forwarded `repoUrl` from `ProjectsPage`, and rendered real parsed hunks + `409` conflict banners in `DiffViewer`.
+4. **Verification:** `pnpm build`, `pnpm typecheck`, `pnpm lint`, and `pnpm test` (`61` files, `401` tests passed; live Docker container assertions skipped on host without Docker daemon). Regression tests added in `apps/api/tests/runtimeWs.test.ts`, `git.test.ts`, `changesets.test.ts`, `githubAuth.test.ts`, `projects.test.ts`, `apps/runtime/tests/workerClient.test.ts`, `pairing.test.ts`, `packages/git/tests/diffParser.test.ts`, `packages/agent/tests/changeset.test.ts`, `apps/web/src/features/changeset/DiffViewer.test.tsx`, and `ProjectsPage.test.tsx`.
 
 ---
 

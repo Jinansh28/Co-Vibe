@@ -13,6 +13,7 @@
   "dependencies": {
     "@co-vibe/agent": "workspace:*",
     "@co-vibe/context": "workspace:*",
+    "@co-vibe/git": "workspace:*",
     "@co-vibe/protocol": "workspace:*",
     "@co-vibe/security": "workspace:*",
     "@co-vibe/shared": "workspace:*",

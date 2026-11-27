@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { verify } from 'hono/jwt';
 import { resolveJwtSecret, type Env } from '../middleware/auth.js';
+import { runtimeBridge } from '../services/runtimeBridge.js';
 
 export const runtimeWsRoutes = new Hono<Env>();
 
@@ -67,9 +68,16 @@ runtimeWsRoutes.get('/', async (c) => {
 
     server.accept();
 
+    const cleanup = runtimeBridge.registerConnection({
+      runtimeId: String(payload.sub || 'runtime'),
+      workspaceId: typeof payload.workspaceId === 'string' ? payload.workspaceId : undefined,
+      socket: server,
+    });
+
     server.addEventListener('message', (event: any) => {
       try {
-        const rawData = typeof event.data === 'string' ? event.data : new TextDecoder().decode(event.data);
+        const rawData =
+          typeof event.data === 'string' ? event.data : new TextDecoder().decode(event.data);
         const msg = JSON.parse(rawData);
 
         if (msg.type === 'ping') {
@@ -80,11 +88,17 @@ runtimeWsRoutes.get('/', async (c) => {
               replyTo: msg.id,
             })
           );
+          return;
         }
+
+        runtimeBridge.handleIncomingMessage(msg);
       } catch (_err) {
         // Non-JSON or invalid payload
       }
     });
+
+    server.addEventListener('close', cleanup);
+    server.addEventListener('error', cleanup);
 
     return new Response(null, {
       status: 101,

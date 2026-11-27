@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { SafeRepoUrlSchema } from './runtime.js';
 
 export const ProjectMemberRoleSchema = z.enum(['owner', 'editor', 'viewer']);
 export type ProjectMemberRole = z.infer<typeof ProjectMemberRoleSchema>;
@@ -6,6 +7,10 @@ export type ProjectMemberRole = z.infer<typeof ProjectMemberRoleSchema>;
 export const CreateProjectSchema = z.object({
   name: z.string().trim().min(1, 'Project name is required'),
   description: z.string().optional(),
+  repoUrl: z.preprocess(
+    (val) => (typeof val === 'string' && val.trim() === '' ? undefined : val),
+    SafeRepoUrlSchema.optional()
+  ),
 });
 export type CreateProjectInput = z.infer<typeof CreateProjectSchema>;
 

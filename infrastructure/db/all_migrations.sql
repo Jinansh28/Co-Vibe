@@ -277,7 +277,31 @@ ALTER TABLE public.projects ADD COLUMN IF NOT EXISTS join_code TEXT UNIQUE;
 CREATE INDEX IF NOT EXISTS idx_projects_join_code ON public.projects(join_code);
 
 -- ------------------------------------------------------------------------------
--- 9. Record All Migrations as Applied
+-- 9. Migration 008: Encrypted GitHub OAuth Tokens (AUTH-03)
+-- ------------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS public.github_oauth_tokens (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+  github_username TEXT,
+  encrypted_token TEXT NOT NULL,
+  iv TEXT NOT NULL,
+  auth_tag TEXT NOT NULL,
+  scope TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT uq_github_oauth_tokens_user_id UNIQUE (user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_github_oauth_tokens_user_id ON public.github_oauth_tokens(user_id);
+
+CREATE OR REPLACE TRIGGER set_github_oauth_tokens_updated_at
+  BEFORE UPDATE ON public.github_oauth_tokens
+  FOR EACH ROW
+  EXECUTE FUNCTION set_updated_at();
+
+-- ------------------------------------------------------------------------------
+-- 10. Record All Migrations as Applied
 -- ------------------------------------------------------------------------------
 
 INSERT INTO public.schema_migrations (name) VALUES
@@ -287,5 +311,6 @@ INSERT INTO public.schema_migrations (name) VALUES
   ('004_agent_execution.sql'),
   ('005_changesets_conversations.sql'),
   ('006_runtimes_git_audit.sql'),
-  ('007_project_join_code.sql')
+  ('007_project_join_code.sql'),
+  ('008_github_oauth_tokens.sql')
 ON CONFLICT (name) DO NOTHING;

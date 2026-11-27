@@ -151,4 +151,66 @@ describe('ChangeSetManager', { timeout: 15000 }, () => {
     const gitStatus = (await execGit(['status', '--porcelain'])).trim();
     expect(gitStatus).toBe('');
   });
+
+  it('should apply only selected acceptedHunks when subset is specified', async () => {
+    const initialLines = [
+      'line 1',
+      'line 2',
+      'line 3',
+      'line 4',
+      'line 5',
+      'line 6',
+      'line 7',
+      'line 8',
+      'line 9',
+      'line 10',
+    ].join('\n') + '\n';
+
+    await fs.writeFile(path.join(workspacePath, 'multi.txt'), initialLines);
+    await execGit(['add', 'multi.txt']);
+    await execGit(['commit', '-m', 'initial multi']);
+    const baseRevision = await execGit(['rev-parse', 'HEAD']);
+
+    await execGit(['checkout', '-b', 'agent-hunks']);
+    const updatedLines = [
+      'line 1 agent',
+      'line 2',
+      'line 3',
+      'line 4',
+      'line 5',
+      'line 6',
+      'line 7',
+      'line 8',
+      'line 9',
+      'line 10 agent',
+    ].join('\n') + '\n';
+    await fs.writeFile(path.join(workspacePath, 'multi.txt'), updatedLines);
+    await execGit(['add', 'multi.txt']);
+    await execGit(['commit', '-m', 'two hunks']);
+
+    const patch = (await execGitRaw(['diff', baseRevision, 'HEAD'])).replace(/\r\n/g, '\n') + '\n';
+    await execGit(['checkout', '-']);
+
+    const { extractPatchHunkIds } = await import('@co-vibe/git');
+    const hunkIds = extractPatchHunkIds(patch);
+    expect(hunkIds.length).toBe(2);
+
+    const status = await manager.applyChangeSet(
+      {
+        id: 'cs-partial',
+        taskId: 'task-1',
+        baseRevision,
+        status: 'pending',
+        patch,
+        changedFiles: ['multi.txt'],
+      },
+      [hunkIds[0]]
+    );
+
+    expect(status).toBe('accepted');
+    const finalContent = (await fs.readFile(path.join(workspacePath, 'multi.txt'), 'utf-8')).replace(/\r\n/g, '\n');
+    expect(finalContent).toContain('line 1 agent');
+    expect(finalContent).toContain('line 10\n');
+    expect(finalContent).not.toContain('line 10 agent');
+  });
 });

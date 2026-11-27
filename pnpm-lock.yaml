@@ -87,6 +87,9 @@ importers:
       '@co-vibe/context':
         specifier: workspace:*
         version: link:../../packages/context
+      '@co-vibe/git':
+        specifier: workspace:*
+        version: link:../../packages/git
       '@co-vibe/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
@@ -179,6 +182,9 @@ importers:
       '@co-vibe/context':
         specifier: workspace:*
         version: link:../context
+      '@co-vibe/git':
+        specifier: workspace:*
+        version: link:../git
       '@co-vibe/protocol':
         specifier: workspace:*
         version: link:../protocol

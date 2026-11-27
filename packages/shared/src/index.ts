@@ -8,12 +8,24 @@ export interface User {
   updatedAt: string;
 }
 
+export interface Repository {
+  id: string;
+  projectId: string;
+  provider: string;
+  ownerName: string;
+  repoName: string;
+  cloneUrl: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Project {
   id: string;
   ownerId: string;
   name: string;
   description?: string;
   joinCode?: string;
+  repository?: Repository;
   createdAt: string;
   updatedAt: string;
 }

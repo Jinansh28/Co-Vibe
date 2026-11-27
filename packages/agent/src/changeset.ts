@@ -2,6 +2,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
+import { filterPatchByHunks } from '@co-vibe/git';
 
 const execFileAsync = promisify(execFile);
 
@@ -29,16 +30,26 @@ export class ChangeSetManager {
     return stdout.trim();
   }
 
-  async applyChangeSet(changeSet: ChangeSet, acceptedHunks?: boolean): Promise<ChangeSetStatus> {
+  async applyChangeSet(changeSet: ChangeSet, acceptedHunks?: boolean | string[]): Promise<ChangeSetStatus> {
     if (changeSet.status !== 'pending' && changeSet.status !== 'stale') {
       return changeSet.status;
+    }
+
+    let effectivePatch = changeSet.patch;
+    if (Array.isArray(acceptedHunks)) {
+      effectivePatch = filterPatchByHunks(changeSet.patch, acceptedHunks);
+      if (!effectivePatch.trim()) {
+        return 'rejected';
+      }
+    } else if (acceptedHunks === false) {
+      return 'rejected';
     }
 
     const patchPath = path.join(this.workspacePath, `.git`, `patch-${changeSet.id}.diff`);
     
     try {
       const currentHead = await this.execGit(['rev-parse', 'HEAD']);
-      await fs.writeFile(patchPath, changeSet.patch, 'utf-8');
+      await fs.writeFile(patchPath, effectivePatch, 'utf-8');
 
       if (currentHead === changeSet.baseRevision) {
         // Clean apply since base revision is identical

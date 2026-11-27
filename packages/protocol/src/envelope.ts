@@ -90,6 +90,10 @@ export const AgentTaskProgressPayloadSchema = z.object({
       filePath: z.string(),
       originalContent: z.string(),
       modifiedContent: z.string(),
+      patch: z.string().optional(),
+      baseRevision: z.string().optional(),
+      changedFiles: z.array(z.string()).optional(),
+      hunks: z.array(z.string()).optional(),
     })
     .optional(),
 });

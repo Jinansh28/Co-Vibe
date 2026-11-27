@@ -164,4 +164,63 @@ describe('ProjectsPage Component', () => {
 
     expect(handleOpenWorkspace).toHaveBeenCalledWith('proj-1', 'ws-1');
   });
+
+  it('includes repoUrl from CreateProjectModal in POST /api/v1/projects payload', async () => {
+    const originalFetch = global.fetch;
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        project: {
+          id: 'proj-repo-1',
+          name: 'Imported Repo Project',
+          description: 'Cloned from GitHub',
+          createdAt: '2026-11-27T00:00:00.000Z',
+        },
+        member: { role: 'owner' },
+      }),
+    });
+    global.fetch = fetchMock as any;
+
+    try {
+      await act(async () => {
+        renderWithProviders(<ProjectsPage initialProjects={[]} />);
+      });
+
+      await act(async () => {
+        fireEvent.click(screen.getByTestId('create-project-btn'));
+      });
+
+      await act(async () => {
+        fireEvent.change(screen.getByLabelText(/Project Name/i), {
+          target: { value: 'Imported Repo Project' },
+        });
+        fireEvent.change(screen.getByLabelText(/Description/i), {
+          target: { value: 'Cloned from GitHub' },
+        });
+        fireEvent.change(screen.getByLabelText(/Import GitHub Repository/i), {
+          target: { value: 'https://github.com/co-vibe/demo-repo' },
+        });
+      });
+
+      await act(async () => {
+        fireEvent.click(screen.getByTestId('create-project-submit-btn'));
+      });
+
+      await waitFor(() => {
+        expect(fetchMock).toHaveBeenCalledWith(
+          '/api/v1/projects',
+          expect.objectContaining({
+            method: 'POST',
+            body: JSON.stringify({
+              name: 'Imported Repo Project',
+              description: 'Cloned from GitHub',
+              repoUrl: 'https://github.com/co-vibe/demo-repo',
+            }),
+          })
+        );
+      });
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
 });

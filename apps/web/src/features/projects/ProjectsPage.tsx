@@ -131,6 +131,7 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
         body: JSON.stringify({
           name: data.name,
           description: data.description,
+          ...(data.repoUrl ? { repoUrl: data.repoUrl } : {}),
         }),
       });
 

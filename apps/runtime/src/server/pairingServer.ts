@@ -1,16 +1,22 @@
 import http from 'node:http';
 import fs from 'node:fs/promises';
 import syncFs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { PairingVerifySchema, type AgentTaskProgressPayload } from '@co-vibe/protocol';
 import { TokenManager, type JwtPayload } from '../auth/tokenManager.js';
 import { DockerManager } from '../docker/DockerManager.js';
 import { ProcessManager } from '../process/ProcessManager.js';
+import { TestRunner } from '../process/TestRunner.js';
 import { assertWorkspacePath, redactSecrets, validateCommandPolicy } from '@co-vibe/security';
+import { GitWorktreeManager, extractPatchHunkIds } from '@co-vibe/git';
 import {
   AgentOrchestrator,
   AgentStateMachine,
+  ChangeSetManager,
   ToolRegistry,
   createFilesystemTools,
   createShellTools,
@@ -18,6 +24,8 @@ import {
   type ShellCommandExecutor,
 } from '@co-vibe/agent';
 import { ContextRetriever } from '@co-vibe/context';
+
+const execFileAsync = promisify(execFile);
 
 const DEFAULT_ALLOWED_ORIGINS = ['http://localhost:5173', 'http://127.0.0.1:5173'];
 
@@ -44,10 +52,90 @@ export interface PendingChangeSet {
   originalContent: string;
   modifiedContent: string;
   workspaceRoot: string;
+  baseRevision?: string;
+  patch?: string;
+  changedFiles?: string[];
+  hunks?: string[];
   createdAt: number;
 }
 
 export const pendingChangeSets = new Map<string, PendingChangeSet>();
+
+export async function applyChangeSetInWorkspace(
+  workspaceRoot: string,
+  opts: {
+    changeSetId: string;
+    acceptedHunks?: string[];
+    pending?: PendingChangeSet;
+    remoteChangeSet?: {
+      id?: string;
+      taskId?: string;
+      baseRevision?: string;
+      patch?: string;
+      changedFiles?: string[];
+    };
+  }
+): Promise<{ status: 'accepted' | 'rejected' | 'conflicted'; filePath?: string; message?: string }> {
+  const patch = opts.pending?.patch ?? opts.remoteChangeSet?.patch;
+  const baseRevision = opts.pending?.baseRevision ?? opts.remoteChangeSet?.baseRevision;
+  const changedFiles =
+    opts.pending?.changedFiles ??
+    opts.remoteChangeSet?.changedFiles ??
+    (opts.pending?.filePath ? [opts.pending.filePath] : []);
+  const filePath = opts.pending?.filePath ?? changedFiles[0];
+
+  let isGitRepo = false;
+  try {
+    await fs.access(path.join(workspaceRoot, '.git'));
+    await execFileAsync('git', ['rev-parse', 'HEAD'], { cwd: workspaceRoot });
+    isGitRepo = true;
+  } catch {
+    isGitRepo = false;
+  }
+
+  if (isGitRepo && patch && patch.trim() && baseRevision) {
+    const manager = new ChangeSetManager(workspaceRoot);
+    const status = await manager.applyChangeSet(
+      {
+        id: opts.changeSetId,
+        taskId: opts.remoteChangeSet?.taskId || opts.changeSetId,
+        baseRevision,
+        status: 'pending',
+        patch,
+        changedFiles,
+      },
+      opts.acceptedHunks
+    );
+
+    if (status === 'conflicted') {
+      return {
+        status: 'conflicted',
+        filePath,
+        message: 'Merge conflict detected while applying changeset',
+      };
+    }
+    if (status === 'rejected') {
+      pendingChangeSets.delete(opts.changeSetId);
+      return { status: 'rejected', filePath };
+    }
+    pendingChangeSets.delete(opts.changeSetId);
+    return { status: 'accepted', filePath };
+  }
+
+  if (opts.pending) {
+    if (Array.isArray(opts.acceptedHunks) && opts.acceptedHunks.length === 0) {
+      pendingChangeSets.delete(opts.changeSetId);
+      return { status: 'rejected', filePath: opts.pending.filePath };
+    }
+    const safePath = assertWorkspacePath(workspaceRoot, opts.pending.filePath);
+    await fs.mkdir(path.dirname(safePath), { recursive: true });
+    await fs.writeFile(safePath, opts.pending.modifiedContent, 'utf8');
+    pendingChangeSets.delete(opts.changeSetId);
+    return { status: 'accepted', filePath: opts.pending.filePath };
+  }
+
+  return { status: 'accepted', filePath };
+}
 
 function loadEnvConfig() {
   const envPaths = [
@@ -95,7 +183,7 @@ export class InvalidWorkspaceIdError extends Error {
 
 const SAFE_WORKSPACE_ID_REGEX = /^[a-zA-Z0-9._-]+$/;
 
-function validateWorkspaceId(rawWorkspaceId: string): string {
+export function validateWorkspaceId(rawWorkspaceId: string): string {
   const cleanWsId = rawWorkspaceId.trim();
   if (
     !cleanWsId ||
@@ -665,7 +753,40 @@ export function createPairingRequestHandler(
         });
       }
 
+      let worktreePath: string | null = null;
+      let worktreeManager: GitWorktreeManager | null = null;
+      let baseRevision: string | null = null;
+      let executionRoot = workspaceRoot;
+      const workspaceKey = getWorkspaceKey(req);
+
       try {
+        // Initialize isolated Git worktree only if workspaceRoot itself is a Git repo with a HEAD commit
+        try {
+          await fs.access(path.join(workspaceRoot, '.git'));
+          const { stdout: headSha } = await execFileAsync('git', ['rev-parse', 'HEAD'], {
+            cwd: workspaceRoot,
+          });
+          const trimmedSha = headSha.trim();
+          if (trimmedSha) {
+            baseRevision = trimmedSha;
+            worktreeManager = new GitWorktreeManager(workspaceRoot);
+            worktreePath = path.join(
+              os.tmpdir(),
+              'co-vibe-worktrees',
+              `${workspaceKey}-${runId}`
+            );
+            await fs.mkdir(path.dirname(worktreePath), { recursive: true });
+            await worktreeManager.createWorktree(baseRevision, worktreePath);
+            executionRoot = worktreePath;
+          }
+        } catch {
+          // Non-git workspace or no HEAD commit yet; operate in workspaceRoot staging mode
+          worktreePath = null;
+          worktreeManager = null;
+          baseRevision = null;
+          executionRoot = workspaceRoot;
+        }
+
         // Collect existing workspace files for context retrieval
         const workspaceFiles = new Map<string, string>();
         const readFilesRecursively = async (dir: string, relative: string) => {
@@ -691,16 +812,21 @@ export function createPairingRequestHandler(
           }
         };
 
-        await readFilesRecursively(workspaceRoot, '');
+        await readFilesRecursively(executionRoot, '');
 
-        // Initialize tool registry with workspace-scoped filesystem & sandboxed shell execution tools
-        const workspaceKey = getWorkspaceKey(req);
+        // Initialize tool registry with worktree-scoped filesystem & sandboxed shell execution tools
+        const sandboxContainerKey = worktreePath
+          ? `${workspaceKey}-wt-${runId.slice(0, 8)}`
+          : workspaceKey;
         const sandboxExecutor: ShellCommandExecutor = async (command, args, opts) => {
-          const containerId = await dockerManager.ensureWorkspaceContainer(workspaceKey, workspaceRoot);
-          const requestedCwd = opts?.cwd ? assertWorkspacePath(workspaceRoot, opts.cwd) : workspaceRoot;
-          const containerCwd = toContainerCwd(workspaceRoot, requestedCwd);
+          const containerId = await dockerManager.ensureWorkspaceContainer(
+            sandboxContainerKey,
+            executionRoot
+          );
+          const requestedCwd = opts?.cwd ? assertWorkspacePath(executionRoot, opts.cwd) : executionRoot;
+          const containerCwd = toContainerCwd(executionRoot, requestedCwd);
           const execResult = await processManager.execCommand(containerId, [command, ...args], {
-            workspaceId: workspaceKey,
+            workspaceId: sandboxContainerKey,
             cwd: containerCwd,
             timeoutMs: opts?.timeoutMs ?? 60000,
           });
@@ -711,21 +837,37 @@ export function createPairingRequestHandler(
           };
         };
 
-        const { readFileTool, writeFileTool, listDirTool } = createFilesystemTools(workspaceRoot);
+        const { readFileTool, writeFileTool, listDirTool } = createFilesystemTools(executionRoot);
         const { runCommandTool, runTestsTool } = createShellTools({
-          workspaceRoot,
+          workspaceRoot: executionRoot,
           executor: sandboxExecutor,
         });
 
         const stagingWriteFileTool = {
           ...writeFileTool,
           execute: async ({ path: targetPath, content }: { path: string; content: string }) => {
-            const safePath = assertWorkspacePath(workspaceRoot, targetPath);
+            const safeExecPath = assertWorkspacePath(executionRoot, targetPath);
             let originalContent = '';
             try {
-              originalContent = await fs.readFile(safePath, 'utf8');
+              originalContent = await fs.readFile(safeExecPath, 'utf8');
             } catch {
               originalContent = '';
+            }
+
+            let patch: string | undefined;
+            let hunks: string[] | undefined;
+
+            if (worktreeManager && worktreePath && baseRevision) {
+              await fs.mkdir(path.dirname(safeExecPath), { recursive: true });
+              await fs.writeFile(safeExecPath, content, 'utf8');
+
+              const relPath = path.relative(executionRoot, safeExecPath).replace(/\\/g, '/');
+              await execFileAsync('git', ['add', '-N', '--', relPath], {
+                cwd: executionRoot,
+              }).catch(() => {});
+
+              patch = await worktreeManager.generatePatch(executionRoot, baseRevision);
+              hunks = extractPatchHunkIds(patch);
             }
 
             const changeSetId = crypto.randomUUID();
@@ -735,6 +877,10 @@ export function createPairingRequestHandler(
               originalContent,
               modifiedContent: content,
               workspaceRoot,
+              ...(baseRevision ? { baseRevision } : {}),
+              ...(patch ? { patch } : {}),
+              changedFiles: [targetPath],
+              ...(hunks && hunks.length > 0 ? { hunks } : {}),
               createdAt: Date.now(),
             });
 
@@ -750,6 +896,10 @@ export function createPairingRequestHandler(
                 filePath: targetPath,
                 originalContent,
                 modifiedContent: content,
+                ...(patch ? { patch } : {}),
+                ...(baseRevision ? { baseRevision } : {}),
+                changedFiles: [targetPath],
+                ...(hunks && hunks.length > 0 ? { hunks } : {}),
               },
             });
 
@@ -763,6 +913,27 @@ export function createPairingRequestHandler(
         toolRegistry.register(listDirTool);
         toolRegistry.register(runCommandTool);
         toolRegistry.register(runTestsTool);
+
+        // Wire TestRunner validation when workspace has a runnable JS test suite
+        let validateTask: (() => Promise<{ passed: boolean; failedSpecs: any[] }>) | undefined;
+        try {
+          const pkgRaw = await fs.readFile(path.join(executionRoot, 'package.json'), 'utf8');
+          const pkg = JSON.parse(pkgRaw);
+          const deps = { ...pkg.dependencies, ...pkg.devDependencies };
+          const hasTestRunner = Boolean(deps['vitest'] || deps['jest'] || deps['mocha']);
+          if (hasTestRunner) {
+            const runner = new TestRunner(processManager);
+            validateTask = async () => {
+              const containerId = await dockerManager.ensureWorkspaceContainer(
+                sandboxContainerKey,
+                executionRoot
+              );
+              return runner.runTests(containerId, '/workspace');
+            };
+          }
+        } catch {
+          // No package.json or unparseable; skip automated TestRunner validation
+        }
 
         // Ensure .env is loaded
         loadEnvConfig();
@@ -778,6 +949,7 @@ export function createPairingRequestHandler(
           taskId,
           runId,
           workspaceFiles,
+          validateTask,
           onProgress: writeProgress,
         });
 
@@ -801,6 +973,10 @@ export function createPairingRequestHandler(
           percentage: 100,
         });
       } finally {
+        if (worktreeManager && worktreePath) {
+          await worktreeManager.removeWorktree(worktreePath).catch(() => {});
+          await fs.rm(worktreePath, { recursive: true, force: true }).catch(() => {});
+        }
         res.end();
       }
       return;
@@ -812,14 +988,40 @@ export function createPairingRequestHandler(
     if (pathname.startsWith('/api/v1/changesets/')) {
       if (pathname.endsWith('/accept') && method === 'POST') {
         const id = pathname.slice('/api/v1/changesets/'.length, -'/accept'.length);
+        const body = await parseJsonBody<{ acceptedHunks?: string[] }>(req);
+        const acceptedHunks = Array.isArray(body?.acceptedHunks)
+          ? body.acceptedHunks.filter((h): h is string => typeof h === 'string')
+          : undefined;
         const pending = pendingChangeSets.get(id);
         if (pending) {
-          const safePath = assertWorkspacePath(pending.workspaceRoot, pending.filePath);
-          await fs.mkdir(path.dirname(safePath), { recursive: true });
-          await fs.writeFile(safePath, pending.modifiedContent, 'utf8');
-          pendingChangeSets.delete(id);
+          const result = await applyChangeSetInWorkspace(pending.workspaceRoot, {
+            changeSetId: id,
+            acceptedHunks,
+            pending,
+          });
+
+          if (result.status === 'conflicted') {
+            res.writeHead(409, { 'Content-Type': 'application/json' });
+            res.end(
+              JSON.stringify({
+                ok: false,
+                success: false,
+                status: 'conflicted',
+                error: result.message || 'Merge conflict detected while applying changeset',
+              })
+            );
+            return;
+          }
+
           res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ ok: true, success: true, status: 'accepted', filePath: pending.filePath }));
+          res.end(
+            JSON.stringify({
+              ok: true,
+              success: true,
+              status: result.status,
+              filePath: pending.filePath,
+            })
+          );
           return;
         }
         res.writeHead(200, { 'Content-Type': 'application/json' });

@@ -56,9 +56,25 @@ export interface AgentTaskDetails extends AgentTaskSummary {
   } | null;
 }
 
+export interface ChangeSetRecord {
+  id: string;
+  taskId: string;
+  runId?: string;
+  workspaceId: string;
+  baseRevision: string;
+  status: string;
+  patch: string;
+  changedFiles: string[];
+}
+
 export interface IAgentHistoryService {
   reset(): void;
   getTaskWorkspaceId(taskId: string): Promise<string | null>;
+  getChangeSetById(changeSetId: string): Promise<ChangeSetRecord | null>;
+  updateChangeSetStatus(
+    changeSetId: string,
+    status: 'pending' | 'accepted' | 'rejected' | 'stale' | 'conflicted'
+  ): Promise<void>;
   listWorkspaceTasks(workspaceId: string): Promise<AgentTaskSummary[]>;
   getTaskDetails(taskId: string): Promise<AgentTaskDetails | null>;
   createTask(workspaceId: string, prompt: string): Promise<{ taskId: string; runId: string }>;
@@ -95,6 +111,63 @@ export class SupabaseAgentHistoryService implements IAgentHistoryService {
       return null;
     }
     return task.workspace_id ?? null;
+  }
+
+  public async getChangeSetById(changeSetId: string): Promise<ChangeSetRecord | null> {
+    const { data: cs, error } = await this.client
+      .from('change_sets')
+      .select('*')
+      .eq('id', changeSetId)
+      .maybeSingle();
+
+    if (isTableMissingError(error)) {
+      return this.fallback.getChangeSetById(changeSetId);
+    }
+    if (error || !cs) {
+      return null;
+    }
+
+    const workspaceId = await this.getTaskWorkspaceId(cs.task_id);
+    if (!workspaceId) {
+      return null;
+    }
+
+    let changedFiles: string[] = [];
+    if (Array.isArray(cs.changed_files)) {
+      changedFiles = cs.changed_files;
+    } else if (typeof cs.changed_files === 'string') {
+      try {
+        changedFiles = JSON.parse(cs.changed_files);
+      } catch {
+        changedFiles = [];
+      }
+    }
+
+    return {
+      id: cs.id,
+      taskId: cs.task_id,
+      runId: cs.run_id ?? undefined,
+      workspaceId,
+      baseRevision: cs.base_revision || 'HEAD',
+      status: cs.status || 'pending',
+      patch: cs.patch || '',
+      changedFiles,
+    };
+  }
+
+  public async updateChangeSetStatus(
+    changeSetId: string,
+    status: 'pending' | 'accepted' | 'rejected' | 'stale' | 'conflicted'
+  ): Promise<void> {
+    const now = new Date().toISOString();
+    const { error } = await this.client
+      .from('change_sets')
+      .update({ status, updated_at: now })
+      .eq('id', changeSetId);
+
+    if (isTableMissingError(error)) {
+      await this.fallback.updateChangeSetStatus(changeSetId, status);
+    }
   }
 
   public async listWorkspaceTasks(workspaceId: string): Promise<AgentTaskSummary[]> {
@@ -389,6 +462,38 @@ export class InMemoryAgentHistoryService implements IAgentHistoryService {
   public async getTaskWorkspaceId(taskId: string): Promise<string | null> {
     const task = this.tasks.get(taskId);
     return task ? task.workspaceId : null;
+  }
+
+  public async getChangeSetById(changeSetId: string): Promise<ChangeSetRecord | null> {
+    const cs = this.changeSets.get(changeSetId);
+    if (!cs) {
+      return null;
+    }
+    const task = this.tasks.get(cs.taskId);
+    if (!task) {
+      return null;
+    }
+    return {
+      id: cs.id,
+      taskId: cs.taskId,
+      runId: cs.runId,
+      workspaceId: task.workspaceId,
+      baseRevision: cs.baseRevision || 'HEAD',
+      status: cs.status || 'pending',
+      patch: cs.patch || '',
+      changedFiles: Array.isArray(cs.changedFiles) ? cs.changedFiles : [],
+    };
+  }
+
+  public async updateChangeSetStatus(
+    changeSetId: string,
+    status: 'pending' | 'accepted' | 'rejected' | 'stale' | 'conflicted'
+  ): Promise<void> {
+    const cs = this.changeSets.get(changeSetId);
+    if (cs) {
+      cs.status = status;
+      cs.updatedAt = new Date().toISOString();
+    }
   }
 
   public async listWorkspaceTasks(workspaceId: string): Promise<AgentTaskSummary[]> {

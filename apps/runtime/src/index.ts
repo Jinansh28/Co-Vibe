@@ -2,7 +2,11 @@ import type { Server } from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { TokenManager } from './auth/tokenManager.js';
-import { createPairingServer } from './server/pairingServer.js';
+import { createPairingServer, applyChangeSetInWorkspace } from './server/pairingServer.js';
+import { WorkerClient } from './server/workerClient.js';
+import { registerRuntimeRpcHandlers } from './server/runtimeRpcHandlers.js';
+import { DockerManager } from './docker/DockerManager.js';
+import { ProcessManager } from './process/ProcessManager.js';
 
 // Automatically load runtime .env if present
 for (const envPath of [
@@ -22,8 +26,19 @@ for (const envPath of [
 export const PORT = Number(process.env.RUNTIME_PORT || 7890);
 
 export { TokenManager };
-export { createPairingServer, createPairingRequestHandler } from './server/pairingServer.js';
-export { WorkerClient, type WorkerClientOptions, type ConnectionState } from './server/workerClient.js';
+export { createPairingServer, createPairingRequestHandler, applyChangeSetInWorkspace } from './server/pairingServer.js';
+export {
+  WorkerClient,
+  RpcHandlerError,
+  type WorkerClientOptions,
+  type ConnectionState,
+  type RpcHandler,
+} from './server/workerClient.js';
+export {
+  registerRuntimeRpcHandlers,
+  defaultResolveWorkspaceRoot,
+  type RuntimeRpcDependencies,
+} from './server/runtimeRpcHandlers.js';
 export {
   DockerManager,
   type CreateContainerOptions,
@@ -59,7 +74,18 @@ if (process.env.NODE_ENV !== 'test') {
     );
   }
   const tokenManager = new TokenManager();
-  const server = createPairingServer(tokenManager);
+  const dockerManager = new DockerManager();
+  const processManager = new ProcessManager(dockerManager);
+  const server = createPairingServer(tokenManager, { dockerManager, processManager });
+
+  if (process.env.WORKER_WS_URL && typeof globalThis.WebSocket !== 'undefined') {
+    const workerClient = new WorkerClient({
+      workerUrl: process.env.WORKER_WS_URL,
+      token: () => tokenManager.getActiveToken() ?? tokenManager.generateRuntimeToken(process.env.WORKSPACE_ID).token,
+    });
+    registerRuntimeRpcHandlers(workerClient, { dockerManager, processManager });
+    workerClient.connect();
+  }
 
   server.listen(PORT, '127.0.0.1', () => {
     const pairingInfo = tokenManager.getPairingCode();

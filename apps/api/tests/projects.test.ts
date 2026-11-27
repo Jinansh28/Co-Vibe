@@ -88,6 +88,53 @@ describe('Projects & Workspaces API Endpoints (TASK-010)', () => {
       expect(getBody.role).toBe('owner');
       expect(getBody.members).toHaveLength(1);
     });
+
+    it('persists safe repoUrl metadata into repositories and rejects unsafe URLs', async () => {
+      const badFileRes = await app.request('/api/v1/projects', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${ownerToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: 'Unsafe Local',
+          repoUrl: 'file:///etc/passwd',
+        }),
+      });
+      expect(badFileRes.status).toBe(400);
+
+      const badCredRes = await app.request('/api/v1/projects', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${ownerToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: 'Unsafe Creds',
+          repoUrl: 'https://user:secret@github.com/org/repo',
+        }),
+      });
+      expect(badCredRes.status).toBe(400);
+
+      const goodRes = await app.request('/api/v1/projects', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${ownerToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: 'GitHub Imported Project',
+          repoUrl: 'https://github.com/co-vibe/starter-kit.git',
+        }),
+      });
+      expect(goodRes.status).toBe(201);
+      const body = (await goodRes.json()) as Record<string, any>;
+      expect(body.project.repository).toBeDefined();
+      expect(body.project.repository.provider).toBe('github');
+      expect(body.project.repository.ownerName).toBe('co-vibe');
+      expect(body.project.repository.repoName).toBe('starter-kit');
+      expect(body.project.repository.cloneUrl).toBe('https://github.com/co-vibe/starter-kit.git');
+    });
   });
 
   describe('GET /api/v1/projects/:id', () => {

@@ -790,4 +790,125 @@ describe('Pairing Server HTTP Endpoints', () => {
 
     await fs.rm(wsRoot, { recursive: true, force: true }).catch(() => {});
   });
+
+  it('uses Git worktree isolation for agent edits, emits real hunks, and returns 409 on 3-way conflict without corrupting workspace', { timeout: 15000 }, async () => {
+    const { execFile } = await import('node:child_process');
+    const { promisify } = await import('node:util');
+    const execFileAsync = promisify(execFile);
+
+    const testWsId = `test-ws-wt-${Date.now()}`;
+    const wsRoot = path.join(process.cwd(), '.workspaces', testWsId);
+    await fs.mkdir(wsRoot, { recursive: true });
+
+    await execFileAsync('git', ['init'], { cwd: wsRoot });
+    await execFileAsync('git', ['config', 'user.name', 'Test'], { cwd: wsRoot });
+    await execFileAsync('git', ['config', 'user.email', 'test@example.com'], { cwd: wsRoot });
+    await execFileAsync('git', ['config', 'core.autocrlf', 'false'], { cwd: wsRoot });
+
+    const initialContent = [
+      'line 1',
+      'line 2',
+      'line 3',
+      'line 4',
+      'line 5',
+      'line 6',
+      'line 7',
+      'line 8',
+      'line 9',
+      'line 10',
+    ].join('\n') + '\n';
+
+    await fs.writeFile(path.join(wsRoot, 'app.ts'), initialContent);
+    await execFileAsync('git', ['add', '.'], { cwd: wsRoot });
+    await execFileAsync('git', ['commit', '-m', 'base commit'], { cwd: wsRoot });
+    const baseSha = (await execFileAsync('git', ['rev-parse', 'HEAD'], { cwd: wsRoot })).stdout.trim();
+
+    // Create a mock agent-staged changeset via worktree patch (two separate hunks)
+    const { GitWorktreeManager, extractPatchHunkIds } = await import('@co-vibe/git');
+    const { pendingChangeSets } = await import('../src/server/pairingServer.js');
+    const os = await import('node:os');
+    const wtDir = path.join(os.tmpdir(), `wt-pairing-test-${Date.now()}`);
+    const wtMgr = new GitWorktreeManager(wsRoot);
+    await wtMgr.createWorktree(baseSha, wtDir);
+
+    const agentContent = [
+      'line 1 agent',
+      'line 2',
+      'line 3',
+      'line 4',
+      'line 5',
+      'line 6',
+      'line 7',
+      'line 8',
+      'line 9',
+      'line 10 agent',
+    ].join('\n') + '\n';
+    await fs.writeFile(path.join(wtDir, 'app.ts'), agentContent);
+    const patch = (await wtMgr.generatePatch(wtDir, baseSha)).replace(/\r\n/g, '\n') + '\n';
+    const hunks = extractPatchHunkIds(patch);
+    expect(hunks).toHaveLength(2);
+    await wtMgr.removeWorktree(wtDir);
+
+    // Partial hunk acceptance writes only Hunk 1 cleanly
+    const partialId = `cs-partial-${Date.now()}`;
+    pendingChangeSets.set(partialId, {
+      id: partialId,
+      filePath: 'app.ts',
+      originalContent: initialContent,
+      modifiedContent: agentContent,
+      workspaceRoot: wsRoot,
+      baseRevision: baseSha,
+      patch,
+      changedFiles: ['app.ts'],
+      hunks,
+      createdAt: Date.now(),
+    });
+
+    const partialRes = await fetch(`${baseUrl}/api/v1/changesets/${partialId}/accept`, {
+      method: 'POST',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ acceptedHunks: [hunks[0]] }),
+    });
+    expect(partialRes.status).toBe(200);
+    const afterPartial = (await fs.readFile(path.join(wsRoot, 'app.ts'), 'utf8')).replace(/\r\n/g, '\n');
+    expect(afterPartial).toContain('line 1 agent');
+    expect(afterPartial).toContain('line 10\n');
+    expect(afterPartial).not.toContain('line 10 agent');
+
+    // Now simulate human commit conflicting with line 1, and accept full patch -> expect 409 Conflict
+    const humanContent = initialContent.replace('line 1\n', 'line 1 human\n');
+    await fs.writeFile(path.join(wsRoot, 'app.ts'), humanContent);
+    await execFileAsync('git', ['add', 'app.ts'], { cwd: wsRoot });
+    await execFileAsync('git', ['commit', '-m', 'human edit line 1'], { cwd: wsRoot });
+
+    const conflictId = `cs-conflict-${Date.now()}`;
+    pendingChangeSets.set(conflictId, {
+      id: conflictId,
+      filePath: 'app.ts',
+      originalContent: initialContent,
+      modifiedContent: agentContent,
+      workspaceRoot: wsRoot,
+      baseRevision: baseSha,
+      patch,
+      changedFiles: ['app.ts'],
+      hunks,
+      createdAt: Date.now(),
+    });
+
+    const conflictRes = await fetch(`${baseUrl}/api/v1/changesets/${conflictId}/accept`, {
+      method: 'POST',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ acceptedHunks: hunks }),
+    });
+    expect(conflictRes.status).toBe(409);
+    const conflictBody = (await conflictRes.json()) as Record<string, any>;
+    expect(conflictBody.status).toBe('conflicted');
+
+    // Workspace file remains clean (no conflict markers)
+    const afterConflict = (await fs.readFile(path.join(wsRoot, 'app.ts'), 'utf8')).replace(/\r\n/g, '\n');
+    expect(afterConflict).toBe(humanContent);
+    expect(afterConflict).not.toContain('<<<<<<<');
+
+    await fs.rm(wsRoot, { recursive: true, force: true }).catch(() => {});
+  });
 });

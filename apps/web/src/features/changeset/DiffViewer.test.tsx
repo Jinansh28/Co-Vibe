@@ -88,4 +88,77 @@ describe('DiffViewer', () => {
       expect(onReject).toHaveBeenCalledWith('123');
     });
   });
+
+  it('renders real parsed hunks from unified diff patch and sends only selected hunks on accept', async () => {
+    const onAccept = vi.fn();
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ ok: true });
+
+    const patch = [
+      'diff --git a/src/math.ts b/src/math.ts',
+      '--- a/src/math.ts',
+      '+++ b/src/math.ts',
+      '@@ -1,3 +1,3 @@',
+      ' const a = 1;',
+      '-const b = 2;',
+      '+const b = 3;',
+      '@@ -10,3 +10,3 @@',
+      ' const c = 4;',
+      '-const d = 5;',
+      '+const d = 6;',
+    ].join('\n');
+
+    render(
+      <DiffViewer
+        changeSetId="cs-real"
+        originalContent="old"
+        modifiedContent="new"
+        filePath="src/math.ts"
+        patch={patch}
+        onAccept={onAccept}
+        onReject={vi.fn()}
+      />
+    );
+
+    const hunk1Label = 'src/math.ts #1 @@ -1,3 +1,3 @@';
+    const hunk2Label = 'src/math.ts #2 @@ -10,3 +10,3 @@';
+    expect(screen.getByText(hunk1Label)).toBeTruthy();
+    expect(screen.getByText(hunk2Label)).toBeTruthy();
+
+    // Uncheck second hunk
+    const checkboxes = screen.getAllByRole('checkbox');
+    fireEvent.click(checkboxes[1]);
+    fireEvent.click(screen.getByTestId('accept-button'));
+
+    await waitFor(() => {
+      expect(onAccept).toHaveBeenCalledWith('cs-real', [hunk1Label]);
+    });
+  });
+
+  it('displays conflict error banner when server returns 409 Conflict', async () => {
+    const onAccept = vi.fn();
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      ok: false,
+      status: 409,
+      json: async () => ({ status: 'conflicted', message: 'Merge conflict detected in src/math.ts' }),
+    });
+
+    render(
+      <DiffViewer
+        changeSetId="cs-409"
+        originalContent="old"
+        modifiedContent="new"
+        filePath="src/math.ts"
+        hunks={['src/math.ts #1 @@ -1,1 +1,1 @@']}
+        onAccept={onAccept}
+        onReject={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByTestId('accept-button'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('diff-viewer-error').textContent).toContain('Merge conflict detected');
+    });
+    expect(onAccept).not.toHaveBeenCalled();
+  });
 });

@@ -10,9 +10,35 @@ export interface DiffViewerProps {
   originalContent: string;
   modifiedContent: string;
   filePath: string;
+  patch?: string;
+  hunks?: string[];
   runtimeUrl?: string;
   onAccept: (changeSetId: string, acceptedHunks?: string[]) => void;
   onReject: (changeSetId: string) => void;
+}
+
+const HUNK_HEADER_REGEX = /^@@ -\d+(?:,\d+)? \+\d+(?:,\d+)? @@.*$/;
+
+export function extractHunkLabelsFromPatch(patch?: string): string[] {
+  if (!patch || !patch.trim()) return [];
+  const normalized = patch.replace(/\r\n/g, '\n');
+  const fileBlocks = normalized.split(/^diff --git /m).filter((b) => b.trim().length > 0);
+  const labels: string[] = [];
+
+  for (const block of fileBlocks) {
+    const lines = block.split('\n');
+    let fileName = '';
+    let hunkIdx = 0;
+    for (const line of lines) {
+      if (line.startsWith('+++ b/')) fileName = line.substring(6);
+      else if (line.startsWith('--- a/') && !fileName) fileName = line.substring(6);
+      else if (HUNK_HEADER_REGEX.test(line)) {
+        hunkIdx++;
+        labels.push(fileName ? `${fileName} #${hunkIdx} ${line}` : `#${hunkIdx} ${line}`);
+      }
+    }
+  }
+  return labels;
 }
 
 export const DiffViewer: React.FC<DiffViewerProps> = ({
@@ -20,13 +46,26 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
   originalContent,
   modifiedContent,
   filePath,
+  patch,
+  hunks: propHunks,
   runtimeUrl,
   onAccept,
   onReject,
 }) => {
-  // Placeholder hunks logic for MVP
-  const hunks = ['Hunk 1', 'Hunk 2'];
+  const parsedPatchHunks = React.useMemo(() => extractHunkLabelsFromPatch(patch), [patch]);
+  const hunks = React.useMemo(() => {
+    if (propHunks && propHunks.length > 0) return propHunks;
+    if (parsedPatchHunks.length > 0) return parsedPatchHunks;
+    return ['Hunk 1', 'Hunk 2'];
+  }, [propHunks, parsedPatchHunks]);
+
   const [selectedHunks, setSelectedHunks] = useState<string[]>(hunks);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    setSelectedHunks(hunks);
+    setErrorMsg(null);
+  }, [changeSetId, hunks]);
 
   const language = getLanguageFromPath(filePath);
   const diffEditorRef = useRef<editor.IStandaloneDiffEditor | null>(null);
@@ -59,6 +98,7 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
   };
 
   const handleAccept = async () => {
+    setErrorMsg(null);
     try {
       const res = await postChangeSetAction('accept', {
         method: 'POST',
@@ -68,10 +108,15 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
       if (res.ok) {
         onAccept(changeSetId, selectedHunks);
       } else {
-        console.error('Failed to accept changeset');
+        const errData = typeof res.json === 'function' ? await res.json().catch(() => ({})) : {};
+        setErrorMsg(
+          errData?.message ||
+            errData?.error ||
+            (res.status === 409 ? 'Merge conflict detected. Refresh and resolve manually.' : 'Failed to accept changeset')
+        );
       }
     } catch (err) {
-      console.error(err);
+      setErrorMsg(err instanceof Error ? err.message : 'Failed to accept changeset');
     }
   };
 
@@ -147,6 +192,22 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
         </div>
       </div>
       
+      {errorMsg && (
+        <div
+          role="alert"
+          data-testid="diff-viewer-error"
+          style={{
+            padding: '8px 16px',
+            backgroundColor: 'rgba(239, 68, 68, 0.15)',
+            borderBottom: '1px solid rgba(239, 68, 68, 0.3)',
+            color: '#fca5a5',
+            fontSize: '12px',
+          }}
+        >
+          {errorMsg}
+        </div>
+      )}
+
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
         <div
           style={{

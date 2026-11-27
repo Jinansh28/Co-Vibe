@@ -12,6 +12,7 @@
   "dependencies": {
     "zod": "^3.25.76",
     "@co-vibe/context": "workspace:*",
+    "@co-vibe/git": "workspace:*",
     "@co-vibe/protocol": "workspace:*",
     "@co-vibe/security": "workspace:*"
   },

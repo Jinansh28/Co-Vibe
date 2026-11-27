@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import type { User, Project, Workspace, ProjectMember } from '@co-vibe/shared';
+import type { User, Project, Workspace, ProjectMember, Repository } from '@co-vibe/shared';
 import type { CreateProjectInput, CreateWorkspaceInput, ProjectMemberRole } from '@co-vibe/protocol';
 import type { Env } from '../middleware/auth.js';
 
@@ -70,6 +70,7 @@ export interface IProjectService {
     workspaceId: string,
     authUserId: string
   ): Promise<WorkspaceMembershipResult>;
+  updateWorkspaceBranch(workspaceId: string, branchName: string): Promise<void>;
   addMember(
     projectId: string,
     authUserId: string,
@@ -99,13 +100,56 @@ function mapUser(row: any): User {
   };
 }
 
+export function parseRepoUrl(repoUrl: string): {
+  provider: string;
+  ownerName: string;
+  repoName: string;
+  cloneUrl: string;
+} {
+  const trimmed = repoUrl.trim();
+  const parsed = new URL(trimmed);
+  const segments = parsed.pathname.split('/').filter(Boolean);
+  const ownerName = segments[0] || 'unknown';
+  const rawRepo = segments[1] || 'repo';
+  const repoName = rawRepo.replace(/\.git$/i, '') || rawRepo;
+  const host = parsed.hostname.toLowerCase();
+  const provider = host.includes('github') ? 'github' : host;
+  return {
+    provider,
+    ownerName,
+    repoName,
+    cloneUrl: trimmed,
+  };
+}
+
+function mapRepository(row: any): Repository {
+  return {
+    id: row.id,
+    projectId: row.project_id,
+    provider: row.provider || 'github',
+    ownerName: row.owner_name,
+    repoName: row.repo_name,
+    cloneUrl: row.clone_url,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
 function mapProject(row: any): Project {
+  const repoRows = Array.isArray(row.repositories)
+    ? row.repositories
+    : row.repositories
+      ? [row.repositories]
+      : [];
+  const repository = repoRows.length > 0 ? mapRepository(repoRows[0]) : undefined;
+
   return {
     id: row.id,
     ownerId: row.owner_id,
     name: row.name,
     description: row.description ?? undefined,
     joinCode: row.join_code ?? undefined,
+    ...(repository ? { repository } : {}),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -259,8 +303,45 @@ export class SupabaseProjectService implements IProjectService {
       throw new Error(`Failed to add project owner: ${mErr?.message}`);
     }
 
+    const project = mapProject(projectRow);
+
+    if (input.repoUrl) {
+      const parsedRepo = parseRepoUrl(input.repoUrl);
+      const { data: repoRow, error: rErr } = await this.client
+        .from('repositories')
+        .insert({
+          project_id: projectRow.id,
+          provider: parsedRepo.provider,
+          owner_name: parsedRepo.ownerName,
+          repo_name: parsedRepo.repoName,
+          clone_url: parsedRepo.cloneUrl,
+          created_at: now,
+          updated_at: now,
+        })
+        .select('*')
+        .single();
+
+      if (isTableMissingError(rErr)) {
+        // Fallback if repositories table is not migrated yet
+        project.repository = {
+          id: generateUUID(),
+          projectId: projectRow.id,
+          provider: parsedRepo.provider,
+          ownerName: parsedRepo.ownerName,
+          repoName: parsedRepo.repoName,
+          cloneUrl: parsedRepo.cloneUrl,
+          createdAt: now,
+          updatedAt: now,
+        };
+      } else if (rErr) {
+        throw new Error(`Failed to save repository metadata: ${rErr.message}`);
+      } else if (repoRow) {
+        project.repository = mapRepository(repoRow);
+      }
+    }
+
     return {
-      project: mapProject(projectRow),
+      project,
       member: mapMember(memberRow),
     };
   }
@@ -276,7 +357,8 @@ export class SupabaseProjectService implements IProjectService {
       .select(`
         *,
         project_members (*),
-        workspaces (*)
+        workspaces (*),
+        repositories (*)
       `)
       .eq('id', projectId)
       .maybeSingle();
@@ -342,7 +424,7 @@ export class SupabaseProjectService implements IProjectService {
       .from('project_members')
       .select(`
         project_id,
-        projects (*)
+        projects (*, repositories (*))
       `)
       .eq('user_id', userId);
 
@@ -552,6 +634,21 @@ export class SupabaseProjectService implements IProjectService {
     };
   }
 
+  public async updateWorkspaceBranch(workspaceId: string, branchName: string): Promise<void> {
+    if (!isValidUuid(workspaceId)) {
+      return;
+    }
+
+    const { error } = await this.client
+      .from('workspaces')
+      .update({ active_branch: branchName, updated_at: new Date().toISOString() })
+      .eq('id', workspaceId);
+
+    if (isTableMissingError(error)) {
+      await this.fallback.updateWorkspaceBranch(workspaceId, branchName);
+    }
+  }
+
   public async addMember(
     projectId: string,
     authUserId: string,
@@ -658,6 +755,7 @@ export class InMemoryProjectService implements IProjectService {
   private projects: Map<string, Project> = new Map();
   private projectMembers: Map<string, ProjectMember> = new Map();
   private workspaces: Map<string, Workspace> = new Map();
+  private repositories: Map<string, Repository> = new Map();
 
   public reset(): void {
     this.users.clear();
@@ -665,6 +763,7 @@ export class InMemoryProjectService implements IProjectService {
     this.projects.clear();
     this.projectMembers.clear();
     this.workspaces.clear();
+    this.repositories.clear();
   }
 
   public async getOrCreateUser(authUserId: string, email: string): Promise<User> {
@@ -708,6 +807,22 @@ export class InMemoryProjectService implements IProjectService {
       createdAt: now,
       updatedAt: now,
     };
+
+    if (input.repoUrl) {
+      const parsedRepo = parseRepoUrl(input.repoUrl);
+      const repo: Repository = {
+        id: generateUUID(),
+        projectId: project.id,
+        provider: parsedRepo.provider,
+        ownerName: parsedRepo.ownerName,
+        repoName: parsedRepo.repoName,
+        cloneUrl: parsedRepo.cloneUrl,
+        createdAt: now,
+        updatedAt: now,
+      };
+      this.repositories.set(project.id, repo);
+      project.repository = repo;
+    }
 
     const member: ProjectMember = {
       id: generateUUID(),
@@ -903,6 +1018,14 @@ export class InMemoryProjectService implements IProjectService {
       workspaceId,
       role: member.role,
     };
+  }
+
+  public async updateWorkspaceBranch(workspaceId: string, branchName: string): Promise<void> {
+    const workspace = this.workspaces.get(workspaceId);
+    if (workspace) {
+      workspace.activeBranch = branchName;
+      workspace.updatedAt = new Date().toISOString();
+    }
   }
 
   public async addMember(

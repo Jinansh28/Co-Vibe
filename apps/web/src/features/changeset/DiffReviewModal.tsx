@@ -6,6 +6,10 @@ export interface DiffData {
   filePath: string;
   originalContent: string;
   modifiedContent: string;
+  patch?: string;
+  baseRevision?: string;
+  changedFiles?: string[];
+  hunks?: string[];
 }
 
 export interface DiffReviewModalProps {
@@ -148,6 +152,8 @@ export const DiffReviewModal: React.FC<DiffReviewModalProps> = ({
             filePath={diffData.filePath}
             originalContent={diffData.originalContent}
             modifiedContent={diffData.modifiedContent}
+            patch={diffData.patch}
+            hunks={diffData.hunks}
             runtimeUrl={runtimeUrl}
             onAccept={handleAccept}
             onReject={handleReject}
