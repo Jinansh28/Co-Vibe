@@ -4,6 +4,7 @@ import type { editor } from 'monaco-editor';
 import { DEFAULT_EDITOR_OPTIONS, getLanguageFromPath } from '../editor/editorConfig.js';
 import { HunkSelector } from './HunkSelector.js';
 import { fetchRuntime } from '../../lib/runtimeConfig.js';
+import { apiUrl } from '../../lib/apiConfig.js';
 
 export interface DiffViewerProps {
   changeSetId: string;
@@ -91,10 +92,10 @@ export const DiffViewer: React.FC<DiffViewerProps> = ({
   }, []);
 
   const postChangeSetAction = async (action: 'accept' | 'reject', init: RequestInit) => {
-    const url = runtimeUrl
-      ? `${runtimeUrl}/api/v1/changesets/${changeSetId}/${action}`
-      : `/api/v1/changesets/${changeSetId}/${action}`;
-    return runtimeUrl ? fetchRuntime(url, init) : fetch(url, init);
+    if (runtimeUrl) {
+      return fetchRuntime(`${runtimeUrl}/api/v1/changesets/${changeSetId}/${action}`, init);
+    }
+    return fetch(apiUrl(`/api/v1/changesets/${changeSetId}/${action}`), init);
   };
 
   const handleAccept = async () => {

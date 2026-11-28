@@ -41,6 +41,8 @@ export {
 } from './server/runtimeRpcHandlers.js';
 export {
   DockerManager,
+  DEFAULT_SANDBOX_IMAGE,
+  resolveSandboxImage,
   type CreateContainerOptions,
   type ExecOptions,
   type ExecResult,

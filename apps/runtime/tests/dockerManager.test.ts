@@ -1,5 +1,5 @@
-import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
-import { DockerManager } from '../src/docker/DockerManager.js';
+import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest';
+import { DockerManager, DEFAULT_SANDBOX_IMAGE } from '../src/docker/DockerManager.js';
 
 describe('DockerManager Unit & Integration Tests', () => {
   let dockerManager: DockerManager;
@@ -20,6 +20,32 @@ describe('DockerManager Unit & Integration Tests', () => {
   });
 
   describe('Security & Configuration Validation', () => {
+    afterEach(() => {
+      delete process.env.SANDBOX_DOCKER_IMAGE;
+      vi.restoreAllMocks();
+    });
+
+    it('uses SANDBOX_DOCKER_IMAGE when set and falls back to DEFAULT_SANDBOX_IMAGE', async () => {
+      const manager = new DockerManager();
+      const dockerInstance = manager.getDockerInstance() as unknown as {
+        createContainer: (opts: any) => Promise<{ id: string }>;
+      };
+      const capturedImages: string[] = [];
+      vi.spyOn(dockerInstance, 'createContainer').mockImplementation(async (opts: any) => {
+        capturedImages.push(opts.Image);
+        return { id: 'mock-id' };
+      });
+
+      delete process.env.SANDBOX_DOCKER_IMAGE;
+      await manager.createContainer({ workspaceId: 'ws-default' });
+
+      process.env.SANDBOX_DOCKER_IMAGE = 'co-vibe-sandbox';
+      await manager.createContainer({ workspaceId: 'ws-env' });
+      await manager.createContainer({ workspaceId: 'ws-explicit', image: 'custom-image:1.0' });
+
+      expect(capturedImages).toEqual([DEFAULT_SANDBOX_IMAGE, 'co-vibe-sandbox', 'custom-image:1.0']);
+    });
+
     it('should throw an error if hostPath attempts to mount docker.sock', async () => {
       await expect(
         dockerManager.createContainer({

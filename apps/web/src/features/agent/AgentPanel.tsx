@@ -4,6 +4,7 @@ import { AgentTaskProgressPayload } from '@co-vibe/protocol';
 import { AuthContext } from '../auth/AuthProvider.js';
 import { ResizeHandle, clampSize } from '../../components/layout/ResizeHandle.js';
 import { RUNTIME_URL, fetchRuntime } from '../../lib/runtimeConfig.js';
+import { apiUrl } from '../../lib/apiConfig.js';
 
 const DEFAULT_AGENT_WIDTH = 320;
 const DEFAULT_AGENT_MIN_WIDTH = 260;
@@ -209,7 +210,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
     const localTasks = getLocalTaskHistory(effectiveWsId);
     try {
       if (workspaceId) {
-        const res = await fetch(`/api/v1/workspaces/${workspaceId}/agent/tasks`, {
+        const res = await fetch(apiUrl(`/api/v1/workspaces/${workspaceId}/agent/tasks`), {
           headers: {
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
           },
@@ -244,7 +245,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
     let details: AgentTaskDetailsRecord | null = null;
 
     try {
-      const res = await fetch(`/api/v1/agent/tasks/${taskId}`, {
+      const res = await fetch(apiUrl(`/api/v1/agent/tasks/${taskId}`), {
         headers: {
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
@@ -352,7 +353,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
       if (workspaceId) {
         if (selectedTaskId) {
           // Record follow-up message into existing conversation
-          fetch(`/api/v1/agent/tasks/${selectedTaskId}/conversations`, {
+          fetch(apiUrl(`/api/v1/agent/tasks/${selectedTaskId}/conversations`), {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
@@ -362,7 +363,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
           }).catch(() => {});
         } else {
           try {
-            const createRes = await fetch(`/api/v1/workspaces/${workspaceId}/agent/tasks`, {
+            const createRes = await fetch(apiUrl(`/api/v1/workspaces/${workspaceId}/agent/tasks`), {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
@@ -478,7 +479,7 @@ export const AgentPanel: React.FC<AgentPanelProps> = ({
                 onReviewDiff(event.diffData);
               }
               if (currentTaskId && currentRunId) {
-                fetch(`/api/v1/agent/tasks/${currentTaskId}/runs/${currentRunId}/progress`, {
+                fetch(apiUrl(`/api/v1/agent/tasks/${currentTaskId}/runs/${currentRunId}/progress`), {
                   method: 'POST',
                   headers: {
                     'Content-Type': 'application/json',

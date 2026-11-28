@@ -21,6 +21,16 @@ export interface ExecResult {
   exitCode: number;
 }
 
+export const DEFAULT_SANDBOX_IMAGE = 'node:22-bookworm-slim';
+
+export function resolveSandboxImage(explicitImage?: string): string {
+  return (
+    explicitImage?.trim() ||
+    (typeof process !== 'undefined' ? process.env.SANDBOX_DOCKER_IMAGE?.trim() : undefined) ||
+    DEFAULT_SANDBOX_IMAGE
+  );
+}
+
 export class DockerManager {
   private docker: Docker;
   private workspaceContainers: Map<string, string> = new Map();
@@ -34,7 +44,8 @@ export class DockerManager {
   }
 
   public async createContainer(options: CreateContainerOptions): Promise<string> {
-    const { workspaceId, hostPath, image = 'node:22-bookworm-slim', containerName, env } = options;
+    const { workspaceId, hostPath, image, containerName, env } = options;
+    const resolvedImage = resolveSandboxImage(image);
 
     if (hostPath && hostPath.includes('docker.sock')) {
       throw new Error('Mounting docker.sock inside sandbox container is strictly prohibited');
@@ -52,7 +63,7 @@ export class DockerManager {
     ];
 
     const containerOptions: Docker.ContainerCreateOptions = {
-      Image: image,
+      Image: resolvedImage,
       name: containerName || `covibe-sandbox-${workspaceId}-${Date.now()}`,
       Cmd: ['sleep', 'infinity'],
       User: '10001',

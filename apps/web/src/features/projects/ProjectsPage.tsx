@@ -4,6 +4,7 @@ import { useNotification } from '../../context/NotificationContext.js';
 import { ProjectCard, ProjectCardData } from './ProjectCard.js';
 import { CreateProjectModal } from './CreateProjectModal.js';
 import { JoinProjectModal } from './JoinProjectModal.js';
+import { apiUrl } from '../../lib/apiConfig.js';
 
 const LOCAL_STORAGE_PROJECTS_KEY = 'co_vibe_projects_cache';
 
@@ -69,7 +70,7 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
     const fetchProjects = async () => {
       try {
         setIsLoading(true);
-        const res = await fetch('/api/v1/projects', {
+        const res = await fetch(apiUrl('/api/v1/projects'), {
           headers: {
             'Content-Type': 'application/json',
             ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
@@ -122,7 +123,7 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
 
   const handleCreateProject = async (data: { name: string; description?: string; repoUrl?: string }) => {
     try {
-      const res = await fetch('/api/v1/projects', {
+      const res = await fetch(apiUrl('/api/v1/projects'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -184,7 +185,7 @@ export const ProjectsPage: React.FC<ProjectsPageProps> = ({
   };
 
   const handleJoinProject = async (joinCode: string) => {
-    const res = await fetch(`/api/v1/projects/join`, {
+    const res = await fetch(apiUrl('/api/v1/projects/join'), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

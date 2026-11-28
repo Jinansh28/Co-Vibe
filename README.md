@@ -95,8 +95,9 @@ For local development with Wrangler, or to deploy, you need to set these secrets
 
 ```env
 SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_JWT_SECRET=your-jwt-secret
-RUNTIME_AUTH_SECRET=your-runtime-auth-secret
+SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key
+SUPABASE_JWT_SECRET=your-supabase-jwt-secret
+RUNTIME_JWT_SECRET=your-runtime-jwt-secret
 ```
 
 ### Database
@@ -104,10 +105,10 @@ RUNTIME_AUTH_SECRET=your-runtime-auth-secret
 Run the provided migrations against your Supabase Postgres instance to set up the schema:
 
 ```bash
-npx tsx scripts/migrate.ts
+pnpm db:migrate
 ```
 
-_(Ensure you have configured `DATABASE_URL` in your environment or `scripts/migrate.ts` first, if necessary)_.
+_(Ensure you have configured `DATABASE_URL` in `.env` or your environment first)_.
 
 ## Execution Commands
 

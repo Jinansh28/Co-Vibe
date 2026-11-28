@@ -6,7 +6,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const rootDir = path.resolve(__dirname, '..');
 const apiDir = path.resolve(rootDir, 'apps/api');
-const wranglerToml = path.resolve(rootDir, 'infrastructure/cloudflare/wrangler.toml');
+const wranglerToml = path.resolve(apiDir, 'wrangler.toml');
 
 console.log(`Deploying Cloudflare Worker from ${apiDir}...`);
 

@@ -5,6 +5,7 @@ import { YjsMonacoAdapter, AwarenessManager } from '@co-vibe/collaboration';
 import type { editor } from 'monaco-editor';
 import { useAuth } from '../auth/useAuth.js';
 import { fetchRuntime } from '../../lib/runtimeConfig.js';
+import { getWsBaseUrl } from '../../lib/apiConfig.js';
 
 export function useCollaboration(
   workspaceId: string,
@@ -29,23 +30,7 @@ export function useCollaboration(
     const doc = new Y.Doc();
     docRef.current = doc;
 
-    // Dynamically determine WebSocket protocol & host
-    const getWsBaseUrl = () => {
-      if (import.meta.env.VITE_WS_URL) {
-        return import.meta.env.VITE_WS_URL;
-      }
-      const isSecure = window.location.protocol === 'https:';
-      const proto = isSecure ? 'wss:' : 'ws:';
-      // If api base url is configured, use its host
-      const apiBase = import.meta.env.VITE_API_BASE_URL;
-      if (apiBase) {
-        const url = new URL(apiBase);
-        return `${proto}//${url.host}`;
-      }
-      return `${proto}//localhost:8787`;
-    };
-
-    const wsUrl = getWsBaseUrl(); 
+    const wsUrl = getWsBaseUrl();
     const tokenQuery = `?token=${token}`;
 
     const provider = new WebsocketProvider(
@@ -70,6 +55,8 @@ export function useCollaboration(
     awarenessManagerRef.current = awarenessManager;
 
     return () => {
+      setConnected(false);
+      setSynced(false);
       provider.disconnect();
       doc.destroy();
     };

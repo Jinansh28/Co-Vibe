@@ -223,4 +223,34 @@ describe('ProjectsPage Component', () => {
       global.fetch = originalFetch;
     }
   });
+
+  it('uses VITE_API_URL when configured for project API requests', async () => {
+    vi.stubEnv('VITE_API_URL', 'https://co-vibe-api.workers.dev/');
+    const originalFetch = global.fetch;
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ projects: [] }),
+    });
+    global.fetch = fetchMock as any;
+
+    try {
+      await act(async () => {
+        renderWithProviders(<ProjectsPage />);
+      });
+
+      await waitFor(() => {
+        expect(fetchMock).toHaveBeenCalledWith(
+          'https://co-vibe-api.workers.dev/api/v1/projects',
+          expect.objectContaining({
+            headers: expect.objectContaining({
+              Authorization: 'Bearer fake-jwt-token',
+            }),
+          })
+        );
+      });
+    } finally {
+      vi.unstubAllEnvs();
+      global.fetch = originalFetch;
+    }
+  });
 });

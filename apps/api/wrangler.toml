@@ -1,10 +1,24 @@
 name = "co-vibe-api"
 main = "src/index.ts"
-compatibility_date = "2024-11-01"
+compatibility_date = "2024-11-06"
 compatibility_flags = ["nodejs_compat"]
 
 [vars]
-ENVIRONMENT = "development"
+ENVIRONMENT = "production"
+# Set ALLOWED_ORIGINS and FRONTEND_URL for production CORS (e.g., Cloudflare Pages origin)
+# ALLOWED_ORIGINS = "https://co-vibe-web.pages.dev"
+# FRONTEND_URL = "https://co-vibe-web.pages.dev"
+
+# Required Worker secrets (configure via `wrangler secret put <NAME>` or `apps/api/.dev.vars` for local dev):
+# - SUPABASE_URL
+# - SUPABASE_SERVICE_ROLE_KEY
+# - SUPABASE_JWT_SECRET
+# - RUNTIME_JWT_SECRET
+#
+# Optional GitHub OAuth secrets (when GitHub integration is enabled):
+# - GITHUB_TOKEN_ENCRYPTION_KEY
+# - GITHUB_CLIENT_ID
+# - GITHUB_CLIENT_SECRET
 
 [[durable_objects.bindings]]
 name = "WORKSPACE_ROOM"

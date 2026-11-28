@@ -161,4 +161,34 @@ describe('DiffViewer', () => {
     });
     expect(onAccept).not.toHaveBeenCalled();
   });
+
+  it('routes Worker fallback changeset requests through VITE_API_URL when configured', async () => {
+    vi.stubEnv('VITE_API_URL', 'https://co-vibe-api.workers.dev/');
+    const onAccept = vi.fn();
+    (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ ok: true });
+
+    try {
+      render(
+        <DiffViewer
+          changeSetId="cs-prod"
+          originalContent="old"
+          modifiedContent="new"
+          filePath="src/test.ts"
+          onAccept={onAccept}
+          onReject={vi.fn()}
+        />
+      );
+
+      fireEvent.click(screen.getByTestId('accept-button'));
+
+      await waitFor(() => {
+        expect(global.fetch).toHaveBeenCalledWith(
+          'https://co-vibe-api.workers.dev/api/v1/changesets/cs-prod/accept',
+          expect.objectContaining({ method: 'POST' })
+        );
+      });
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
 });

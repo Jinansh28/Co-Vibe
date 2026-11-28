@@ -265,4 +265,19 @@ describe('AgentPanel Component with Code Snippet Context', () => {
     fireEvent.click(historyTab);
     expect(await screen.findByText('Create auth module')).toBeDefined();
   });
+
+  it('routes agent task history requests to VITE_API_URL when configured', async () => {
+    vi.stubEnv('VITE_API_URL', 'https://co-vibe-api.workers.dev/');
+    try {
+      render(<AgentPanel isOpen={true} workspaceId="ws-prod" />);
+      await waitFor(() => {
+        expect(global.fetch).toHaveBeenCalledWith(
+          'https://co-vibe-api.workers.dev/api/v1/workspaces/ws-prod/agent/tasks',
+          expect.any(Object)
+        );
+      });
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
 });

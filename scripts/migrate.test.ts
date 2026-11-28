@@ -64,7 +64,7 @@ describe('Database Initial Migration (TASK-006)', () => {
 
 
   describe('Migration Runner (scripts/migrate.ts)', () => {
-    let executedQueries: string[];
+    let executedQueries: Array<{ sql: string; params?: unknown[] }>;
     let appliedMigrations: Set<string>;
     let mockDb: DatabaseExecutor;
 
@@ -73,17 +73,21 @@ describe('Database Initial Migration (TASK-006)', () => {
       appliedMigrations = new Set();
 
       mockDb = {
-        query: async (sql: string) => {
-          executedQueries.push(sql);
+        query: async (sql: string, params?: unknown[]) => {
+          executedQueries.push({ sql, params });
 
           if (sql.includes('SELECT name FROM public.schema_migrations')) {
             return Array.from(appliedMigrations).map((name) => ({ name }));
           }
 
           if (sql.includes('INSERT INTO public.schema_migrations')) {
-            const match = sql.match(/VALUES \('([^']+)'\)/);
-            if (match && match[1]) {
-              appliedMigrations.add(match[1]);
+            if (Array.isArray(params) && typeof params[0] === 'string') {
+              appliedMigrations.add(params[0]);
+            } else {
+              const match = sql.match(/VALUES \('([^']+)'\)/);
+              if (match && match[1]) {
+                appliedMigrations.add(match[1]);
+              }
             }
           }
 
@@ -92,22 +96,29 @@ describe('Database Initial Migration (TASK-006)', () => {
       };
     });
 
-    it('loads migration files successfully', () => {
+    it('loads all migration files (001 through 008) in order', () => {
       const files = loadMigrationFiles(migrationsDir);
-      expect(files.length).toBeGreaterThan(0);
+      expect(files.length).toBeGreaterThanOrEqual(8);
       expect(files[0]?.name).toBe('001_initial_schema.sql');
+      expect(files.some((f) => f.name === '008_github_oauth_tokens.sql')).toBe(true);
     });
 
-    it('executes unapplied migrations and tracks them in schema_migrations', async () => {
+    it('executes unapplied migrations and records them via parameterized insert', async () => {
       const result = await runMigrations(mockDb, migrationsDir);
 
       expect(result.applied).toContain('001_initial_schema.sql');
       expect(result.applied).toContain('002_workspaces_repos.sql');
+      expect(result.applied).toContain('008_github_oauth_tokens.sql');
       expect(result.skipped).toHaveLength(0);
+
+      const insertQuery = executedQueries.find((q) => q.sql.includes('INSERT INTO public.schema_migrations'));
+      expect(insertQuery?.sql).toContain('$1');
+      expect(insertQuery?.params).toEqual(['001_initial_schema.sql']);
 
       const currentApplied = await getAppliedMigrations(mockDb);
       expect(currentApplied.has('001_initial_schema.sql')).toBe(true);
       expect(currentApplied.has('002_workspaces_repos.sql')).toBe(true);
+      expect(currentApplied.has('008_github_oauth_tokens.sql')).toBe(true);
     });
 
     it('skips already applied migrations on subsequent runs', async () => {

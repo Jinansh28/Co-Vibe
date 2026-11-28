@@ -3,7 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export interface DatabaseExecutor {
-  query: (sql: string) => Promise<unknown>;
+  query: (sql: string, params?: unknown[]) => Promise<unknown>;
 }
 
 export interface MigrationResult {
@@ -76,12 +76,29 @@ export async function runMigrations(
     // Execute migration SQL inside a single statement/batch
     await db.query(sql);
 
-    // Record applied migration
-    await db.query(`INSERT INTO public.schema_migrations (name) VALUES ('${name}');`);
+    // Record applied migration using parameterized query
+    await db.query(
+      'INSERT INTO public.schema_migrations (name) VALUES ($1) ON CONFLICT (name) DO NOTHING;',
+      [name]
+    );
     applied.push(name);
   }
 
   return { applied, skipped };
+}
+
+function loadDotEnvIfNeeded(rootDir: string): void {
+  if (process.env.DATABASE_URL || process.env.POSTGRES_URL) {
+    return;
+  }
+  const envPath = path.resolve(rootDir, '.env');
+  if (fs.existsSync(envPath) && typeof process.loadEnvFile === 'function') {
+    try {
+      process.loadEnvFile(envPath);
+    } catch {
+      // Ignore .env parse errors
+    }
+  }
 }
 
 // CLI Execution Entrypoint
@@ -89,13 +106,16 @@ const __filename = fileURLToPath(import.meta.url);
 const isDirectExecution = process.argv[1] && path.resolve(process.argv[1]) === path.resolve(__filename);
 
 if (isDirectExecution) {
+  const rootDir = path.resolve(path.dirname(__filename), '..');
+  loadDotEnvIfNeeded(rootDir);
+
   const connectionString = process.env.DATABASE_URL || process.env.POSTGRES_URL;
   if (!connectionString) {
     console.error('Error: DATABASE_URL or POSTGRES_URL environment variable is required to run migrations.');
     process.exit(1);
   }
 
-  const defaultMigrationsDir = path.resolve(path.dirname(__filename), '../infrastructure/db/migrations');
+  const defaultMigrationsDir = path.resolve(rootDir, 'infrastructure/db/migrations');
 
   console.log(`Running migrations against database from directory: ${defaultMigrationsDir}`);
 
@@ -105,7 +125,10 @@ if (isDirectExecution) {
       const client = new Client({ connectionString });
       await client.connect();
       try {
-        const result = await runMigrations({ query: (sql) => client.query(sql) }, defaultMigrationsDir);
+        const result = await runMigrations(
+          { query: (sql, params) => client.query(sql, params) },
+          defaultMigrationsDir
+        );
         console.log(`Migrations complete. Applied: ${result.applied.join(', ') || 'none'}. Skipped: ${result.skipped.join(', ') || 'none'}.`);
       } finally {
         await client.end();
